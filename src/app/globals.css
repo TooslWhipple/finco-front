@@ -1,0 +1,120 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@theme inline {
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-secondary: var(--brand-secondary);
+  --color-brand-secondary-alt: var(--brand-secondary-alt);
+  --color-brand-cta: var(--brand-cta);
+  --color-brand-cta-light: var(--brand-cta-light);
+  --color-brand-coral: var(--brand-coral);
+  --color-brand-danger: var(--brand-danger);
+  --color-brand-indigo: var(--brand-indigo);
+  --color-brand-cream: var(--brand-cream);
+  --color-brand-text: var(--brand-text);
+  --color-brand-text-muted: var(--brand-text-muted);
+  --color-brand-line: var(--brand-line);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-roboto), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --brand-primary: #022f34;
+  --brand-secondary: #51aaa1;
+  --brand-secondary-alt: #57b5ac;
+  --brand-cta: #f07d00;
+  --brand-cta-light: #ff9a3c;
+  --brand-coral: #eb5a34;
+  --brand-danger: #e34328;
+  --brand-indigo: #47588f;
+  --brand-cream: #f8f7f6;
+  --brand-text: #232323;
+  --brand-text-muted: #6f6f6f;
+  --brand-line: #ececec;
+  --brand-white: #ffffff;
+
+  --background: var(--brand-cream);
+  --foreground: var(--brand-text);
+  --card: var(--brand-white);
+  --card-foreground: var(--brand-text);
+  --popover: var(--brand-white);
+  --popover-foreground: var(--brand-text);
+  --primary: var(--brand-primary);
+  --primary-foreground: var(--brand-white);
+  --secondary: var(--brand-secondary);
+  --secondary-foreground: var(--brand-white);
+  --muted: var(--brand-cream);
+  --muted-foreground: var(--brand-text-muted);
+  --accent: var(--brand-cream);
+  --accent-foreground: var(--brand-primary);
+  --destructive: var(--brand-danger);
+  --border: var(--brand-line);
+  --input: var(--brand-line);
+  --ring: var(--brand-secondary);
+  --chart-1: var(--brand-primary);
+  --chart-2: var(--brand-secondary);
+  --chart-3: var(--brand-cta);
+  --chart-4: var(--brand-indigo);
+  --chart-5: var(--brand-coral);
+  --radius: 0.625rem;
+  --sidebar: var(--brand-primary);
+  --sidebar-foreground: var(--brand-white);
+  --sidebar-primary: var(--brand-cta);
+  --sidebar-primary-foreground: var(--brand-white);
+  --sidebar-accent: var(--brand-secondary-alt);
+  --sidebar-accent-foreground: var(--brand-white);
+  --sidebar-border: var(--brand-secondary);
+  --sidebar-ring: var(--brand-secondary);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
