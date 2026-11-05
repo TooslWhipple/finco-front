@@ -33,6 +33,7 @@ import { avisarProximaFase } from "@/lib/avisos";
 import { formatMoneda, formatNumero } from "@/lib/format";
 import { MES_DEMO } from "@/lib/tiempo";
 import { cn } from "@/lib/utils";
+import { SeccionMantenimientos } from "@/features/mantenimientos/seccion-mantenimientos";
 import { FichaLocal } from "./ficha-local";
 import { PlanoLocales } from "./plano-locales";
 import { ProximosVencimientos } from "./proximos-vencimientos";
@@ -48,6 +49,13 @@ import {
 
 const TODOS = "TODOS";
 const RUTA_COTIZACION = "/cotizaciones/nueva";
+
+type VistaPlaza = "PLANO" | "MANTENIMIENTO";
+
+const VISTAS_PLAZA = [
+  { valor: "PLANO", etiqueta: "Plano" },
+  { valor: "MANTENIMIENTO", etiqueta: "Mantenimiento" },
+] as const;
 
 const AÑO_INPC = 2026;
 /** Filas de "Próximos vencimientos"; el KPI "Por vencer" cuenta todos. */
@@ -70,6 +78,7 @@ export function PlazaDetalle({ plazaId }: { plazaId: string }) {
   const [soloDisponibles, setSoloDisponibles] = useState(false);
   const [giro, setGiro] = useState<string>(TODOS);
   const [seleccion, setSeleccion] = useState<string>();
+  const [vistaPlaza, setVistaPlaza] = useState<VistaPlaza>("PLANO");
 
   const prospectosActivos = useMemo(
     () =>
@@ -213,157 +222,177 @@ export function PlazaDetalle({ plazaId }: { plazaId: string }) {
         </div>
       </header>
 
-      <KpiRow>
-        <KpiCard
-          etiqueta="Locales"
-          valor={resumen ? formatNumero(resumen.total) : "—"}
-          detalle={
-            resumen && plantas
-              ? plantas
-                  .map(
-                    (p) =>
-                      `${resumen.porPlanta[p.id] ?? 0} ${abreviaturaPlanta(p.nombre)}`,
-                  )
-                  .join(" · ")
-              : undefined
-          }
-        />
-        <KpiCard
-          etiqueta="Rentados"
-          valor={resumen ? formatNumero(resumen.rentados) : "—"}
-          detalle={
-            resumen ? `${Math.round(resumen.ocupacion * 100)}% ocupación` : undefined
-          }
-          tono="positivo"
-        />
-        <KpiCard
-          etiqueta="Disponibles"
-          valor={resumen ? formatNumero(resumen.disponibles) : "—"}
-          detalle={resumen ? `${resumen.enCotizacion} en cotización` : undefined}
-        />
-        <KpiCard
-          etiqueta="Renta promedio"
-          valor={resumen ? `${formatMoneda(resumen.rentaPromedioM2)} / m²` : "—"}
-          delta={
-            incrementoAnual !== undefined
-              ? {
-                  texto: `${incrementoAnual.toLocaleString("es-MX", { maximumFractionDigits: 1 })}% anual`,
-                  direccion: "sube",
-                }
-              : undefined
-          }
-          subtexto={incrementoAnual === undefined ? "Locales rentados" : undefined}
-        />
-        <KpiCard
-          etiqueta="Por vencer"
-          valor={resumen ? formatNumero(resumen.porVencer) : "—"}
-          subtexto="próximos 90 días"
-        />
-        <KpiCard
-          etiqueta="Con atraso"
-          valor={resumen ? formatNumero(resumen.conAtraso) : "—"}
-          subtexto={resumen ? `${formatMoneda(resumen.montoVencido)} vencido` : undefined}
-        />
-      </KpiRow>
+      <SegmentedControl
+        etiqueta="Vista de la plaza"
+        opciones={VISTAS_PLAZA}
+        valor={vistaPlaza}
+        onChange={setVistaPlaza}
+      />
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_21.5rem]">
-        <SectionCard sinPadding className="min-w-0 overflow-hidden">
-          <BarraFiltros
-            envolver
-            className="px-4 pt-4 pb-3 [&_button]:px-3 [&_button]:text-[13px] [&_select]:pr-7 [&_select]:pl-3 [&_select]:text-[13px] [&>div]:gap-1.5"
-          >
-            {plantas && plantaActiva ? (
-              <SegmentedControl
-                etiqueta="Planta"
-                opciones={plantas.map((p) => ({
-                  valor: p.id,
-                  etiqueta: `${p.nombre} · ${datos?.resumen.porPlanta[p.id] ?? 0}`,
-                }))}
-                valor={plantaActiva}
-                onChange={setPlantaElegida}
-                className="shrink-0 [&_button]:whitespace-nowrap"
-              />
-            ) : null}
-            <span aria-hidden className="mx-1 h-6 w-px shrink-0 bg-brand-line" />
-            <SelectorPill
-              etiqueta="Filtrar por estatus"
-              valor={estatus}
-              onChange={setEstatus}
-              opciones={[
-                { valor: TODOS, etiqueta: "Estatus" },
-                ...CATEGORIAS.map((c) => ({ valor: c, etiqueta: ETIQUETA_CATEGORIA[c] })),
-              ]}
+      {vistaPlaza === "MANTENIMIENTO" ? (
+        <SeccionMantenimientos filtro={{ plazaId }} conKpis />
+      ) : (
+        <>
+          <KpiRow>
+            <KpiCard
+              etiqueta="Locales"
+              valor={resumen ? formatNumero(resumen.total) : "—"}
+              detalle={
+                resumen && plantas
+                  ? plantas
+                      .map(
+                        (p) =>
+                          `${resumen.porPlanta[p.id] ?? 0} ${abreviaturaPlanta(p.nombre)}`,
+                      )
+                      .join(" · ")
+                  : undefined
+              }
             />
-            <button
-              type="button"
-              aria-pressed={soloDisponibles}
-              onClick={() => setSoloDisponibles((v) => !v)}
-              className={cn(
-                "h-9 shrink-0 cursor-pointer rounded-full border px-3 text-sm font-medium whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                soloDisponibles
-                  ? "border-brand-primary bg-brand-primary text-white"
-                  : "border-brand-line bg-card text-brand-text hover:bg-brand-cream",
-              )}
-            >
-              Solo disponibles
-            </button>
-            <SelectorPill
-              etiqueta="Filtrar por giro"
-              valor={giro}
-              onChange={setGiro}
-              opciones={[
-                { valor: TODOS, etiqueta: "Giro: todos" },
-                ...(datos?.giros ?? []).map((g) => ({
-                  valor: g,
-                  etiqueta: `Giro: ${g}`,
-                })),
-              ]}
+            <KpiCard
+              etiqueta="Rentados"
+              valor={resumen ? formatNumero(resumen.rentados) : "—"}
+              detalle={
+                resumen ? `${Math.round(resumen.ocupacion * 100)}% ocupación` : undefined
+              }
+              tono="positivo"
             />
-          </BarraFiltros>
-          <div className="px-4 pb-4">
-            {datos ? (
-              <PlanoLocales
-                locales={localesPlanta}
-                categorias={datos.categorias}
-                locatarios={datos.nombrePorLocal}
-                prospectos={prospectosActivos}
-                coincidentes={coincidentes}
-                contexto={contextoVial}
-                seleccionadoId={seleccionId}
-                onSeleccionar={(id) => {
-                  setSeleccion(id);
-                  const destino = locales?.find((l) => l.id === id)?.plantaId;
-                  if (destino) setPlantaElegida(destino);
-                }}
-              />
-            ) : (
-              <div className="flex h-96 items-center justify-center text-sm text-brand-text-muted">
-                Cargando plano…
+            <KpiCard
+              etiqueta="Disponibles"
+              valor={resumen ? formatNumero(resumen.disponibles) : "—"}
+              detalle={resumen ? `${resumen.enCotizacion} en cotización` : undefined}
+            />
+            <KpiCard
+              etiqueta="Renta promedio"
+              valor={resumen ? `${formatMoneda(resumen.rentaPromedioM2)} / m²` : "—"}
+              delta={
+                incrementoAnual !== undefined
+                  ? {
+                      texto: `${incrementoAnual.toLocaleString("es-MX", { maximumFractionDigits: 1 })}% anual`,
+                      direccion: "sube",
+                    }
+                  : undefined
+              }
+              subtexto={incrementoAnual === undefined ? "Locales rentados" : undefined}
+            />
+            <KpiCard
+              etiqueta="Por vencer"
+              valor={resumen ? formatNumero(resumen.porVencer) : "—"}
+              subtexto="próximos 90 días"
+            />
+            <KpiCard
+              etiqueta="Con atraso"
+              valor={resumen ? formatNumero(resumen.conAtraso) : "—"}
+              subtexto={
+                resumen ? `${formatMoneda(resumen.montoVencido)} vencido` : undefined
+              }
+            />
+          </KpiRow>
+
+          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_21.5rem]">
+            <SectionCard sinPadding className="min-w-0 overflow-hidden">
+              <BarraFiltros
+                envolver
+                className="px-4 pt-4 pb-3 [&_button]:px-3 [&_button]:text-[13px] [&_select]:pr-7 [&_select]:pl-3 [&_select]:text-[13px] [&>div]:gap-1.5"
+              >
+                {plantas && plantaActiva ? (
+                  <SegmentedControl
+                    etiqueta="Planta"
+                    opciones={plantas.map((p) => ({
+                      valor: p.id,
+                      etiqueta: `${p.nombre} · ${datos?.resumen.porPlanta[p.id] ?? 0}`,
+                    }))}
+                    valor={plantaActiva}
+                    onChange={setPlantaElegida}
+                    className="shrink-0 [&_button]:whitespace-nowrap"
+                  />
+                ) : null}
+                <span aria-hidden className="mx-1 h-6 w-px shrink-0 bg-brand-line" />
+                <SelectorPill
+                  etiqueta="Filtrar por estatus"
+                  valor={estatus}
+                  onChange={setEstatus}
+                  opciones={[
+                    { valor: TODOS, etiqueta: "Estatus" },
+                    ...CATEGORIAS.map((c) => ({
+                      valor: c,
+                      etiqueta: ETIQUETA_CATEGORIA[c],
+                    })),
+                  ]}
+                />
+                <button
+                  type="button"
+                  aria-pressed={soloDisponibles}
+                  onClick={() => setSoloDisponibles((v) => !v)}
+                  className={cn(
+                    "h-9 shrink-0 cursor-pointer rounded-full border px-3 text-sm font-medium whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                    soloDisponibles
+                      ? "border-brand-primary bg-brand-primary text-white"
+                      : "border-brand-line bg-card text-brand-text hover:bg-brand-cream",
+                  )}
+                >
+                  Solo disponibles
+                </button>
+                <SelectorPill
+                  etiqueta="Filtrar por giro"
+                  valor={giro}
+                  onChange={setGiro}
+                  opciones={[
+                    { valor: TODOS, etiqueta: "Giro: todos" },
+                    ...(datos?.giros ?? []).map((g) => ({
+                      valor: g,
+                      etiqueta: `Giro: ${g}`,
+                    })),
+                  ]}
+                />
+              </BarraFiltros>
+              <div className="px-4 pb-4">
+                {datos ? (
+                  <PlanoLocales
+                    locales={localesPlanta}
+                    categorias={datos.categorias}
+                    locatarios={datos.nombrePorLocal}
+                    prospectos={prospectosActivos}
+                    coincidentes={coincidentes}
+                    contexto={contextoVial}
+                    seleccionadoId={seleccionId}
+                    onSeleccionar={(id) => {
+                      setSeleccion(id);
+                      const destino = locales?.find((l) => l.id === id)?.plantaId;
+                      if (destino) setPlantaElegida(destino);
+                    }}
+                  />
+                ) : (
+                  <div className="flex h-96 items-center justify-center text-sm text-brand-text-muted">
+                    Cargando plano…
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </SectionCard>
+            </SectionCard>
 
-        <div className="space-y-6">
-          <FichaLocal
-            local={seleccionado}
-            planta={plantas?.find((p) => p.id === seleccionado?.plantaId)}
-            categoria={seleccionado ? datos?.categorias.get(seleccionado.id) : undefined}
-            rol={rol}
-            ubicacion={ubicacionLocal}
-            prospectosActivos={
-              seleccionado ? (prospectosActivos.get(seleccionado.id) ?? 0) : 0
-            }
-            cotizacionesAbiertas={cotizacionesAbiertas}
-            rutaFicha={`/plazas/${plazaId}/locales/${seleccionado?.id ?? ""}`}
-            rutaCotizar={rutaCotizar}
-          />
-          <ProximosVencimientos
-            vencimientos={datos?.vencimientos ?? []}
-            locatarios={datos?.nombres ?? new Map()}
-          />
-        </div>
-      </div>
+            <div className="space-y-6">
+              <FichaLocal
+                local={seleccionado}
+                planta={plantas?.find((p) => p.id === seleccionado?.plantaId)}
+                categoria={
+                  seleccionado ? datos?.categorias.get(seleccionado.id) : undefined
+                }
+                rol={rol}
+                ubicacion={ubicacionLocal}
+                prospectosActivos={
+                  seleccionado ? (prospectosActivos.get(seleccionado.id) ?? 0) : 0
+                }
+                cotizacionesAbiertas={cotizacionesAbiertas}
+                rutaFicha={`/plazas/${plazaId}/locales/${seleccionado?.id ?? ""}`}
+                rutaCotizar={rutaCotizar}
+              />
+              <ProximosVencimientos
+                vencimientos={datos?.vencimientos ?? []}
+                locatarios={datos?.nombres ?? new Map()}
+              />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

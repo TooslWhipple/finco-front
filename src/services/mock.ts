@@ -16,6 +16,7 @@ import type {
   EstadoIntegracion,
   IntegracionesService,
   LocalesRepository,
+  MantenimientosRepository,
   PlazasRepository,
   ProspectosRepository,
   Repositorios,
@@ -88,6 +89,13 @@ function crearTerrenosMock(seed: Seed): TerrenosRepository {
   return { listar: async () => [...seed.terrenos] };
 }
 
+function crearMantenimientosMock(seed: Seed): MantenimientosRepository {
+  return {
+    listar: async () => [...seed.mantenimientos],
+    listarProveedores: async () => [...seed.proveedores],
+  };
+}
+
 function crearConfiguracionMock(seed: Seed): ConfiguracionRepository {
   return {
     listarUsuarios: async () => [...USUARIOS_DEMO],
@@ -134,6 +142,7 @@ export function crearRepositoriosMock(seed: Seed = crearSeed()): Repositorios {
     prospectos: crearProspectosMock(seed),
     contratos: crearContratosMock(seed),
     terrenos: crearTerrenosMock(seed),
+    mantenimientos: crearMantenimientosMock(seed),
     integraciones: crearIntegracionesMock(seed),
     configuracion: crearConfiguracionMock(seed),
   };

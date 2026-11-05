@@ -1,4 +1,4 @@
-import type { Ciudad } from "@/domain";
+import type { Ciudad, Proveedor } from "@/domain";
 
 /** Ciudad del catálogo con los conteos que fija la guía visual. */
 export interface EntradaCatalogo extends Ciudad {
@@ -227,4 +227,48 @@ export const MARCAS: readonly string[] = [
   "Manglar",
   "Sirena",
   "Duna",
+];
+
+/** Proveedores ficticios de mantenimiento; cada uno atiende solo sus especialidades. */
+export const PROVEEDORES: readonly Proveedor[] = [
+  {
+    id: "prv-1",
+    nombre: "Mantenimientos Comerciales S.A. de C.V.",
+    especialidades: ["PINTURA", "IMPERMEABILIZACION", "LIMPIEZA"],
+  },
+  {
+    id: "prv-2",
+    nombre: "Electro Servicios del Pacífico",
+    especialidades: ["ELECTRICO"],
+  },
+  {
+    id: "prv-3",
+    nombre: "Climas y Refrigeración del Norte",
+    especialidades: ["CLIMA", "ELECTRICO"],
+  },
+  {
+    id: "prv-4",
+    nombre: "Plomería Integral Sinaloa",
+    especialidades: ["PLOMERIA"],
+  },
+  {
+    id: "prv-5",
+    nombre: "Impermeabilizantes Costa Azul",
+    especialidades: ["IMPERMEABILIZACION"],
+  },
+  {
+    id: "prv-6",
+    nombre: "Limpieza Profesional Aseo Total",
+    especialidades: ["LIMPIEZA"],
+  },
+  {
+    id: "prv-7",
+    nombre: "Pinturas y Acabados Delgado",
+    especialidades: ["PINTURA"],
+  },
+  {
+    id: "prv-8",
+    nombre: "Servicios Técnicos Integrales Bajío",
+    especialidades: ["PLOMERIA", "ELECTRICO", "CLIMA"],
+  },
 ];

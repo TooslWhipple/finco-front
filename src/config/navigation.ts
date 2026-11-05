@@ -11,6 +11,7 @@ import {
   Receipt,
   Tag,
   Users,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 
@@ -88,6 +89,13 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
         icono: Receipt,
         badge: "cobranza",
         prefijo: "/cobranza",
+      },
+      {
+        id: "mantenimientos",
+        etiqueta: "Mantenimientos",
+        ruta: "/mantenimientos",
+        icono: Wrench,
+        prefijo: "/mantenimientos",
       },
     ],
   },

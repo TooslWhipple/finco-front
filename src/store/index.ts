@@ -8,6 +8,7 @@ import {
   DEMO_TODAY,
   type Cotizacion,
   type EstadoCambio,
+  type EstatusMantenimiento,
   type EtapaTerreno,
   type EventoSync,
   type Local,
@@ -15,13 +16,14 @@ import {
   type ReglaActualizacion,
   type Rol,
 } from "@/domain";
+import { evidenciaAntes, evidenciaDespues } from "@/data/fotos";
 import { usuarioDeRol, usuarioPorId } from "@/config/usuarios";
 import { crearEstadoInicial, type DatosDemo } from "./estado-inicial";
 import * as r from "./reducers";
 
 export const CLAVE_STORAGE = "finco-demo";
 /** Subir al cambiar la forma del estado persistido: descarta lo viejo. */
-export const VERSION_STORAGE = 4;
+export const VERSION_STORAGE = 5;
 
 export interface Acciones {
   iniciarSesion(usuarioId: string): void;
@@ -57,6 +59,17 @@ export interface Acciones {
   registrarFirmaContrato(id: string, ahora: string): void;
   moverEtapaTerreno(id: string, etapa: EtapaTerreno): void;
   actualizarAvanceTerreno(id: string, avancePct: number): void;
+  /** Alta de un mantenimiento programado, con el siguiente folio. */
+  crearMantenimiento(nuevo: r.NuevoMantenimiento): void;
+  /**
+   * Mueve un mantenimiento de estatus: al iniciar adjunta una foto del "antes", al
+   * finalizar (con `costoReal`) una del "después".
+   */
+  transicionarMantenimiento(
+    id: string,
+    destino: EstatusMantenimiento,
+    costoReal?: number,
+  ): void;
   establecerReglaDefault(plazaId: string, regla: ReglaActualizacion): void;
   ajustarLocal(localId: string, ajuste: r.AjusteLocal): void;
   /** Vuelve todo al estado inicial, conservando la sesión actual. */
@@ -173,6 +186,28 @@ export const useAppStore = create<AppState>()(
           set((s) => ({
             terrenos: r.actualizarAvanceTerreno(s.terrenos, id, avancePct),
           })),
+        crearMantenimiento: (nuevo) =>
+          set((s) => ({
+            mantenimientos: r.agregarMantenimiento(s.mantenimientos, nuevo, DEMO_TODAY),
+          })),
+        transicionarMantenimiento: (id, destino, costoReal) =>
+          set((s) => {
+            const actual = s.mantenimientos.mantenimientos.find((m) => m.id === id);
+            if (!actual) return s;
+            const evidencia =
+              destino === "EN_PROCESO"
+                ? evidenciaAntes(actual.categoria, actual.id, actual.evidencia)
+                : destino === "FINALIZADO"
+                  ? evidenciaDespues(actual.categoria, actual.id, actual.evidencia)
+                  : [];
+            return {
+              mantenimientos: r.transicionarMantenimiento(s.mantenimientos, id, destino, {
+                hoy: DEMO_TODAY,
+                costoReal,
+                evidencia,
+              }),
+            };
+          }),
         establecerReglaDefault: (plazaId, regla) =>
           set((s) => ({
             reglasDefault: r.establecerReglaDefault(s.reglasDefault, plazaId, regla),
@@ -200,6 +235,7 @@ export const useAppStore = create<AppState>()(
         prospectos,
         contratos,
         terrenos,
+        mantenimientos,
         reglasDefault,
       }): DatosDemo => ({
         session,
@@ -211,6 +247,7 @@ export const useAppStore = create<AppState>()(
         prospectos,
         contratos,
         terrenos,
+        mantenimientos,
         reglasDefault,
       }),
     },

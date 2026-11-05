@@ -49,6 +49,13 @@ describe("can", () => {
     expect(can("DIRECCION", "contratos.gestionar")).toBe(false);
   });
 
+  it("los mantenimientos solo los gestiona el Superadmin", () => {
+    for (const rol of ["DIRECCION", "VENTAS", "COBRANZA"] as const) {
+      expect(can(rol, "mantenimientos.gestionar")).toBe(false);
+    }
+    expect(can("SUPERADMIN", "mantenimientos.gestionar")).toBe(true);
+  });
+
   it("sin rol no hay permisos", () => {
     expect(can(null, "cotizaciones.crear")).toBe(false);
     expect(can(undefined, "cobranza.gestionar")).toBe(false);

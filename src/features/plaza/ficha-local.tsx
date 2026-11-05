@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { Eye, FileText, Lock } from "lucide-react";
-import { SectionCard, StatusChip } from "@/components/shared";
+import { GaleriaFotos, SectionCard, StatusChip } from "@/components/shared";
 import { buttonVariants } from "@/components/ui/button";
 import { can } from "@/config/permissions";
+import { fotosDeLocal } from "@/data/fotos";
 import type { Local, Planta, Rol } from "@/domain";
 import { formatFecha, formatMoneda } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -75,6 +76,12 @@ export function FichaLocal({
         </span>
       }
     >
+      <GaleriaFotos
+        variante="portada"
+        fotos={fotosDeLocal(local)}
+        titulo={`Local ${local.codigo}`}
+        className="mb-3"
+      />
       <p className="-mt-1 mb-3 text-sm text-brand-text-muted">
         {[planta?.nombre ?? "Planta", ubicacion, `${local.areaM2} m²`]
           .filter(Boolean)

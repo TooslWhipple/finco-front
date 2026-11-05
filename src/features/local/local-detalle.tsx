@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { FileText, History, Settings2 } from "lucide-react";
 import { toast } from "sonner";
-import { StatusChip } from "@/components/shared";
+import { GaleriaFotos, SectionCard, StatusChip } from "@/components/shared";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { can } from "@/config/permissions";
+import { fotosDeLocal } from "@/data/fotos";
 import { prospectosPorLocal } from "@/domain";
 import {
   useCiudades,
@@ -20,6 +21,7 @@ import { formatMoneda, formatNumero } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store";
 import type { EntradaBitacora } from "@/store/reducers";
+import { SeccionMantenimientos } from "@/features/mantenimientos/seccion-mantenimientos";
 import { BandejaActualizacionAnual } from "./bandeja-actualizacion-anual";
 import { construirHistorial, frenteLocalM } from "./calculos";
 import { HistorialCambios } from "./historial-cambios";
@@ -117,7 +119,18 @@ export function LocalDetalle({ plazaId, localId }: { plazaId: string; localId: s
       ) : null}
 
       <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <PrecioReglaLocal local={local} plaza={plaza} />
+        <div className="min-w-0 space-y-6">
+          <SectionCard titulo="Fotos">
+            <GaleriaFotos fotos={fotosDeLocal(local)} titulo={`Local ${local.codigo}`} />
+          </SectionCard>
+          <PrecioReglaLocal local={local} plaza={plaza} />
+          <SectionCard titulo="Mantenimientos">
+            <SeccionMantenimientos
+              filtro={{ plazaId: plaza.id, localId: local.id }}
+              compacta
+            />
+          </SectionCard>
+        </div>
         <div className="min-w-0">
           <BandejaActualizacionAnual localIdDestacado={local.id} />
         </div>

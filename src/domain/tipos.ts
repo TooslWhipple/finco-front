@@ -100,6 +100,18 @@ export interface Local {
   libreDesde?: FechaISO;
 }
 
+/** Imagen estática servida desde `public/`. */
+export interface Foto {
+  /** Ruta absoluta bajo public/, p. ej. "/locales/alimentos/03.webp". */
+  src: string;
+  /** Descripción en español. */
+  alt: string;
+  /** Ancho del archivo en px. */
+  ancho: number;
+  /** Alto del archivo en px. */
+  alto: number;
+}
+
 export interface Locatario {
   id: string;
   nombre: string;
@@ -344,4 +356,49 @@ export interface EventoSync {
   resultado: ResultadoSync;
   detalle: string;
   registros: number;
+}
+
+export type TipoMantenimiento = "PREVENTIVO" | "CORRECTIVO";
+
+export type EstatusMantenimiento =
+  "PROGRAMADO" | "EN_PROCESO" | "FINALIZADO" | "CANCELADO";
+
+export type CategoriaMantenimiento =
+  "PINTURA" | "IMPERMEABILIZACION" | "ELECTRICO" | "PLOMERIA" | "CLIMA" | "LIMPIEZA";
+
+/** Quién pidió el trabajo. */
+export type OrigenMantenimiento = "ADMINISTRACION" | "LOCATARIO";
+
+/** Quién paga el trabajo. */
+export type CargoMantenimiento = "PLAZA" | "LOCATARIO";
+
+export interface Proveedor {
+  id: string;
+  nombre: string;
+  especialidades: CategoriaMantenimiento[];
+}
+
+/** Trabajo de mantenimiento de una plaza o de uno de sus locales. Montos en MXN. */
+export interface Mantenimiento {
+  id: string;
+  /** `MNT-<año>-<NNNN>`, consecutivo. */
+  folio: string;
+  plazaId: string;
+  /** Vacío cuando el trabajo es de áreas comunes. */
+  localId?: string;
+  titulo: string;
+  descripcion: string;
+  tipo: TipoMantenimiento;
+  categoria: CategoriaMantenimiento;
+  origen: OrigenMantenimiento;
+  estatus: EstatusMantenimiento;
+  proveedorId: string;
+  fechaProgramada: FechaISO;
+  fechaInicio?: FechaISO;
+  fechaFin?: FechaISO;
+  costoEstimado: number;
+  costoReal?: number;
+  cargoA: CargoMantenimiento;
+  /** Fotos del antes y el después. */
+  evidencia: Foto[];
 }

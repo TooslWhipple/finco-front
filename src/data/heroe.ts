@@ -9,6 +9,7 @@ import {
   type FechaISO,
   type Local,
   type Locatario,
+  type CategoriaMantenimiento,
   type Planta,
   type Plaza,
   type ReglaActualizacion,
@@ -23,6 +24,8 @@ import {
 } from "./cartera";
 import { CATALOGO, CIUDAD_HEROE } from "./catalogo";
 import { coordenadasPlaza } from "./coordenadas";
+import { evidenciaAntes, evidenciaDespues } from "./fotos";
+import type { BorradorMantenimiento } from "./mantenimientos";
 import { geometriaHeroePA, geometriaHeroePB, LIENZO, PLANTA_HEROE_PB_ID } from "./planos";
 import { crearPrng } from "./prng";
 
@@ -339,4 +342,204 @@ export function crearHeroe(ctx: Contexto): ParteSeed {
     facturas,
     cotizaciones,
   };
+}
+
+const dias = (n: number): FechaISO => sumarDias(DEMO_TODAY, n);
+
+/** Evidencia de un trabajo ya iniciado (y, si terminó, la del "después"). */
+function evidenciaHeroe(
+  categoria: CategoriaMantenimiento,
+  semilla: string,
+  finalizado: boolean,
+) {
+  const antes = evidenciaAntes(categoria, semilla);
+  return finalizado ? [...antes, ...evidenciaDespues(categoria, semilla, antes)] : antes;
+}
+
+/**
+ * Mantenimientos de Plaza Alborada escritos a mano: incluyen las filas de la
+ * referencia de Arco (pintura del piso 1 con Mantenimientos Comerciales) y dos
+ * trabajos del local A-09 (uno finalizado con evidencia, otro programado).
+ */
+export function mantenimientosHeroe(): BorradorMantenimiento[] {
+  const a09 = `${PLAZA_HEROE_ID}-${LOCAL_HEROE}`;
+  const base = { plazaId: PLAZA_HEROE_ID, proveedorId: "prv-1" } as const;
+  return [
+    {
+      ...base,
+      titulo: "Pintura completa piso 1",
+      descripcion:
+        "Repinte general de pasillos, columnas y fachadas interiores de planta baja.",
+      tipo: "PREVENTIVO",
+      categoria: "PINTURA",
+      origen: "ADMINISTRACION",
+      estatus: "FINALIZADO",
+      fechaProgramada: dias(-8),
+      fechaInicio: dias(-8),
+      fechaFin: dias(-1),
+      costoEstimado: 84_000,
+      costoReal: 86_500,
+      cargoA: "PLAZA",
+      evidencia: evidenciaHeroe("PINTURA", "heroe-pintura-piso-1", true),
+    },
+    {
+      ...base,
+      localId: a09,
+      titulo: "Pintura y resane del local A-09",
+      descripcion:
+        "Resane de muros y pintura completa antes de mostrar el local a prospectos.",
+      tipo: "PREVENTIVO",
+      categoria: "PINTURA",
+      origen: "ADMINISTRACION",
+      estatus: "FINALIZADO",
+      fechaProgramada: dias(-27),
+      fechaInicio: dias(-26),
+      fechaFin: dias(-21),
+      costoEstimado: 18_500,
+      costoReal: 17_900,
+      cargoA: "PLAZA",
+      evidencia: evidenciaHeroe("PINTURA", "heroe-a09-pintura", true),
+    },
+    {
+      ...base,
+      localId: a09,
+      titulo: "Limpieza profunda previa a entrega",
+      descripcion: "Limpieza fina y pulido de piso para la entrega a Café Tierra Alta.",
+      tipo: "PREVENTIVO",
+      categoria: "LIMPIEZA",
+      origen: "ADMINISTRACION",
+      estatus: "PROGRAMADO",
+      fechaProgramada: dias(17),
+      costoEstimado: 4_800,
+      cargoA: "PLAZA",
+      evidencia: [],
+    },
+    {
+      ...base,
+      proveedorId: "prv-5",
+      titulo: "Impermeabilización de azotea, ala B",
+      descripcion:
+        "Retiro de membrana dañada y aplicación de impermeabilizante prefabricado.",
+      tipo: "CORRECTIVO",
+      categoria: "IMPERMEABILIZACION",
+      origen: "ADMINISTRACION",
+      estatus: "EN_PROCESO",
+      fechaProgramada: dias(-8),
+      fechaInicio: dias(-6),
+      costoEstimado: 126_000,
+      cargoA: "PLAZA",
+      evidencia: evidenciaHeroe("IMPERMEABILIZACION", "heroe-azotea-b", false),
+    },
+    {
+      ...base,
+      proveedorId: "prv-3",
+      titulo: "Servicio a equipos de aire acondicionado",
+      descripcion:
+        "Limpieza de serpentines y revisión de gas en las manejadoras de pasillos.",
+      tipo: "PREVENTIVO",
+      categoria: "CLIMA",
+      origen: "ADMINISTRACION",
+      estatus: "PROGRAMADO",
+      fechaProgramada: dias(-6),
+      costoEstimado: 32_500,
+      cargoA: "PLAZA",
+      evidencia: [],
+    },
+    {
+      ...base,
+      proveedorId: "prv-2",
+      titulo: "Revisión de tableros y luminarias",
+      descripcion:
+        "Termografía de tableros generales y reemplazo de luminarias de estacionamiento.",
+      tipo: "PREVENTIVO",
+      categoria: "ELECTRICO",
+      origen: "ADMINISTRACION",
+      estatus: "FINALIZADO",
+      fechaProgramada: dias(-62),
+      fechaInicio: dias(-62),
+      fechaFin: dias(-59),
+      costoEstimado: 41_000,
+      costoReal: 39_200,
+      cargoA: "PLAZA",
+      evidencia: evidenciaHeroe("ELECTRICO", "heroe-tableros", true),
+    },
+    {
+      ...base,
+      proveedorId: "prv-4",
+      localId: `${PLAZA_HEROE_ID}-C-09`,
+      titulo: "Reparación de fuga en baño del restaurante",
+      descripcion:
+        "Cambio de válvula y tubería con fuga reportada por Restaurante Mar y Sol.",
+      tipo: "CORRECTIVO",
+      categoria: "PLOMERIA",
+      origen: "LOCATARIO",
+      estatus: "FINALIZADO",
+      fechaProgramada: dias(-4),
+      fechaInicio: dias(-3),
+      fechaFin: dias(-2),
+      costoEstimado: 6_000,
+      costoReal: 6_200,
+      cargoA: "LOCATARIO",
+      evidencia: evidenciaHeroe("PLOMERIA", "heroe-c09-fuga", true),
+    },
+    {
+      ...base,
+      proveedorId: "prv-2",
+      localId: `${PLAZA_HEROE_ID}-B-02`,
+      titulo: "Reemplazo de luminarias del local",
+      descripcion: "Café Raíz reporta luminarias que no encienden en el área de mesas.",
+      tipo: "CORRECTIVO",
+      categoria: "ELECTRICO",
+      origen: "LOCATARIO",
+      estatus: "PROGRAMADO",
+      fechaProgramada: dias(7),
+      costoEstimado: 9_800,
+      cargoA: "LOCATARIO",
+      evidencia: [],
+    },
+    {
+      ...base,
+      proveedorId: "prv-8",
+      localId: `${PLAZA_HEROE_ID}-A-01`,
+      titulo: "Reparación de equipo de clima",
+      descripcion: "El minisplit de Farmacia Cardón no enfría; el equipo es de la plaza.",
+      tipo: "CORRECTIVO",
+      categoria: "CLIMA",
+      origen: "LOCATARIO",
+      estatus: "EN_PROCESO",
+      fechaProgramada: dias(-3),
+      fechaInicio: dias(-1),
+      costoEstimado: 12_400,
+      cargoA: "PLAZA",
+      evidencia: evidenciaHeroe("CLIMA", "heroe-a01-clima", false),
+    },
+    {
+      ...base,
+      proveedorId: "prv-6",
+      titulo: "Limpieza profunda de áreas comunes",
+      descripcion: "Pulido de pisos y lavado de cristales en accesos y pasillos.",
+      tipo: "PREVENTIVO",
+      categoria: "LIMPIEZA",
+      origen: "ADMINISTRACION",
+      estatus: "CANCELADO",
+      fechaProgramada: dias(-40),
+      costoEstimado: 14_000,
+      cargoA: "PLAZA",
+      evidencia: [],
+    },
+    {
+      ...base,
+      proveedorId: "prv-7",
+      titulo: "Renovación de señalética y pintura de cajones",
+      descripcion: "Retoque de pintura vial y señalética del estacionamiento.",
+      tipo: "PREVENTIVO",
+      categoria: "PINTURA",
+      origen: "ADMINISTRACION",
+      estatus: "PROGRAMADO",
+      fechaProgramada: dias(30),
+      costoEstimado: 23_000,
+      cargoA: "PLAZA",
+      evidencia: [],
+    },
+  ];
 }

@@ -13,6 +13,7 @@ export type Accion =
   | "prospectos.gestionar"
   | "contratos.gestionar"
   | "terrenos.gestionar"
+  | "mantenimientos.gestionar"
   | "configuracion.editar";
 
 const TODAS: readonly Accion[] = [
@@ -28,6 +29,7 @@ const TODAS: readonly Accion[] = [
   "prospectos.gestionar",
   "contratos.gestionar",
   "terrenos.gestionar",
+  "mantenimientos.gestionar",
   "configuracion.editar",
 ];
 

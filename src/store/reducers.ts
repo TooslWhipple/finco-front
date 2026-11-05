@@ -1,4 +1,6 @@
 import {
+  siguienteFolio,
+  transicionar,
   ETIQUETA_ETAPA_PROSPECTO,
   ETAPAS_TERRENO,
   reglaEfectiva,
@@ -11,8 +13,11 @@ import {
   type EventoSync,
   type ExcepcionPrecio,
   type FechaISO,
+  type EstatusMantenimiento,
+  type Foto,
   type IdIntegracion,
   type Local,
+  type Mantenimiento,
   type Prospecto,
   type ReglaActualizacion,
   type Terreno,
@@ -65,6 +70,10 @@ export interface ContratosState {
 
 export interface TerrenosState {
   terrenos: Terreno[];
+}
+
+export interface MantenimientosState {
+  mantenimientos: Mantenimiento[];
 }
 
 export interface ReglasDefaultState {
@@ -334,6 +343,53 @@ export function actualizarAvanceTerreno(
   const avance = Math.min(100, Math.max(0, Math.round(avancePct)));
   return {
     terrenos: estado.terrenos.map((t) => (t.id === id ? { ...t, avancePct: avance } : t)),
+  };
+}
+
+// --- mantenimientos -------------------------------------------------------
+
+/** Lo que captura el diálogo de alta: el resto lo fija el reducer (nace programado). */
+export type NuevoMantenimiento = Omit<
+  Mantenimiento,
+  "id" | "folio" | "estatus" | "evidencia" | "fechaInicio" | "fechaFin" | "costoReal"
+>;
+
+/** Da de alta un mantenimiento programado con el siguiente folio libre. */
+export function agregarMantenimiento(
+  estado: MantenimientosState,
+  nuevo: NuevoMantenimiento,
+  hoy: FechaISO,
+): MantenimientosState {
+  const folio = siguienteFolio(
+    estado.mantenimientos.map((m) => m.folio),
+    hoy,
+  );
+  const consecutivo = folio.split("-")[2];
+  const mantenimiento: Mantenimiento = {
+    ...nuevo,
+    id: `mnt-${consecutivo}`,
+    folio,
+    estatus: "PROGRAMADO",
+    evidencia: [],
+  };
+  return { mantenimientos: [...estado.mantenimientos, mantenimiento] };
+}
+
+/**
+ * Mueve un mantenimiento a otro estatus según el flujo del dominio. Si la
+ * transición no es válida (o falta el costo real al finalizar) deja el estado igual.
+ */
+export function transicionarMantenimiento(
+  estado: MantenimientosState,
+  id: string,
+  destino: EstatusMantenimiento,
+  datos: { hoy: FechaISO; costoReal?: number; evidencia?: readonly Foto[] },
+): MantenimientosState {
+  const actual = estado.mantenimientos.find((m) => m.id === id);
+  const siguiente = actual && transicionar(actual, destino, datos);
+  if (!siguiente) return estado;
+  return {
+    mantenimientos: estado.mantenimientos.map((m) => (m.id === id ? siguiente : m)),
   };
 }
 

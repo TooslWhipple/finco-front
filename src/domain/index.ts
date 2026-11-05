@@ -10,3 +10,5 @@ export * from "./prospectos";
 export * from "./contratos";
 export * from "./terrenos";
 export * from "./mapa";
+export * from "./fotos";
+export * from "./mantenimientos";

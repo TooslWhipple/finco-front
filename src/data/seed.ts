@@ -13,16 +13,19 @@ import {
   type Integracion,
   type Local,
   type Locatario,
+  type Mantenimiento,
   type Planta,
   type Plaza,
   type Prospecto,
+  type Proveedor,
   type Terreno,
 } from "@/domain";
 import { crearContexto } from "./cartera";
-import { CATALOGO, CIUDAD_HEROE, NOMBRES_PLAZA } from "./catalogo";
+import { CATALOGO, CIUDAD_HEROE, NOMBRES_PLAZA, PROVEEDORES } from "./catalogo";
 import { generarPlazas, repartir, type PlazaPlan } from "./generador";
 import { crearHeroe, PLAZA_HEROE_ID } from "./heroe";
 import { crearConectores } from "./integraciones";
+import { crearMantenimientos } from "./mantenimientos";
 import { crearPrng } from "./prng";
 import { crearProspectos } from "./prospectos";
 import { crearTerrenos } from "./terrenos";
@@ -48,6 +51,8 @@ export interface Seed {
   ultimoSync: string;
   prospectos: Prospecto[];
   terrenos: Terreno[];
+  proveedores: Proveedor[];
+  mantenimientos: Mantenimiento[];
   integraciones: Integracion[];
   /** Log de sincronizaciones, del más antiguo al más reciente. */
   eventosSync: EventoSync[];
@@ -164,6 +169,11 @@ export function crearSeed(): Seed {
     ultimoSync,
     prospectos: prospeccion.prospectos,
     terrenos,
+    proveedores: PROVEEDORES.map((p) => ({
+      ...p,
+      especialidades: [...p.especialidades],
+    })),
+    mantenimientos: crearMantenimientos(plazas, locales),
     integraciones: conectores.integraciones,
     eventosSync: conectores.eventosSync,
   };

@@ -77,4 +77,9 @@ describe("repositorios mock", () => {
     expect(parametros.umbralOcupacionMedia).toBe(0.75);
     expect(Object.keys(parametros.inpcAnual).length).toBeGreaterThan(0);
   });
+
+  it("mantenimientos: lista el seed y sus proveedores", async () => {
+    expect(await repos.mantenimientos.listar()).toEqual(seed.mantenimientos);
+    expect(await repos.mantenimientos.listarProveedores()).toHaveLength(8);
+  });
 });

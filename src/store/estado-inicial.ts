@@ -6,6 +6,7 @@ import type {
   CotizacionesState,
   IntegracionesState,
   LocalesState,
+  MantenimientosState,
   ProspectosState,
   ReglasDefaultState,
   TerrenosState,
@@ -25,12 +26,13 @@ export interface DatosDemo {
   prospectos: ProspectosState;
   contratos: ContratosState;
   terrenos: TerrenosState;
+  mantenimientos: MantenimientosState;
   reglasDefault: ReglasDefaultState;
 }
 
 /**
  * Estado de la demo recién reiniciada. Las listas mutables (cotizaciones,
- * excepciones, bandeja anual, prospectos, terrenos) parten del seed; el resto de los datos se lee
+ * excepciones, bandeja anual, prospectos, terrenos, mantenimientos) parten del seed; el resto de los datos se lee
  * siempre de los repositorios.
  */
 export function crearEstadoInicial(): DatosDemo {
@@ -48,6 +50,7 @@ export function crearEstadoInicial(): DatosDemo {
     prospectos: { prospectos: seed.prospectos },
     contratos: { nuevos: [] },
     terrenos: { terrenos: seed.terrenos },
+    mantenimientos: { mantenimientos: seed.mantenimientos },
     reglasDefault: { porPlaza: {} },
   };
 }

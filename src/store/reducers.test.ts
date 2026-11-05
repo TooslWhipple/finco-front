@@ -262,3 +262,60 @@ describe("reglas por default", () => {
     ).toBe(localA09);
   });
 });
+
+describe("mantenimientos", () => {
+  const estado = (): r.MantenimientosState => ({ mantenimientos: seed.mantenimientos });
+  const nuevo: r.NuevoMantenimiento = {
+    plazaId: "plz-alborada",
+    titulo: "Prueba",
+    descripcion: "",
+    tipo: "PREVENTIVO",
+    categoria: "CLIMA",
+    origen: "ADMINISTRACION",
+    proveedorId: "prv-3",
+    fechaProgramada: "2026-12-01",
+    costoEstimado: 1000,
+    cargoA: "PLAZA",
+  };
+
+  it("agregar da el siguiente folio y nace programado y sin evidencia", () => {
+    const antes = estado();
+    const despues = r.agregarMantenimiento(antes, nuevo, DEMO_TODAY);
+    expect(despues.mantenimientos).toHaveLength(antes.mantenimientos.length + 1);
+    const creado = despues.mantenimientos.at(-1)!;
+    expect(creado).toMatchObject({
+      estatus: "PROGRAMADO",
+      evidencia: [],
+      titulo: "Prueba",
+    });
+    expect(creado.folio).toBe(
+      `MNT-2026-${String(antes.mantenimientos.length + 1).padStart(4, "0")}`,
+    );
+    expect(new Set(despues.mantenimientos.map((m) => m.id)).size).toBe(
+      despues.mantenimientos.length,
+    );
+    expect(antes.mantenimientos).toBe(seed.mantenimientos);
+  });
+
+  it("transicionar aplica el dominio y deja igual lo inválido", () => {
+    const programado = seed.mantenimientos.find((m) => m.estatus === "PROGRAMADO")!;
+    const e = estado();
+    expect(
+      r.transicionarMantenimiento(e, programado.id, "FINALIZADO", { hoy: DEMO_TODAY }),
+    ).toBe(e);
+    expect(
+      r.transicionarMantenimiento(e, "no-existe", "EN_PROCESO", { hoy: DEMO_TODAY }),
+    ).toBe(e);
+    const iniciado = r.transicionarMantenimiento(e, programado.id, "EN_PROCESO", {
+      hoy: DEMO_TODAY,
+    });
+    expect(iniciado.mantenimientos.find((m) => m.id === programado.id)).toMatchObject({
+      estatus: "EN_PROCESO",
+      fechaInicio: DEMO_TODAY,
+    });
+    const terminado = seed.mantenimientos.find((m) => m.estatus === "FINALIZADO")!;
+    expect(
+      r.transicionarMantenimiento(e, terminado.id, "CANCELADO", { hoy: DEMO_TODAY }),
+    ).toBe(e);
+  });
+});

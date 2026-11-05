@@ -77,6 +77,7 @@ describe("store de la demo", () => {
       "cotizaciones",
       "integraciones",
       "locales",
+      "mantenimientos",
       "prospectos",
       "reglasDefault",
       "session",
@@ -130,5 +131,73 @@ describe("store de la demo", () => {
     const e = useAppStore.getState();
     expect(e.contratos.nuevos).toEqual([]);
     expect(e.reglasDefault.porPlaza).toEqual({});
+  });
+
+  it("crea un mantenimiento programado, lo inicia y lo finaliza con evidencia", () => {
+    const s = useAppStore.getState();
+    const antes = s.mantenimientos.mantenimientos.length;
+    s.crearMantenimiento({
+      plazaId: "plz-alborada",
+      localId: "plz-alborada-C-09",
+      titulo: "Fuga",
+      descripcion: "",
+      tipo: "CORRECTIVO",
+      categoria: "PLOMERIA",
+      origen: "LOCATARIO",
+      proveedorId: "prv-4",
+      fechaProgramada: "2026-11-05",
+      costoEstimado: 5000,
+      cargoA: "PLAZA",
+    });
+    let lista = useAppStore.getState().mantenimientos.mantenimientos;
+    expect(lista).toHaveLength(antes + 1);
+    const nuevo = lista.at(-1)!;
+    expect(nuevo).toMatchObject({ estatus: "PROGRAMADO", evidencia: [] });
+    expect(nuevo.folio).toBe(`MNT-2026-${String(antes + 1).padStart(4, "0")}`);
+
+    s.transicionarMantenimiento(nuevo.id, "FINALIZADO", 100);
+    expect(useAppStore.getState().mantenimientos.mantenimientos.at(-1)!.estatus).toBe(
+      "PROGRAMADO",
+    );
+    s.transicionarMantenimiento(nuevo.id, "EN_PROCESO");
+    lista = useAppStore.getState().mantenimientos.mantenimientos;
+    expect(lista.at(-1)).toMatchObject({
+      estatus: "EN_PROCESO",
+      fechaInicio: "2026-11-03",
+    });
+    expect(lista.at(-1)!.evidencia).toHaveLength(1);
+
+    s.transicionarMantenimiento(nuevo.id, "FINALIZADO");
+    expect(useAppStore.getState().mantenimientos.mantenimientos.at(-1)!.estatus).toBe(
+      "EN_PROCESO",
+    );
+    s.transicionarMantenimiento(nuevo.id, "FINALIZADO", 5400);
+    const fin = useAppStore.getState().mantenimientos.mantenimientos.at(-1)!;
+    expect(fin).toMatchObject({
+      estatus: "FINALIZADO",
+      costoReal: 5400,
+      fechaFin: "2026-11-03",
+    });
+    expect(fin.evidencia).toHaveLength(2);
+    expect(new Set(fin.evidencia.map((f) => f.src)).size).toBe(2);
+  });
+
+  it("resetDemo revierte los mantenimientos creados", () => {
+    const s = useAppStore.getState();
+    const antes = s.mantenimientos.mantenimientos.length;
+    s.crearMantenimiento({
+      plazaId: "plz-alborada",
+      titulo: "x",
+      descripcion: "",
+      tipo: "PREVENTIVO",
+      categoria: "LIMPIEZA",
+      origen: "ADMINISTRACION",
+      proveedorId: "prv-6",
+      fechaProgramada: "2026-12-01",
+      costoEstimado: 1000,
+      cargoA: "PLAZA",
+    });
+    useAppStore.getState().resetDemo();
+    expect(useAppStore.getState().mantenimientos.mantenimientos).toHaveLength(antes);
   });
 });

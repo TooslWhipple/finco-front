@@ -38,6 +38,15 @@ export const ACCIONES_MATRIZ: readonly {
     ],
   },
   {
+    modulo: "Mantenimientos",
+    acciones: [
+      {
+        accion: "mantenimientos.gestionar",
+        etiqueta: "Crear mantenimientos y cambiar su estatus",
+      },
+    ],
+  },
+  {
     modulo: "Terrenos y configuración",
     acciones: [
       { accion: "terrenos.gestionar", etiqueta: "Gestionar terrenos y proyectos" },

@@ -14,6 +14,7 @@ const ETIQUETAS: Readonly<Record<string, string>> = {
   contratos: "Contratos",
   "terrenos-y-proyectos": "Terrenos y proyectos",
   cobranza: "Cobranza",
+  mantenimientos: "Mantenimientos",
   integraciones: "Integraciones",
   reportes: "Reportes",
   configuracion: "Configuración",

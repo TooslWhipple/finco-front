@@ -9,8 +9,8 @@ function activos(ruta: string): string[] {
 }
 
 describe("menú", () => {
-  it("tiene 12 ítems y todos se ven con cualquier rol, como en el PDF", () => {
-    expect(ITEMS).toHaveLength(12);
+  it("tiene 13 ítems (los 12 del PDF más Mantenimientos, que pidió el jefe el 2026-11-04) y todos se ven con cualquier rol", () => {
+    expect(ITEMS).toHaveLength(13);
     expect(ITEMS.some((i) => "accion" in i)).toBe(false);
   });
 
@@ -28,6 +28,12 @@ describe("menú", () => {
     ]);
     expect(activos("/plazas/plz-alborada")).toEqual(["plazas"]);
     expect(activos("/precios-y-reglas")).toEqual(["precios-y-reglas"]);
+  });
+
+  it("Mantenimientos va en Operación y solo se activa en su ruta", () => {
+    const operacion = NAVEGACION.find((g) => g.id === "operacion");
+    expect(operacion?.items.map((i) => i.id)).toContain("mantenimientos");
+    expect(activos("/mantenimientos")).toEqual(["mantenimientos"]);
   });
 });
 

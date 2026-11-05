@@ -5,6 +5,9 @@ import {
   carteraVencida,
   contratosPorVencer,
   diasAtraso,
+  erroresMantenimiento,
+  kpisMantenimiento,
+  consecutivoDeFolio,
   embudoProspectos,
   enDesarrolloEn,
   estatusCobro,
@@ -16,7 +19,7 @@ import {
   repricingAlLiberar,
   semaforoTerreno,
 } from "@/domain";
-import { CATALOGO } from "./catalogo";
+import { CATALOGO, PROVEEDORES } from "./catalogo";
 import { COTIZACION_HEROE, LOCAL_HEROE, PLAZA_HEROE_ID } from "./heroe";
 import { crearSeed } from "./seed";
 
@@ -360,5 +363,96 @@ describe("integraciones", () => {
       expect(fechas.at(-1)).toBe(integracion.ultimoSync);
     }
     expect(seed.integraciones[0].ultimoSync).toBe(seed.ultimoSync);
+  });
+});
+
+describe("mantenimientos", () => {
+  const plazaPorId = new Map(seed.plazas.map((p) => [p.id, p]));
+  const localPorId = new Map(seed.locales.map((l) => [l.id, l]));
+  const proveedorPorId = new Map(seed.proveedores.map((p) => [p.id, p]));
+  const deAlborada = seed.mantenimientos.filter((m) => m.plazaId === PLAZA_HEROE_ID);
+
+  it("hay unos 200, con 8 proveedores y folios consecutivos únicos", () => {
+    expect(seed.proveedores).toHaveLength(8);
+    expect(seed.proveedores.map((p) => p.id)).toEqual(PROVEEDORES.map((p) => p.id));
+    expect(seed.mantenimientos.length).toBeGreaterThanOrEqual(150);
+    expect(seed.mantenimientos.length).toBeLessThanOrEqual(260);
+    expect(new Set(seed.mantenimientos.map((m) => m.id)).size).toBe(
+      seed.mantenimientos.length,
+    );
+    expect(seed.mantenimientos.map((m) => consecutivoDeFolio(m.folio))).toEqual(
+      seed.mantenimientos.map((_, i) => i + 1),
+    );
+    for (const m of seed.mantenimientos) expect(m.folio).toMatch(/^MNT-\d{4}-\d{4}$/);
+  });
+
+  it("cada registro apunta a plaza, local de esa plaza y proveedor existentes", () => {
+    for (const m of seed.mantenimientos) {
+      expect(plazaPorId.has(m.plazaId), m.folio).toBe(true);
+      if (m.localId) expect(localPorId.get(m.localId)?.plazaId, m.folio).toBe(m.plazaId);
+      expect(proveedorPorId.has(m.proveedorId), m.folio).toBe(true);
+    }
+  });
+
+  it("cumple todas las invariantes del dominio", () => {
+    for (const m of seed.mantenimientos) {
+      const errores = erroresMantenimiento(m, {
+        local: m.localId ? localPorId.get(m.localId) : undefined,
+        proveedor: proveedorPorId.get(m.proveedorId),
+      });
+      expect(errores, m.folio).toEqual([]);
+    }
+  });
+
+  it("las fechas caben en la ventana y ningún trabajo empezó o terminó en el futuro", () => {
+    for (const m of seed.mantenimientos) {
+      expect(
+        m.fechaProgramada >= "2026-05-01" && m.fechaProgramada <= "2027-01-31",
+        m.folio,
+      ).toBe(true);
+      if (m.fechaInicio) expect(m.fechaInicio <= DEMO_TODAY, m.folio).toBe(true);
+      if (m.fechaFin) expect(m.fechaFin <= DEMO_TODAY, m.folio).toBe(true);
+      if (m.estatus === "FINALIZADO")
+        expect(m.evidencia.length, m.folio).toBeGreaterThan(0);
+    }
+  });
+
+  it("las plazas en operación (salvo la héroe) tienen entre 3 y 8 y las de preventa ninguno", () => {
+    for (const p of seed.plazas) {
+      const n = seed.mantenimientos.filter((m) => m.plazaId === p.id).length;
+      if (p.estatus === "PREVENTA") expect(n, p.id).toBe(0);
+      else if (p.id !== PLAZA_HEROE_ID) {
+        expect(n, p.id).toBeGreaterThanOrEqual(3);
+        expect(n, p.id).toBeLessThanOrEqual(8);
+      }
+    }
+  });
+
+  it("hay mezcla de estatus y de tipos", () => {
+    expect(new Set(seed.mantenimientos.map((m) => m.estatus)).size).toBe(4);
+    expect(new Set(seed.mantenimientos.map((m) => m.tipo)).size).toBe(2);
+    const k = kpisMantenimiento(seed.mantenimientos, DEMO_TODAY);
+    expect(k.atrasados).toBeGreaterThan(0);
+    expect(k.pctPreventivo).toBeGreaterThan(0.3);
+    expect(k.pctPreventivo).toBeLessThan(0.8);
+  });
+
+  it("Alborada lleva unos 10 a mano, con las filas de Arco y A-09 con 2 (finalizado con evidencia y programado)", () => {
+    expect(deAlborada.length).toBeGreaterThanOrEqual(10);
+    expect(deAlborada.length).toBeLessThanOrEqual(12);
+    const pintura = deAlborada.find((m) => m.titulo === "Pintura completa piso 1");
+    expect(proveedorPorId.get(pintura?.proveedorId ?? "")?.nombre).toBe(
+      "Mantenimientos Comerciales S.A. de C.V.",
+    );
+    const deA09 = deAlborada.filter((m) => m.localId === idHeroe);
+    expect(deA09.length).toBeGreaterThanOrEqual(2);
+    expect(deA09.some((m) => m.estatus === "FINALIZADO" && m.evidencia.length > 0)).toBe(
+      true,
+    );
+    expect(deA09.some((m) => m.estatus === "PROGRAMADO")).toBe(true);
+  });
+
+  it("el seed es determinista", () => {
+    expect(crearSeed().mantenimientos).toEqual(seed.mantenimientos);
   });
 });

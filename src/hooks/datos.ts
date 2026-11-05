@@ -1,7 +1,15 @@
 "use client";
 
 import { useMemo } from "react";
-import type { Contrato, EventoSync, Factura, Integracion, Local, Plaza } from "@/domain";
+import {
+  filtrarPorUbicacion,
+  type Contrato,
+  type EventoSync,
+  type Factura,
+  type Integracion,
+  type Local,
+  type Plaza,
+} from "@/domain";
 import { plazasConTerrenos } from "@/data/terrenos";
 import { usuarioPorId } from "@/config/usuarios";
 import { useAppStore } from "@/store";
@@ -145,6 +153,27 @@ export function useContratosVivos() {
 export function useTerrenos() {
   const datos = useAppStore((s) => s.terrenos.terrenos);
   return { datos, cargando: false };
+}
+
+/** Filtro de ubicación de los mantenimientos: toda la red, una plaza o un local. */
+export interface FiltroMantenimientos {
+  plazaId?: string;
+  localId?: string;
+}
+
+/** Mantenimientos de la demo (parten del seed), acotados a una plaza o a un local. */
+export function useMantenimientos(filtro: FiltroMantenimientos = {}) {
+  const todos = useAppStore((s) => s.mantenimientos.mantenimientos);
+  const { plazaId, localId } = filtro;
+  const datos = useMemo(
+    () => filtrarPorUbicacion(todos, { plazaId, localId }),
+    [todos, plazaId, localId],
+  );
+  return { datos, cargando: false };
+}
+
+export function useProveedores() {
+  return useConsulta((r) => r.mantenimientos.listarProveedores());
 }
 
 export function useExcepciones() {

@@ -57,6 +57,14 @@ export const ESTATUS = {
   VERDE: { etiqueta: "En tiempo", tono: "verde" },
   AMARILLO: { etiqueta: "Con retraso", tono: "naranja" },
   ROJO: { etiqueta: "En riesgo", tono: "coral" },
+  // Mantenimientos
+  PROGRAMADO: { etiqueta: "Programado", tono: "indigo" },
+  EN_PROCESO: { etiqueta: "En proceso", tono: "naranja" },
+  FINALIZADO: { etiqueta: "Finalizado", tono: "verde" },
+  CANCELADO: { etiqueta: "Cancelado", tono: "neutro" },
+  ATRASADO: { etiqueta: "Atrasado", tono: "coral" },
+  PREVENTIVO: { etiqueta: "Preventivo", tono: "primario" },
+  CORRECTIVO: { etiqueta: "Correctivo", tono: "coral" },
   // Integraciones y log de sincronización
   CONECTADA: { etiqueta: "Conectada", tono: "verde" },
   CON_DIFERENCIAS: { etiqueta: "Con diferencias", tono: "naranja" },

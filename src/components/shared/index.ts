@@ -12,3 +12,4 @@ export * from "./timeline";
 export * from "./tablero-kanban";
 export * from "./panel-detalle";
 export * from "./card-integracion";
+export * from "./galeria-fotos";
