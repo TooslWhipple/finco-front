@@ -2,7 +2,10 @@
 
 import { useMemo } from "react";
 import {
+  aplicarResumenObra,
+  DEMO_TODAY,
   filtrarPorUbicacion,
+  resumenObra,
   type Contrato,
   type EventoSync,
   type Factura,
@@ -15,6 +18,7 @@ import { usuarioPorId } from "@/config/usuarios";
 import { useAppStore } from "@/store";
 import {
   aplicarAjuste,
+  aplicarMeta,
   aplicarReglaDefault,
   aplicarReglaHeredada,
 } from "@/store/reducers";
@@ -32,20 +36,21 @@ export function useCiudades() {
   return useConsulta((r) => r.plazas.listarCiudades());
 }
 
-/** Plazas con la regla por default que se haya editado en la demo. */
+/** Plazas con la regla por default y la meta de ingresos que se hayan editado en la demo. */
 export function usePlazas() {
   const base = useConsulta((r) => r.plazas.listarPlazas());
   const reglas = useAppStore((s) => s.reglasDefault);
+  const metas = useAppStore((s) => s.metas);
   const terrenos = useAppStore((s) => s.terrenos.terrenos);
   const ciudades = useCiudades().datos;
   const datos = useMemo(
     () =>
       base.datos && ciudades
         ? plazasConTerrenos(base.datos, terrenos, ciudades).map((p) =>
-            aplicarReglaDefault(p, reglas),
+            aplicarMeta(aplicarReglaDefault(p, reglas), metas),
           )
         : undefined,
-    [base.datos, ciudades, terrenos, reglas],
+    [base.datos, ciudades, terrenos, reglas, metas],
   );
   return { datos, cargando: base.cargando };
 }
@@ -53,9 +58,13 @@ export function usePlazas() {
 export function usePlaza(id: string) {
   const base = useConsulta((r) => r.plazas.obtenerPlaza(id), [id]);
   const reglas = useAppStore((s) => s.reglasDefault);
+  const metas = useAppStore((s) => s.metas);
   const datos = useMemo<Plaza | undefined>(
-    () => (base.datos ? aplicarReglaDefault(base.datos, reglas) : undefined),
-    [base.datos, reglas],
+    () =>
+      base.datos
+        ? aplicarMeta(aplicarReglaDefault(base.datos, reglas), metas)
+        : undefined,
+    [base.datos, reglas, metas],
   );
   return { datos, cargando: base.cargando };
 }
@@ -151,8 +160,76 @@ export function useContratosVivos() {
 
 /** Terrenos y proyectos en desarrollo: viven en el store (parten del seed). */
 export function useTerrenos() {
-  const datos = useAppStore((s) => s.terrenos.terrenos);
+  const terrenos = useAppStore((s) => s.terrenos.terrenos);
+  const obra = useAppStore((s) => s.obra);
+  const datos = useMemo(
+    () =>
+      terrenos.map((t) =>
+        aplicarResumenObra(
+          t,
+          resumenObra(
+            obra.contratos.filter((c) => c.terrenoId === t.id),
+            obra.cortes,
+            obra.pagos,
+            DEMO_TODAY,
+          ),
+        ),
+      ),
+    [terrenos, obra],
+  );
   return { datos, cargando: false };
+}
+
+/** Contratos de obra de un proyecto (parten del seed). */
+export function useContratosObra(terrenoId: string) {
+  const todos = useAppStore((s) => s.obra.contratos);
+  return useMemo(
+    () => todos.filter((c) => c.terrenoId === terrenoId),
+    [todos, terrenoId],
+  );
+}
+
+/** Cortes semanales de un proyecto, del más reciente al más antiguo. */
+export function useCortesObra(terrenoId: string) {
+  const contratos = useContratosObra(terrenoId);
+  const todos = useAppStore((s) => s.obra.cortes);
+  return useMemo(() => {
+    const ids = new Set(contratos.map((c) => c.id));
+    return todos
+      .filter((c) => ids.has(c.contratoObraId))
+      .toSorted((a, b) => b.semana.localeCompare(a.semana) || b.id.localeCompare(a.id));
+  }, [contratos, todos]);
+}
+
+/** Pagos a contratistas de un proyecto (costo real, importado de EnKontrol de forma simulada). */
+export function usePagosObra(terrenoId: string) {
+  const contratos = useContratosObra(terrenoId);
+  const todos = useAppStore((s) => s.obra.pagos);
+  return useMemo(() => {
+    const ids = new Set(contratos.map((c) => c.id));
+    return todos.filter((p) => ids.has(p.contratoObraId));
+  }, [contratos, todos]);
+}
+
+/** Licitaciones de obra de un proyecto (parten del seed). */
+export function useLicitaciones(terrenoId: string) {
+  const todas = useAppStore((s) => s.obra.licitaciones);
+  return useMemo(
+    () => todas.filter((l) => l.terrenoId === terrenoId),
+    [todas, terrenoId],
+  );
+}
+
+/** Cronograma de un proyecto, ordenado por inicio planeado. */
+export function useCronograma(terrenoId: string) {
+  const todas = useAppStore((s) => s.obra.cronograma);
+  return useMemo(
+    () =>
+      todas
+        .filter((a) => a.terrenoId === terrenoId)
+        .toSorted((a, b) => a.inicioPlan.localeCompare(b.inicioPlan)),
+    [todas, terrenoId],
+  );
 }
 
 /** Filtro de ubicación de los mantenimientos: toda la red, una plaza o un local. */

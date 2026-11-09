@@ -1,3 +1,4 @@
+import type { Rol } from "@/domain";
 import {
   BarChart3,
   Building,
@@ -30,6 +31,8 @@ export interface ItemNavegacion {
   tambienActivoEn?: RegExp;
   /** Rutas dentro de su prefijo que pertenecen a otro ítem. */
   inactivoEn?: RegExp;
+  /** Roles que ven el ítem; si se omite, lo ven todos. */
+  roles?: readonly Rol[];
 }
 
 export interface GrupoNavegacion {
@@ -37,6 +40,9 @@ export interface GrupoNavegacion {
   titulo: string;
   items: readonly ItemNavegacion[];
 }
+
+/** Roles que ven todo el menú sin tener que listarse en `roles`. */
+const ROLES_VEN_TODO: readonly Rol[] = ["DIRECCION", "SUPERADMIN"];
 
 /** Ficha de un local: la página 3 de la guía la resalta bajo "Precios y reglas". */
 const RUTA_FICHA_LOCAL = /^\/plazas\/[^/]+\/locales\/[^/]+$/;
@@ -46,15 +52,23 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
     id: "operacion",
     titulo: "Operación",
     items: [
-      { id: "inicio", etiqueta: "Inicio", ruta: "/", icono: Home },
+      {
+        id: "inicio",
+        etiqueta: "Inicio",
+        ruta: "/",
+        icono: Home,
+        roles: ["VENTAS", "COBRANZA", "PMO"],
+      },
       {
         id: "mapa",
+        roles: ["VENTAS", "PMO"],
         etiqueta: "Mapa de plazas",
         ruta: "/mapa-de-plazas",
         icono: Map,
       },
       {
         id: "plazas",
+        roles: ["VENTAS", "COBRANZA", "PMO"],
         etiqueta: "Plazas y locales",
         ruta: "/plazas/plz-alborada",
         icono: Building,
@@ -63,6 +77,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
       },
       {
         id: "prospectos",
+        roles: ["VENTAS"],
         etiqueta: "Prospectos",
         ruta: "/prospectos",
         prefijo: "/prospectos",
@@ -70,6 +85,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
       },
       {
         id: "cotizaciones",
+        roles: ["VENTAS"],
         etiqueta: "Cotizaciones",
         ruta: "/cotizaciones",
         icono: FileText,
@@ -77,6 +93,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
       },
       {
         id: "contratos",
+        roles: ["VENTAS", "COBRANZA", "PMO"],
         etiqueta: "Contratos",
         ruta: "/contratos",
         icono: FileSignature,
@@ -84,6 +101,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
       },
       {
         id: "cobranza",
+        roles: ["COBRANZA"],
         etiqueta: "Cobranza",
         ruta: "/cobranza",
         icono: Receipt,
@@ -92,6 +110,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
       },
       {
         id: "mantenimientos",
+        roles: ["SUPERVISOR_OBRA"],
         etiqueta: "Mantenimientos",
         ruta: "/mantenimientos",
         icono: Wrench,
@@ -105,6 +124,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
     items: [
       {
         id: "precios-y-reglas",
+        roles: ["PMO"],
         etiqueta: "Precios y reglas",
         ruta: "/precios-y-reglas",
         icono: Tag,
@@ -114,6 +134,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
       },
       {
         id: "terrenos",
+        roles: ["PMO", "SUPERVISOR_OBRA"],
         etiqueta: "Terrenos y proyectos",
         ruta: "/terrenos-y-proyectos",
         icono: Layers,
@@ -121,6 +142,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
       },
       {
         id: "reportes",
+        roles: ["VENTAS", "COBRANZA", "PMO"],
         etiqueta: "Reportes",
         ruta: "/reportes",
         icono: BarChart3,
@@ -128,6 +150,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
       },
       {
         id: "integraciones",
+        roles: ["COBRANZA", "PMO"],
         etiqueta: "Integraciones",
         ruta: "/integraciones",
         icono: PlugZap,
@@ -135,6 +158,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
       },
       {
         id: "configuracion",
+        roles: [],
         etiqueta: "Configuración",
         ruta: "/configuracion",
         icono: Cog,
@@ -150,4 +174,28 @@ export function itemActivo(item: ItemNavegacion, ruta: string): boolean {
   if (item.tambienActivoEn?.test(ruta)) return true;
   if (!item.prefijo) return ruta === item.ruta;
   return ruta === item.prefijo || ruta.startsWith(`${item.prefijo}/`);
+}
+
+function visiblePara(item: ItemNavegacion, rol: Rol): boolean {
+  return !item.roles || ROLES_VEN_TODO.includes(rol) || item.roles.includes(rol);
+}
+
+/** Grupos del menú con solo los ítems que ve el rol (los grupos vacíos se omiten). */
+export function itemsVisibles(rol: Rol): GrupoNavegacion[] {
+  return NAVEGACION.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => visiblePara(i, rol)),
+  })).filter((g) => g.items.length > 0);
+}
+
+/**
+ * ¿Puede el rol abrir esta ruta? Se bloquea solo si la ruta pertenece (por su
+ * ruta o prefijo) a ítems del menú y ninguno es visible para el rol; las rutas
+ * que no pertenecen a ningún ítem (login, redirecciones) pasan.
+ */
+export function rutaPermitida(rol: Rol, ruta: string): boolean {
+  const duenos = NAVEGACION.flatMap((g) => g.items).filter((i) =>
+    i.prefijo ? ruta === i.prefijo || ruta.startsWith(`${i.prefijo}/`) : ruta === i.ruta,
+  );
+  return duenos.length === 0 || duenos.some((i) => visiblePara(i, rol));
 }

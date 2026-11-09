@@ -34,12 +34,37 @@ describe("store de la demo", () => {
     s.solicitarExcepcion(cot, local, "Cliente ancla");
     const exc = useAppStore.getState().aprobaciones.excepciones.at(-1)!;
     expect(exc.solicitadaPor).toBe("Jorge Ramírez");
-    s.cambiarRol("SUPERADMIN");
-    useAppStore.getState().resolverExcepcion(exc.id, "APROBADA");
+    s.cambiarRol("DIRECCION");
+    useAppStore.getState().autorizarExcepcion(exc.id, "Procede");
+    s.cambiarRol("PMO");
+    useAppStore.getState().aplicarExcepcion(exc.id);
     const resuelta = useAppStore
       .getState()
       .aprobaciones.excepciones.find((e) => e.id === exc.id)!;
-    expect(resuelta).toMatchObject({ estado: "APROBADA", resueltaPor: "Laura Fuentes" });
+    expect(resuelta).toMatchObject({
+      estado: "APLICADA",
+      autorizadaPor: "Mariana López",
+      aplicadaPor: "Ricardo Salas",
+    });
+    const bitacora = useAppStore.getState().locales.ajustes[exc.localId]?.bitacora;
+    expect(bitacora?.at(-1)?.detalle).toContain(`Excepción ${exc.id} aplicada`);
+  });
+
+  it("aprobar la actualización anual deja constancia de lista y mínimo en el local", () => {
+    const s = useAppStore.getState();
+    s.iniciarSesion("usr-laura");
+    const cambio = s.aprobaciones.cambiosAnuales[0];
+    s.resolverCambiosAnuales([cambio.localId], cambio.año, "APROBADO");
+    const bitacora = useAppStore.getState().locales.ajustes[cambio.localId]?.bitacora;
+    expect(bitacora?.at(-1)).toMatchObject({
+      titulo: `Actualización anual ${cambio.año} aprobada`,
+    });
+    expect(bitacora?.at(-1)?.detalle).toContain("mínimo");
+  });
+
+  it("la PMO fija la meta de ingresos de una plaza", () => {
+    useAppStore.getState().establecerMetaPlaza("plz-alborada", 96.5);
+    expect(useAppStore.getState().metas.porPlaza["plz-alborada"]).toBe(96.5);
   });
 
   it("resetDemo deja los datos en el estado inicial y conserva la sesión", () => {
@@ -60,7 +85,7 @@ describe("store de la demo", () => {
     const e = useAppStore.getState();
     expect(e.cobranza.seguimientos).toEqual({});
     expect(e.integraciones.sincronizaciones).toEqual({});
-    expect(e.integraciones.eventos).toHaveLength(7);
+    expect(e.integraciones.eventos).toHaveLength(8);
     expect(e.prospectos.prospectos).toEqual(crearSeed().prospectos);
     expect(e.terrenos.terrenos).toEqual(crearSeed().terrenos);
     expect(e.locales.ajustes).toEqual({});
@@ -78,6 +103,8 @@ describe("store de la demo", () => {
       "integraciones",
       "locales",
       "mantenimientos",
+      "metas",
+      "obra",
       "prospectos",
       "reglasDefault",
       "session",
@@ -199,5 +226,33 @@ describe("store de la demo", () => {
     });
     useAppStore.getState().resetDemo();
     expect(useAppStore.getState().mantenimientos.mantenimientos).toHaveLength(antes);
+  });
+
+  it("el Supervisor firma un corte con fotos y la PMO lo valida o rechaza", () => {
+    const s = useAppStore.getState();
+    const muros = s.obra.contratos.find(
+      (c) => c.terrenoId === "ter-09" && c.partida === "MUROS",
+    )!;
+    s.iniciarSesion("usr-supervisor");
+    s.registrarCorte({
+      contratoObraId: muros.id,
+      semana: "2026-10-26",
+      volumenes: [{ conceptoId: muros.conceptos[0].id, volumen: 300 }],
+    });
+    const corte = useAppStore.getState().obra.cortes.at(-1)!;
+    expect(corte).toMatchObject({
+      estado: "FIRMADO_SUPERVISOR",
+      capturadoPor: "Héctor Ramos",
+    });
+    expect(corte.evidencia.length).toBeGreaterThan(0);
+
+    s.cambiarRol("PMO");
+    s.rechazarCorte(corte.id, "");
+    expect(useAppStore.getState().obra.cortes.at(-1)!.estado).toBe("FIRMADO_SUPERVISOR");
+    s.validarCorte(corte.id);
+    expect(useAppStore.getState().obra.cortes.at(-1)).toMatchObject({
+      estado: "VALIDADO_PMO",
+      validadoPor: "Ricardo Salas",
+    });
   });
 });

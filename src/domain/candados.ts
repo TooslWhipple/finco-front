@@ -16,7 +16,7 @@ export function evaluarCandados(
   hoy: string,
   excepcion?: ExcepcionPrecio,
 ): Candado[] {
-  const excepcionAprobada = excepcion?.estado === "APROBADA";
+  const excepcionAplicada = excepcion?.estado === "APLICADA";
   const bajoMinimo = cotizacion.rentaMensual < local.precioMinimo;
 
   const precio: Candado = !bajoMinimo
@@ -26,12 +26,12 @@ export function evaluarCandados(
         estado: "CUMPLE",
         detalle: "La renta cumple el mínimo autorizado.",
       }
-    : excepcionAprobada
+    : excepcionAplicada
       ? {
           id: "PRECIO_MINIMO",
           nombre: "Renta ≥ precio mínimo autorizado",
           estado: "EXCEPCION",
-          detalle: "Renta bajo el mínimo con excepción aprobada.",
+          detalle: "Renta bajo el mínimo con excepción aplicada.",
         }
       : {
           id: "PRECIO_MINIMO",

@@ -7,7 +7,6 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
-  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -29,12 +28,14 @@ interface FilaRepricing {
   inpc: number | null;
   incrementoPct: number | null;
   precio: number;
+  /** Mínimo autorizado tras aplicar la regla ese año. */
+  minimo: number;
   /** Texto de la columna Regla. */
   regla: string;
 }
 
-/** Año, Regla (absorbe el resto), Ajuste, Precio: la tabla comparte fila con la gráfica. */
-const ANCHOS_COLUMNAS = [44, null, 52, 84] as const;
+/** Año, Regla (absorbe el resto), Ajuste, Lista, Mínimo: la tabla comparte fila con la gráfica. */
+const ANCHOS_COLUMNAS = [44, null, 52, 80, 80] as const;
 
 const COLUMNAS: ColumnDef<FilaRepricing>[] = [
   {
@@ -61,10 +62,15 @@ const COLUMNAS: ColumnDef<FilaRepricing>[] = [
   },
   {
     accessorKey: "precio",
-    header: "Precio",
+    header: "Lista",
     cell: ({ row }) => (
       <MoneyAmount valor={row.original.precio} className="font-semibold" />
     ),
+  },
+  {
+    accessorKey: "minimo",
+    header: "Mínimo",
+    cell: ({ row }) => <MoneyAmount valor={row.original.minimo} />,
   },
 ];
 
@@ -109,6 +115,7 @@ export function Repricing({ local, regla }: RepricingProps) {
         inpc: null,
         incrementoPct: null,
         precio: resultado.precioBase,
+        minimo: resultado.minimoBase,
         regla: "Último contrato firmado",
       },
       ...resultado.pasos.map((p) => ({
@@ -116,6 +123,7 @@ export function Repricing({ local, regla }: RepricingProps) {
         inpc: INPC_ANUAL[p.año] ?? null,
         incrementoPct: p.incrementoPct,
         precio: p.precio,
+        minimo: p.minimo,
         regla: describirAplicacion(regla, INPC_ANUAL[p.año] ?? null),
       })),
     ];
@@ -138,9 +146,10 @@ export function Repricing({ local, regla }: RepricingProps) {
   }
 
   const diferencia = resultado.precioFinal - local.precioVigente;
-  const bajoMinimo = resultado.precioFinal < local.precioMinimo;
-  const minimo = Math.min(local.precioMinimo, ...filas.map((f) => f.precio));
-  const maximo = Math.max(local.precioMinimo, ...filas.map((f) => f.precio));
+  const bajoMinimo = resultado.precioFinal < resultado.minimoFinal;
+  const valores = filas.flatMap((f) => [f.precio, f.minimo]);
+  const minimo = Math.min(...valores);
+  const maximo = Math.max(...valores);
   const dominio: [number, number] = [
     redondearEje(minimo, 1000, false) - 1000,
     redondearEje(maximo, 1000, true) + 1000,
@@ -167,7 +176,7 @@ export function Repricing({ local, regla }: RepricingProps) {
         <div
           className="h-64 min-w-0"
           role="img"
-          aria-label="Evolución del precio por año"
+          aria-label="Evolución del precio de lista y del mínimo autorizado por año"
         >
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart
@@ -199,21 +208,44 @@ export function Repricing({ local, regla }: RepricingProps) {
               />
               <YAxis hide domain={dominio} />
               <Tooltip
-                formatter={(v) => [formatMoneda(Number(v)), "Precio"]}
+                formatter={(v, nombre) => [formatMoneda(Number(v)), nombre]}
                 labelFormatter={(l) => `Año ${l}`}
               />
-              <ReferenceLine
-                y={local.precioMinimo}
+              <Line
+                type="linear"
+                dataKey="minimo"
+                name="Mínimo autorizado"
                 stroke="var(--brand-cta)"
+                strokeWidth={2}
                 strokeDasharray="4 4"
-                label={{
-                  value: `Mínimo autorizado ${formatMoneda(local.precioMinimo)}`,
-                  position: "top",
-                  offset: 14,
-                  fill: "var(--brand-cta)",
-                  fontSize: 12,
-                  fontWeight: 600,
+                dot={{
+                  r: 3,
+                  fill: "var(--card)",
+                  stroke: "var(--brand-cta)",
+                  strokeWidth: 2,
                 }}
+                label={(props: {
+                  x?: number | string;
+                  y?: number | string;
+                  index?: number;
+                }) => {
+                  const { x, y, index } = props;
+                  if (typeof x !== "number" || typeof y !== "number") return <g />;
+                  if (index !== filas.length - 1) return <g />;
+                  return (
+                    <text
+                      x={x}
+                      y={y + 18}
+                      textAnchor="end"
+                      fontSize={12}
+                      fontWeight={600}
+                      fill="var(--brand-cta)"
+                    >
+                      {`Mínimo ${formatMoneda(ultimo.minimo)}`}
+                    </text>
+                  );
+                }}
+                isAnimationActive={false}
               />
               <Area
                 type="linear"
@@ -226,6 +258,7 @@ export function Repricing({ local, regla }: RepricingProps) {
               <Line
                 type="linear"
                 dataKey="precio"
+                name="Precio de lista"
                 stroke="var(--brand-primary)"
                 strokeWidth={2.5}
                 dot={{
@@ -281,14 +314,15 @@ export function Repricing({ local, regla }: RepricingProps) {
           El último contrato se firmó en {añoBase} en{" "}
           <strong>{formatMoneda(resultado.precioBase)}</strong>. Al liberarse, el sistema
           aplicó la regla por los {resultado.pasos.length} años transcurridos: el nuevo
-          precio de lista es <strong>{formatMoneda(resultado.precioFinal)}</strong>
+          precio de lista es <strong>{formatMoneda(resultado.precioFinal)}</strong> y el
+          mínimo autorizado sube a <strong>{formatMoneda(resultado.minimoFinal)}</strong>
           {diferencia === 0
             ? "."
             : ` (${formatMoneda(Math.abs(diferencia))} ${
                 diferencia > 0 ? "por encima" : "por debajo"
               } del precio de lista actual, ${formatMoneda(local.precioVigente)}).`}
           {bajoMinimo
-            ? ` Queda por debajo del mínimo autorizado (${formatMoneda(local.precioMinimo)}): prevalece el mínimo.`
+            ? ` Queda por debajo del mínimo autorizado (${formatMoneda(resultado.minimoFinal)}): prevalece el mínimo.`
             : ""}
         </p>
       </div>

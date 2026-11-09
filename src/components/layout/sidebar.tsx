@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAVEGACION, itemActivo } from "@/config/navigation";
+import { itemActivo, itemsVisibles } from "@/config/navigation";
 import { useBadges, useSesion } from "@/hooks";
 import { cn } from "@/lib/utils";
 import { AvatarUsuario } from "./avatar-usuario";
@@ -12,6 +12,7 @@ export function Sidebar() {
   const ruta = usePathname();
   const { usuario } = useSesion();
   const badges = useBadges();
+  const grupos = usuario ? itemsVisibles(usuario.rol) : [];
 
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground">
@@ -32,7 +33,7 @@ export function Sidebar() {
       </div>
 
       <nav aria-label="Principal" className="flex-1 space-y-5 overflow-y-auto px-3 pb-4">
-        {NAVEGACION.map((grupo) => {
+        {grupos.map((grupo) => {
           return (
             <div key={grupo.id}>
               <p className="px-3 pb-2 text-[0.7rem] font-medium tracking-[0.18em] text-white/60 uppercase">

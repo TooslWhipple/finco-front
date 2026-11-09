@@ -1,7 +1,8 @@
 /** Fecha calendario en ISO `YYYY-MM-DD`. */
 export type FechaISO = string;
 
-export type Rol = "DIRECCION" | "VENTAS" | "SUPERADMIN" | "COBRANZA";
+export type Rol =
+  "DIRECCION" | "VENTAS" | "SUPERADMIN" | "COBRANZA" | "PMO" | "SUPERVISOR_OBRA";
 
 export interface Usuario {
   id: string;
@@ -69,14 +70,21 @@ export interface Plaza {
   coordenadas: Coordenadas;
   direccion?: string;
   reglaDefault?: ReglaActualizacion;
+  /** Meta de cumplimiento del plan de ingresos, en % (la edita la PMO). */
+  metaCumplimientoPct: number;
 }
 
 export type EstatusLocal = "DISPONIBLE" | "OCUPADO" | "EN_COTIZACION" | "PREVENTA";
+
+/** Serie de precios a la que pertenece un registro del historial. */
+export type ConceptoPrecio = "LISTA" | "MINIMO";
 
 export interface RegistroPrecio {
   fecha: FechaISO;
   precio: number;
   motivo: string;
+  /** Serie del registro; si se omite vale `LISTA` (compatibilidad con historiales previos). */
+  concepto?: ConceptoPrecio;
 }
 
 export interface Local {
@@ -87,8 +95,10 @@ export interface Local {
   estatus: EstatusLocal;
   areaM2: number;
   precioVigente: number;
-  /** Solo lo edita el Superadmin. */
+  /** Piso definido por la PMO; debajo solo se renta con autorización de Dirección. */
   precioMinimo: number;
+  /** Renta del modelo financiero de la PMO; base del cumplimiento del plan de ingresos. */
+  rentaPlaneada: number;
   regla: ReglaActualizacion;
   geometria: Geometria;
   locatarioId?: string;
@@ -145,6 +155,10 @@ export interface CambioPropuesto {
   año: number;
   precioActual: number;
   precioPropuesto: number;
+  /** Mínimo autorizado vigente del local. */
+  minimoActual: number;
+  /** Mínimo que propone la regla; nunca queda sobre el precio propuesto. */
+  minimoPropuesto: number;
   /** Variación porcentual respecto al precio actual. */
   variacionPct: number;
   estado: EstadoCambio;
@@ -239,7 +253,13 @@ export interface Cotizacion {
   actividad?: EventoCotizacion[];
 }
 
-export type EstadoExcepcion = "PENDIENTE" | "APROBADA" | "RECHAZADA";
+/**
+ * Flujo de dos pasos: Ventas solicita (PENDIENTE), Dirección autoriza
+ * (AUTORIZADA_DIRECCION) y la PMO aplica (APLICADA). Cualquiera de las dos
+ * puede rechazar con comentario.
+ */
+export type EstadoExcepcion =
+  "PENDIENTE" | "AUTORIZADA_DIRECCION" | "APLICADA" | "RECHAZADA";
 
 export interface ExcepcionPrecio {
   id: string;
@@ -249,11 +269,19 @@ export interface ExcepcionPrecio {
   precioMinimo: number;
   estado: EstadoExcepcion;
   solicitadaPor: string;
-  resueltaPor?: string;
   /** Justificación de Ventas al solicitar. */
   motivo?: string;
-  /** Comentario de quien resolvió (obligatorio al rechazar). */
-  comentario?: string;
+  solicitadaEn?: FechaISO;
+  autorizadaPor?: string;
+  autorizadaEn?: FechaISO;
+  aplicadaPor?: string;
+  aplicadaEn?: FechaISO;
+  rechazadaPor?: string;
+  rechazadaEn?: FechaISO;
+  /** Comentario de Dirección al autorizar o rechazar. */
+  comentarioDireccion?: string;
+  /** Comentario de la PMO al aplicar o rechazar. */
+  comentarioPmo?: string;
 }
 
 export type EstadoCandado = "CUMPLE" | "FALLA" | "EXCEPCION";
@@ -323,9 +351,104 @@ export interface Terreno {
   areaM2: number;
   localesProyectados: number;
   hitos: HitoTerreno[];
+  /**
+   * Semáforo derivado del valor ganado. Lo fija `aplicarResumenObra` al leer los
+   * proyectos con contratos de obra (no se persiste) y manda sobre el calculado
+   * por avance manual.
+   */
+  semaforoObra?: SemaforoTerreno;
 }
 
-export type IdIntegracion = "ENKONTROL" | "EXCEL" | "MONDAY";
+export type PartidaObra =
+  | "TERRACERIAS"
+  | "CIMENTACION"
+  | "ESTRUCTURA"
+  | "MUROS"
+  | "INST_HIDRAULICAS"
+  | "INST_ELECTRICAS"
+  | "TECHOS"
+  | "ACABADOS";
+
+export type UnidadObra = "M2" | "M3" | "ML" | "PZA" | "KG" | "LOTE";
+
+/** Renglón del presupuesto de un contrato; su importe se deriva (`volumen × PU`). */
+export interface ConceptoObra {
+  id: string;
+  clave: string;
+  descripcion: string;
+  unidad: UnidadObra;
+  volumenContratado: number;
+  /** Precio unitario en MXN. */
+  precioUnitario: number;
+}
+
+/** Contrato de obra de un proyecto: una partida, un contratista y sus conceptos. */
+export interface ContratoObra {
+  id: string;
+  /** Folio con la forma "CO-VR-01". */
+  folio: string;
+  terrenoId: string;
+  partida: PartidaObra;
+  contratista: string;
+  conceptos: ConceptoObra[];
+  inicioPlan: FechaISO;
+  finPlan: FechaISO;
+}
+
+export type FaseCronograma =
+  "DISENO" | "PRESUPUESTO" | "LICITACION" | "CONSTRUCCION" | "ENTREGA";
+
+/** Actividad del cronograma del proyecto (de construcción, ligada a un contrato). */
+export interface ActividadCronograma {
+  id: string;
+  terrenoId: string;
+  fase: FaseCronograma;
+  titulo: string;
+  inicioPlan: FechaISO;
+  finPlan: FechaISO;
+  inicioReal?: FechaISO;
+  finReal?: FechaISO;
+  /** Contrato que ejecuta la actividad (solo en la fase de construcción). */
+  contratoObraId?: string;
+}
+
+export type EstadoCorte =
+  "CAPTURADO" | "FIRMADO_SUPERVISOR" | "VALIDADO_PMO" | "RECHAZADO";
+
+/** Volumen ejecutado de un concepto en la semana del corte (no el acumulado). */
+export interface VolumenCorte {
+  conceptoId: string;
+  volumen: number;
+}
+
+/** Corte semanal de un contrato: lo ejecutado esa semana, firmado y luego validado. */
+export interface CorteSemanal {
+  id: string;
+  contratoObraId: string;
+  /** Lunes ISO de la semana reportada. */
+  semana: FechaISO;
+  volumenes: VolumenCorte[];
+  estado: EstadoCorte;
+  capturadoPor: string;
+  firmadoPor?: string;
+  firmadoEn?: FechaISO;
+  /** Quien validó o rechazó el corte (PMO). */
+  validadoPor?: string;
+  validadoEn?: FechaISO;
+  comentario?: string;
+  evidencia: Foto[];
+}
+
+/** Pago a un contratista (costo real, AC), importado de EnKontrol de forma simulada. */
+export interface PagoObra {
+  id: string;
+  contratoObraId: string;
+  fecha: FechaISO;
+  monto: number;
+  folioFactura: string;
+}
+
+export type IdIntegracion = "ENKONTROL" | "EXCEL" | "MONDAY" | "MSPROJECT";
 
 export type EstadoIntegracionSistema = "CONECTADA" | "CON_DIFERENCIAS" | "ERROR";
 
@@ -356,6 +479,61 @@ export interface EventoSync {
   resultado: ResultadoSync;
   detalle: string;
   registros: number;
+}
+
+// --- licitación de obra ----------------------------------------------------
+
+/** Contratista o proveedor al que se invita a licitar una partida de obra. */
+export interface ProveedorObra {
+  id: string;
+  nombre: string;
+  especialidades: PartidaObra[];
+}
+
+/** Lo que un proveedor ofreció en una ronda (sin `monto` = no respondió). */
+export interface PropuestaRonda {
+  proveedorId: string;
+  respondio: boolean;
+  monto?: number;
+  nota?: string;
+}
+
+/** Ronda de propuestas; de la 2 en adelante solo participan los que siguen en la competencia. */
+export interface RondaLicitacion {
+  numero: number;
+  fecha: FechaISO;
+  propuestas: PropuestaRonda[];
+}
+
+export type EstadoLicitacion = "EN_CURSO" | "ADJUDICADA";
+
+/** Proveedor sacado de la competencia al cierre de la ronda `ronda`. */
+export interface DescarteLicitacion {
+  proveedorId: string;
+  ronda: number;
+  motivo: string;
+}
+
+/** Proceso de licitación de una partida de obra, con su historial de rondas. */
+export interface Licitacion {
+  id: string;
+  /** Folio con la forma "LIC-VR-01". */
+  folio: string;
+  terrenoId: string;
+  partida: PartidaObra;
+  /** Presupuesto base interno contra el que se compara la oferta. */
+  presupuestoBase: number;
+  invitados: string[];
+  descartados: DescarteLicitacion[];
+  rondas: RondaLicitacion[];
+  estado: EstadoLicitacion;
+  ganadorId?: string;
+  montoAdjudicado?: number;
+  motivoSeleccion?: string;
+  adjudicadaPor?: string;
+  adjudicadaEn?: FechaISO;
+  /** Contrato de obra que nació de la adjudicación (si ya se firmó). */
+  contratoObraId?: string;
 }
 
 export type TipoMantenimiento = "PREVENTIVO" | "CORRECTIVO";

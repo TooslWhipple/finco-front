@@ -20,8 +20,11 @@ import { DEMO_TODAY } from "@/domain";
 import {
   useCiudades,
   useContratosVivos,
+  useCotizaciones,
+  useExcepciones,
   useFacturas,
   useLocales,
+  useLocatarios,
   usePlazas,
   useProspectos,
   useTerrenos,
@@ -79,6 +82,9 @@ export function Reportes({
   const facturas = useFacturas(MES_DEMO).datos;
   const prospectos = useProspectos().datos;
   const terrenos = useTerrenos().datos;
+  const locatarios = useLocatarios().datos;
+  const cotizaciones = useCotizaciones();
+  const excepciones = useExcepciones();
 
   const [vista, setVista] = useState<VistaReportes>(vistaInicial);
   const [idReporte, setIdReporte] = useState<IdReporte>(REPORTES[0]!.id);
@@ -86,7 +92,7 @@ export function Reportes({
 
   const datos = useMemo<DatosReporte | undefined>(
     () =>
-      ciudades && plazas && locales && contratos && facturas
+      ciudades && plazas && locales && contratos && facturas && locatarios
         ? {
             ciudades,
             plazas,
@@ -95,10 +101,24 @@ export function Reportes({
             facturas,
             prospectos,
             terrenos,
+            locatarios,
+            cotizaciones,
+            excepciones,
             hoy: DEMO_TODAY,
           }
         : undefined,
-    [ciudades, plazas, locales, contratos, facturas, prospectos, terrenos],
+    [
+      ciudades,
+      plazas,
+      locales,
+      contratos,
+      facturas,
+      prospectos,
+      terrenos,
+      locatarios,
+      cotizaciones,
+      excepciones,
+    ],
   );
 
   const definicion = REPORTES.find((r) => r.id === idReporte) ?? REPORTES[0]!;
@@ -125,6 +145,15 @@ export function Reportes({
       .map((p) => ({ valor: p.id, etiqueta: p.nombre })),
   ];
 
+  const drilldown = definicion.drilldown;
+  const abrirPlaza = (fila: Record<string, Celda>) => {
+    const plazaId = drilldown ? fila[drilldown.clavePlaza] : undefined;
+    if (!drilldown || typeof plazaId !== "string") return;
+    const ciudadId = plazas?.find((p) => p.id === plazaId)?.ciudadId ?? TODOS;
+    setFiltro({ ciudadId, plazaId });
+    setIdReporte(drilldown.destino);
+  };
+
   const exportar = () => {
     if (!resultado) return;
     descargarCsv(definicion.archivo, tablaACsv(resultado.tabla));
@@ -135,7 +164,7 @@ export function Reportes({
     <div className="space-y-6">
       <PageHeader
         titulo="Reportes"
-        descripcion="Ocupación, cobranza, precios, prospectos, contratos y terrenos con gráfica y tabla."
+        descripcion="Ocupación, cobranza, precios, rentas, excepciones, prospectos, contratos y terrenos con gráfica y tabla."
         acciones={
           vista === "REPORTES" ? (
             <>
@@ -217,6 +246,7 @@ export function Reportes({
                   columns={columnas}
                   data={resultado.tabla.filas}
                   tamanoPagina={10}
+                  onFilaClick={drilldown ? abrirPlaza : undefined}
                   vacio={
                     <EmptyState
                       icono={FileSearch}

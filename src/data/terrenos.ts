@@ -2,6 +2,7 @@ import {
   diasEntre,
   ETAPAS_TERRENO,
   idPlazaDeTerreno,
+  META_CUMPLIMIENTO_DEFECTO,
   sumarDias,
   type Ciudad,
   type Coordenadas,
@@ -206,6 +207,7 @@ export function plazasConTerrenos(
       ciudadId: t.ciudadId,
       estatus: "PREVENTA",
       coordenadas: coordenadasPlaza(ciudad, id),
+      metaCumplimientoPct: META_CUMPLIMIENTO_DEFECTO,
     });
   }
   return nuevas.length === 0 ? [...plazas] : [...plazas, ...nuevas];

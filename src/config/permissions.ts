@@ -1,10 +1,16 @@
+import { ID_TERRENO_HEROE } from "@/data/obra";
 import type { Rol } from "@/domain";
 
 export type Accion =
   | "cotizaciones.crear"
   | "contrato.generar"
   | "excepcion.solicitar"
-  | "excepcion.resolver"
+  | "excepcion.autorizar"
+  | "excepcion.aplicar"
+  | "metaIngresos.editar"
+  | "obra.corteCapturar"
+  | "obra.corteValidar"
+  | "licitacion.gestionar"
   | "precioMinimo.editar"
   | "regla.editar"
   | "actualizacionAnual.resolver"
@@ -20,7 +26,12 @@ const TODAS: readonly Accion[] = [
   "cotizaciones.crear",
   "contrato.generar",
   "excepcion.solicitar",
-  "excepcion.resolver",
+  "excepcion.autorizar",
+  "excepcion.aplicar",
+  "metaIngresos.editar",
+  "obra.corteCapturar",
+  "obra.corteValidar",
+  "licitacion.gestionar",
   "precioMinimo.editar",
   "regla.editar",
   "actualizacionAnual.resolver",
@@ -35,7 +46,7 @@ const TODAS: readonly Accion[] = [
 
 /** Matriz rol → acciones permitidas. */
 export const PERMISOS: Record<Rol, readonly Accion[]> = {
-  DIRECCION: [],
+  DIRECCION: ["excepcion.autorizar"],
   VENTAS: [
     "cotizaciones.crear",
     "contrato.generar",
@@ -45,6 +56,16 @@ export const PERMISOS: Record<Rol, readonly Accion[]> = {
   ],
   SUPERADMIN: TODAS,
   COBRANZA: ["cobranza.gestionar", "integraciones.sincronizar"],
+  PMO: [
+    "excepcion.aplicar",
+    "precioMinimo.editar",
+    "regla.editar",
+    "terrenos.gestionar",
+    "metaIngresos.editar",
+    "obra.corteValidar",
+    "licitacion.gestionar",
+  ],
+  SUPERVISOR_OBRA: ["obra.corteCapturar"],
 };
 
 export function can(rol: Rol | null | undefined, accion: Accion): boolean {
@@ -57,4 +78,6 @@ export const INICIO_POR_ROL: Record<Rol, string> = {
   VENTAS: "/plazas/plz-alborada",
   SUPERADMIN: "/precios-y-reglas",
   COBRANZA: "/cobranza",
+  PMO: "/terrenos-y-proyectos",
+  SUPERVISOR_OBRA: `/terrenos-y-proyectos/${ID_TERRENO_HEROE}`,
 };

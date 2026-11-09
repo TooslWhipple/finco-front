@@ -25,7 +25,7 @@ import {
 } from "@/hooks";
 import { formatFecha } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { excepcionPendiente } from "./calculos";
+import { excepcionAbierta } from "./calculos";
 
 interface Fila {
   cotizacion: Cotizacion;
@@ -53,7 +53,7 @@ export function ListaCotizaciones() {
           cotizacion,
           localCodigo: local?.codigo ?? cotizacion.localId,
           plaza: (local && nombrePlaza.get(local.plazaId)) ?? "—",
-          enEspera: excepcionPendiente(excepciones, cotizacion.id) !== undefined,
+          enEspera: excepcionAbierta(excepciones, cotizacion.id) !== undefined,
         };
       });
   }, [cotizaciones, excepciones, locales, plazas]);

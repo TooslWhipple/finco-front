@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Download, Map as IconoMapa, MapPinOff, Plus } from "lucide-react";
 import {
+  Ayuda,
   BarraFiltros,
   EmptyState,
   KpiCard,
@@ -14,7 +15,15 @@ import {
   StatusChip,
 } from "@/components/shared";
 import { contextoVialPlanta } from "@/data/planos";
-import { INPC_ANUAL, incrementoPct, prospectosPorLocal } from "@/domain";
+import {
+  cumplimientoPlan,
+  DEMO_TODAY,
+  INPC_ANUAL,
+  incrementoPct,
+  prospectosPorLocal,
+  rentasDeLocales,
+} from "@/domain";
+import { formatPuntosUnDecimal } from "@/features/local/calculos";
 import { buttonVariants } from "@/components/ui/button";
 import { can } from "@/config/permissions";
 import {
@@ -103,10 +112,15 @@ export function PlazaDetalle({ plazaId }: { plazaId: string }) {
       const nombre = nombres.get(c.locatarioId);
       if (nombre) nombrePorLocal.set(localId, nombre);
     }
+    const rentas = rentasDeLocales(locales, contratos, DEMO_TODAY);
     return {
       categorias,
       nombres,
       nombrePorLocal,
+      rentaPorLocal: new Map(
+        [...ctx.contratoPorLocal].map(([id, c]) => [id, c.rentaMensual]),
+      ),
+      plan: cumplimientoPlan(rentas.ocupados, rentas.disponibles),
       resumen: resumirLocalesPlaza(locales, contratos, facturas),
       vencimientos: proximosVencimientos(locales, contratos).slice(
         0,
@@ -275,6 +289,28 @@ export function PlazaDetalle({ plazaId }: { plazaId: string }) {
               subtexto={incrementoAnual === undefined ? "Locales rentados" : undefined}
             />
             <KpiCard
+              etiqueta={
+                <Ayuda texto="Renta contratada de los ocupados entre la renta planeada por la PMO">
+                  Cumplimiento del plan
+                </Ayuda>
+              }
+              valor={datos ? formatPuntosUnDecimal(datos.plan.cumplimientoPct) : "—"}
+              detalle={
+                datos && plaza.datos
+                  ? datos.plan.cumplimientoPct < plaza.datos.metaCumplimientoPct
+                    ? `Bajo la meta de ${formatPuntosUnDecimal(plaza.datos.metaCumplimientoPct)}`
+                    : `Meta ${formatPuntosUnDecimal(plaza.datos.metaCumplimientoPct)}`
+                  : undefined
+              }
+              tono={
+                datos &&
+                plaza.datos &&
+                datos.plan.cumplimientoPct < plaza.datos.metaCumplimientoPct
+                  ? "peligro"
+                  : "positivo"
+              }
+            />
+            <KpiCard
               etiqueta="Por vencer"
               valor={resumen ? formatNumero(resumen.porVencer) : "—"}
               subtexto="próximos 90 días"
@@ -382,6 +418,9 @@ export function PlazaDetalle({ plazaId }: { plazaId: string }) {
                   seleccionado ? (prospectosActivos.get(seleccionado.id) ?? 0) : 0
                 }
                 cotizacionesAbiertas={cotizacionesAbiertas}
+                rentaContratada={
+                  seleccionado ? datos?.rentaPorLocal.get(seleccionado.id) : undefined
+                }
                 rutaFicha={`/plazas/${plazaId}/locales/${seleccionado?.id ?? ""}`}
                 rutaCotizar={rutaCotizar}
               />

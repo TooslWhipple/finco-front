@@ -1,9 +1,12 @@
 import type {
   Ciudad,
   Contrato,
+  Cotizacion,
+  ExcepcionPrecio,
   Factura,
   FechaISO,
   Local,
+  Locatario,
   Plaza,
   Prospecto,
   Terreno,
@@ -18,6 +21,9 @@ export interface DatosReporte {
   facturas: readonly Factura[];
   prospectos: readonly Prospecto[];
   terrenos: readonly Terreno[];
+  locatarios: readonly Locatario[];
+  cotizaciones: readonly Cotizacion[];
+  excepciones: readonly ExcepcionPrecio[];
   hoy: FechaISO;
 }
 

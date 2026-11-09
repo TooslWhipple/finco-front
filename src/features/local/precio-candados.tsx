@@ -3,7 +3,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Lock, Pencil } from "lucide-react";
 import { toast } from "sonner";
-import { SectionCard } from "@/components/shared";
+import { Ayuda, SectionCard } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,10 +19,11 @@ import { DEMO_TODAY, type Local } from "@/domain";
 import { formatFecha, formatMoneda, formatPorcentaje } from "@/lib/format";
 import type { EntradaBitacora } from "@/store/reducers";
 import { fechaUltimaEdicionMinimo, margenSobreMinimo, validarMinimo } from "./calculos";
+import { TEXTOS_PRECIO } from "./textos-precio";
 
 interface PrecioCandadosProps {
   local: Local;
-  /** Solo el Superadmin edita el mínimo. */
+  /** Solo la PMO (y el Superadmin) editan el mínimo. */
   puedeEditar: boolean;
   autor: string;
   bitacora: readonly EntradaBitacora[];
@@ -33,12 +34,15 @@ interface PrecioCandadosProps {
 
 function Cifra({
   etiqueta,
+  ayuda,
   valor,
   nota,
   icono,
   className,
 }: {
   etiqueta: string;
+  /** Explicación de la etiqueta, en un tooltip. */
+  ayuda?: string;
   valor: string;
   nota: string;
   icono?: boolean;
@@ -49,7 +53,7 @@ function Cifra({
       <p className="flex items-center gap-1.5 text-sm text-brand-text-muted">
         {icono ? <Lock aria-hidden className="size-3.5 text-brand-cta" /> : null}
         <span className={icono ? "font-medium text-brand-cta" : undefined}>
-          {etiqueta}
+          {ayuda ? <Ayuda texto={ayuda}>{etiqueta}</Ayuda> : etiqueta}
         </span>
       </p>
       <p className="mt-1 font-heading text-3xl font-bold text-brand-primary tabular-nums">
@@ -124,18 +128,20 @@ export function PrecioCandados({
     >
       <div className="grid gap-3 sm:grid-cols-3">
         <Cifra
-          etiqueta="Precio de lista vigente"
+          etiqueta={TEXTOS_PRECIO.lista.etiqueta}
+          ayuda={TEXTOS_PRECIO.lista.ayuda}
           valor={formatMoneda(local.precioVigente)}
           nota={`mensual + IVA · ${formatMoneda(local.precioVigente / local.areaM2)} / m²`}
           className="border-brand-line bg-card"
         />
         <Cifra
-          etiqueta="Precio mínimo autorizado"
+          etiqueta={TEXTOS_PRECIO.minimo.etiqueta}
+          ayuda={TEXTOS_PRECIO.minimo.ayuda}
           valor={formatMoneda(local.precioMinimo)}
           nota={
             fechaMinimo
-              ? `Solo superadmin · modif. ${formatFecha(fechaMinimo)}`
-              : "Solo superadmin · sin modificaciones"
+              ? `Lo define la PMO · modif. ${formatFecha(fechaMinimo)}`
+              : "Lo define la PMO · sin modificaciones"
           }
           icono
           className="border-brand-cta/40 bg-brand-cta/10"

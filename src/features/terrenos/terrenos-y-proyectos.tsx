@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Layers, RefreshCw } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   BarraFiltros,
+  BarraProgreso,
   DataTable,
   EmptyState,
   KpiCard,
@@ -17,6 +19,7 @@ import {
   StatusChip,
   TableroKanban,
 } from "@/components/shared";
+import { buttonVariants } from "@/components/ui/button";
 import { can } from "@/config/permissions";
 import { coordenadasTerreno } from "@/data/terrenos";
 import {
@@ -53,34 +56,15 @@ const VISTAS = [
   { valor: "LISTA", etiqueta: "Lista" },
 ] as const;
 
-const FONDO_SEMAFORO = {
-  VERDE: "bg-brand-secondary",
-  AMARILLO: "bg-brand-cta",
-  ROJO: "bg-brand-coral",
+const TONO_SEMAFORO = {
+  VERDE: "verde",
+  AMARILLO: "naranja",
+  ROJO: "coral",
 } as const;
 
 interface TerrenosYProyectosProps {
   /** Proyecto abierto al entrar (llega del Mapa o de la ficha de una plaza). */
   terrenoInicialId?: string;
-}
-
-function BarraAvance({ terreno }: { terreno: Terreno }) {
-  const semaforo = semaforoTerreno(terreno, DEMO_TODAY);
-  return (
-    <div
-      role="progressbar"
-      aria-label="Avance"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={terreno.avancePct}
-      className="h-1.5 w-full overflow-hidden rounded-full bg-brand-line"
-    >
-      <div
-        className={cn("h-full rounded-full", FONDO_SEMAFORO[semaforo])}
-        style={{ width: `${terreno.avancePct}%` }}
-      />
-    </div>
-  );
 }
 
 export function TerrenosYProyectos({ terrenoInicialId }: TerrenosYProyectosProps) {
@@ -157,6 +141,20 @@ export function TerrenosYProyectos({ terrenoInicialId }: TerrenosYProyectosProps
         header: "Fecha objetivo",
         accessorFn: (t) => t.fechaObjetivo,
         cell: ({ row }) => formatFecha(row.original.fechaObjetivo),
+      },
+      {
+        id: "expediente",
+        header: "",
+        enableSorting: false,
+        cell: ({ row }) => (
+          <Link
+            href={`/terrenos-y-proyectos/${row.original.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Ver expediente
+          </Link>
+        ),
       },
     ],
     [ciudadPorId],
@@ -282,29 +280,43 @@ export function TerrenosYProyectos({ terrenoInicialId }: TerrenosYProyectosProps
               clave={(t) => t.id}
               vacio="Sin proyectos"
               renderTarjeta={(t) => (
-                <button
-                  type="button"
-                  onClick={() => setSeleccionadoId(t.id)}
+                <div
                   className={cn(
-                    "w-full space-y-2 rounded-lg border bg-card p-3 text-left shadow-xs transition-colors outline-none hover:border-brand-primary focus-visible:ring-3 focus-visible:ring-ring/50",
+                    "rounded-lg border bg-card shadow-xs transition-colors hover:border-brand-primary",
                     t.id === seleccionadoId
                       ? "border-brand-primary"
                       : "border-brand-line",
                   )}
                 >
-                  <span className="flex items-start justify-between gap-2">
-                    <span className="font-medium text-brand-primary">{t.nombre}</span>
-                    <StatusChip estatus={semaforoTerreno(t, DEMO_TODAY)} />
-                  </span>
-                  <span className="block text-xs text-brand-text-muted">
-                    {nombreCiudad(t)} · {t.responsable}
-                  </span>
-                  <BarraAvance terreno={t} />
-                  <span className="flex justify-between text-xs text-brand-text-muted">
-                    <span>{t.avancePct}%</span>
-                    <span>Meta {formatFecha(t.fechaObjetivo)}</span>
-                  </span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setSeleccionadoId(t.id)}
+                    className="w-full space-y-2 rounded-t-lg p-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                  >
+                    <span className="flex items-start justify-between gap-2">
+                      <span className="font-medium text-brand-primary">{t.nombre}</span>
+                      <StatusChip estatus={semaforoTerreno(t, DEMO_TODAY)} />
+                    </span>
+                    <span className="block text-xs text-brand-text-muted">
+                      {nombreCiudad(t)} · {t.responsable}
+                    </span>
+                    <BarraProgreso
+                      valor={t.avancePct / 100}
+                      tono={TONO_SEMAFORO[semaforoTerreno(t, DEMO_TODAY)]}
+                      etiqueta="Avance"
+                    />
+                    <span className="flex justify-between text-xs text-brand-text-muted">
+                      <span>{t.avancePct}%</span>
+                      <span>Meta {formatFecha(t.fechaObjetivo)}</span>
+                    </span>
+                  </button>
+                  <Link
+                    href={`/terrenos-y-proyectos/${t.id}`}
+                    className="block border-t border-brand-line px-3 py-1.5 text-xs font-medium text-brand-primary hover:underline"
+                  >
+                    Ver expediente
+                  </Link>
+                </div>
               )}
             />
           ) : (

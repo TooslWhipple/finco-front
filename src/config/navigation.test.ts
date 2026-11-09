@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import nextConfig from "../../next.config";
-import { NAVEGACION, itemActivo } from "./navigation";
+import { NAVEGACION, itemActivo, itemsVisibles, rutaPermitida } from "./navigation";
 
 const ITEMS = NAVEGACION.flatMap((g) => g.items);
 
@@ -9,7 +9,7 @@ function activos(ruta: string): string[] {
 }
 
 describe("menú", () => {
-  it("tiene 13 ítems (los 12 del PDF más Mantenimientos, que pidió el jefe el 2026-11-04) y todos se ven con cualquier rol", () => {
+  it("tiene 13 ítems (los 12 del PDF más Mantenimientos, que pidió el jefe el 2026-11-04) ", () => {
     expect(ITEMS).toHaveLength(13);
     expect(ITEMS.some((i) => "accion" in i)).toBe(false);
   });
@@ -34,6 +34,66 @@ describe("menú", () => {
     const operacion = NAVEGACION.find((g) => g.id === "operacion");
     expect(operacion?.items.map((i) => i.id)).toContain("mantenimientos");
     expect(activos("/mantenimientos")).toEqual(["mantenimientos"]);
+  });
+});
+
+describe("visibilidad por rol", () => {
+  const ids = (rol: Parameters<typeof itemsVisibles>[0]) =>
+    itemsVisibles(rol).flatMap((g) => g.items.map((i) => i.id));
+
+  it("Dirección y Superadmin ven todo", () => {
+    expect(ids("DIRECCION")).toHaveLength(13);
+    expect(ids("SUPERADMIN")).toHaveLength(13);
+  });
+
+  it("Ventas", () => {
+    expect(ids("VENTAS")).toEqual([
+      "inicio",
+      "mapa",
+      "plazas",
+      "prospectos",
+      "cotizaciones",
+      "contratos",
+      "reportes",
+    ]);
+  });
+
+  it("Cobranza", () => {
+    expect(ids("COBRANZA")).toEqual([
+      "inicio",
+      "plazas",
+      "contratos",
+      "cobranza",
+      "reportes",
+      "integraciones",
+    ]);
+  });
+
+  it("PMO", () => {
+    expect(ids("PMO")).toEqual([
+      "inicio",
+      "mapa",
+      "plazas",
+      "contratos",
+      "precios-y-reglas",
+      "terrenos",
+      "reportes",
+      "integraciones",
+    ]);
+  });
+
+  it("Supervisor de obra solo ve Terrenos y Mantenimientos", () => {
+    expect(ids("SUPERVISOR_OBRA")).toEqual(["mantenimientos", "terrenos"]);
+  });
+
+  it("rutaPermitida bloquea módulos ocultos y deja pasar los visibles", () => {
+    expect(rutaPermitida("SUPERVISOR_OBRA", "/cobranza")).toBe(false);
+    expect(rutaPermitida("SUPERVISOR_OBRA", "/")).toBe(false);
+    expect(rutaPermitida("SUPERVISOR_OBRA", "/terrenos-y-proyectos/x")).toBe(true);
+    expect(rutaPermitida("COBRANZA", "/precios-y-reglas")).toBe(false);
+    expect(rutaPermitida("VENTAS", "/plazas/plz-alborada/locales/a")).toBe(true);
+    expect(rutaPermitida("DIRECCION", "/cobranza")).toBe(true);
+    expect(rutaPermitida("SUPERVISOR_OBRA", "/ruta-desconocida")).toBe(true);
   });
 });
 

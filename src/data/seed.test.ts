@@ -18,6 +18,7 @@ import {
   prospectosPorLocal,
   repricingAlLiberar,
   semaforoTerreno,
+  rentaVsMinimo,
 } from "@/domain";
 import { CATALOGO, PROVEEDORES } from "./catalogo";
 import { COTIZACION_HEROE, LOCAL_HEROE, PLAZA_HEROE_ID } from "./heroe";
@@ -75,11 +76,53 @@ describe("crearSeed: catálogo", () => {
 });
 
 describe("crearSeed: contratos y precios", () => {
-  it("ningún contrato queda bajo el mínimo del local", () => {
+  it("un contrato bajo el mínimo solo existe con una excepción APLICADA que lo respalda", () => {
     const porId = new Map(seed.locales.map((l) => [l.id, l]));
+    const aplicadas = new Map(
+      seed.excepciones
+        .filter((e) => e.estado === "APLICADA")
+        .map((e) => [e.cotizacionId, e]),
+    );
+    let bajoMinimo = 0;
     for (const c of seed.contratos) {
-      expect(c.rentaMensual).toBeGreaterThanOrEqual(porId.get(c.localId)!.precioMinimo);
+      const minimo = porId.get(c.localId)!.precioMinimo;
+      if (c.rentaMensual >= minimo) continue;
+      bajoMinimo += 1;
+      const excepcion = aplicadas.get(c.cotizacionId ?? "");
+      expect(excepcion?.localId).toBe(c.localId);
+      expect(excepcion?.rentaSolicitada).toBe(c.rentaMensual);
+      expect(excepcion?.precioMinimo).toBe(minimo);
     }
+    // ~10 % de los ocupados, para que el reporte de trazabilidad tenga casos.
+    const proporcion = bajoMinimo / seed.contratos.length;
+    expect(proporcion).toBeGreaterThan(0.05);
+    expect(proporcion).toBeLessThan(0.15);
+  });
+
+  it("las rentas se reparten sobre el mínimo con variedad, y cada plaza tiene su factor", () => {
+    const porId = new Map(seed.locales.map((l) => [l.id, l]));
+    const rangos = new Set(
+      seed.contratos.map(
+        (c) => rentaVsMinimo(c.rentaMensual, porId.get(c.localId)!.precioMinimo).rango,
+      ),
+    );
+    expect([...rangos].sort()).toEqual(
+      ["BAJO_MINIMO", "EN_MINIMO", "HASTA_10", "HASTA_5", "MAS_10"].sort(),
+    );
+    const factores = new Set(
+      seed.plazas.map((p) => {
+        const l = seed.locales.find(
+          (x) => x.plazaId === p.id && x.estatus !== "PREVENTA",
+        );
+        return l ? Math.round((l.precioMinimo / l.precioVigente) * 20) : 0;
+      }),
+    );
+    expect(factores.size).toBeGreaterThan(3);
+  });
+
+  it("todo local trae renta planeada y toda plaza la meta de 98 %", () => {
+    for (const l of seed.locales) expect(l.rentaPlaneada).toBeGreaterThan(0);
+    for (const p of seed.plazas) expect(p.metaCumplimientoPct).toBe(98);
   });
 
   it("todo local tiene precio mínimo ≤ lista", () => {
@@ -158,7 +201,7 @@ describe("plaza héroe", () => {
 
   it("el local A-09 parte de $18,740 en 2021 y llega a $24,860 con mínimo $23,500", () => {
     const a09 = seed.locales.find((l) => l.id === idHeroe)!;
-    expect(a09.historial).toHaveLength(1);
+    expect(a09.historial).toHaveLength(2);
     expect(a09.historial[0].precio).toBe(18_740);
     expect(a09.precioVigente).toBe(24_860);
     expect(a09.precioMinimo).toBe(23_500);
@@ -169,6 +212,8 @@ describe("plaza héroe", () => {
       [2022, 2023, 2024, 2025, 2026],
     );
     expect(reprecio?.precioFinal).toBe(a09.precioVigente);
+    // El mínimo de origen ($17,700) sube con la misma regla hasta rozar el vigente.
+    expect(Math.abs((reprecio?.minimoFinal ?? 0) - a09.precioMinimo)).toBeLessThan(100);
   });
 
   it("la cotización COT-2026-0418 falla 1 de 5 candados", () => {
@@ -214,22 +259,31 @@ describe("cobranza y bandeja", () => {
     expect(pct).toBeLessThan(1);
   });
 
-  it("la bandeja anual tiene 8 cambios pendientes, ninguno bajo el mínimo", () => {
+  it("la bandeja anual tiene 8 cambios pendientes, ninguno bajo el mínimo propuesto", () => {
     expect(seed.cambiosPropuestos).toHaveLength(8);
     const porId = new Map(seed.locales.map((l) => [l.id, l]));
     for (const cambio of seed.cambiosPropuestos) {
       expect(cambio.estado).toBe("PENDIENTE");
-      expect(cambio.precioPropuesto).toBeGreaterThanOrEqual(
-        porId.get(cambio.localId)!.precioMinimo,
-      );
+      expect(cambio.minimoActual).toBe(porId.get(cambio.localId)!.precioMinimo);
+      expect(cambio.minimoPropuesto).toBeGreaterThan(cambio.minimoActual);
+      expect(cambio.precioPropuesto).toBeGreaterThanOrEqual(cambio.minimoPropuesto);
       expect(cambio.precioPropuesto).toBeGreaterThan(cambio.precioActual);
     }
   });
 
-  it("deja una excepción pendiente y otra aprobada sobre cotizaciones bajo el mínimo", () => {
-    expect(seed.excepciones.map((e) => e.estado)).toEqual(["PENDIENTE", "APROBADA"]);
-    for (const e of seed.excepciones)
-      expect(e.rentaSolicitada).toBeLessThan(e.precioMinimo);
+  it("deja una excepción por autorizar y otra por aplicar para ver los dos pasos", () => {
+    const abiertas = seed.excepciones.filter(
+      (e) => e.estado === "PENDIENTE" || e.estado === "AUTORIZADA_DIRECCION",
+    );
+    expect(abiertas.map((e) => e.estado)).toEqual(["PENDIENTE", "AUTORIZADA_DIRECCION"]);
+    for (const e of abiertas) expect(e.rentaSolicitada).toBeLessThan(e.precioMinimo);
+    expect(abiertas[1]).toMatchObject({ autorizadaPor: "Mariana López" });
+    // El resto son históricas ya aplicadas.
+    expect(
+      seed.excepciones
+        .filter((e) => !abiertas.includes(e))
+        .every((e) => e.estado === "APLICADA"),
+    ).toBe(true);
   });
 
   it("las 3 diferencias de EnKontrol suman $8,420", () => {
@@ -346,8 +400,13 @@ describe("terrenos", () => {
 });
 
 describe("integraciones", () => {
-  it("hay 3 integraciones y cada evento del log pertenece a una", () => {
-    expect(seed.integraciones.map((i) => i.id)).toEqual(["ENKONTROL", "EXCEL", "MONDAY"]);
+  it("hay 4 integraciones y cada evento del log pertenece a una", () => {
+    expect(seed.integraciones.map((i) => i.id)).toEqual([
+      "ENKONTROL",
+      "EXCEL",
+      "MONDAY",
+      "MSPROJECT",
+    ]);
     const ids = new Set(seed.integraciones.map((i) => i.id));
     expect(seed.eventosSync.length).toBeGreaterThan(0);
     for (const e of seed.eventosSync) expect(ids.has(e.integracionId)).toBe(true);

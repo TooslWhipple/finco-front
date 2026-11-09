@@ -24,6 +24,8 @@ interface Insumos {
   diferencias: readonly DiferenciaConciliacion[];
   locales: readonly Local[];
   terrenos: readonly Terreno[];
+  /** Actividades de cronograma que "importa" MS Project. */
+  actividadesCronograma: number;
   /** Último sync de EnKontrol (ISO con hora). */
   ultimoSyncEnKontrol: string;
 }
@@ -33,11 +35,19 @@ interface Insumos {
  * inicial. Las cifras salen de los datos del seed, no se escriben fijas.
  */
 export function crearConectores(insumos: Insumos): ConectoresSeed {
-  const { facturas, diferencias, locales, terrenos, ultimoSyncEnKontrol } = insumos;
+  const {
+    facturas,
+    diferencias,
+    locales,
+    terrenos,
+    actividadesCronograma,
+    ultimoSyncEnKontrol,
+  } = insumos;
   const pagadas = facturas.filter((f) => f.pagadaEl).length;
   const montoDiferencias = diferencias.reduce((s, d) => s + d.monto, 0);
   const ultimoSyncExcel = `${AYER}T09:10:00`;
   const ultimoSyncMonday = `${DEMO_TODAY}T14:30:00`;
+  const ultimoSyncProject = `${DEMO_TODAY}T16:10:00`;
   const enDesarrollo = terrenos.filter((t) => t.etapa !== "ABIERTO").length;
 
   const integraciones: Integracion[] = [
@@ -76,6 +86,20 @@ export function crearConectores(insumos: Insumos): ConectoresSeed {
       metricas: [
         { etiqueta: "Proyectos sincronizados", valor: formatNumero(terrenos.length) },
         { etiqueta: "En desarrollo", valor: formatNumero(enDesarrollo) },
+      ],
+    },
+    {
+      id: "MSPROJECT",
+      nombre: "Microsoft Project",
+      descripcion: "Cronogramas de obra: actividades, fechas y dependencias (simulado).",
+      estado: "CONECTADA",
+      ultimoSync: ultimoSyncProject,
+      metricas: [
+        {
+          etiqueta: "Actividades importadas",
+          valor: formatNumero(actividadesCronograma),
+        },
+        { etiqueta: "Archivo", valor: "cronograma-obra.mpp" },
       ],
     },
   ];
@@ -139,6 +163,14 @@ export function crearConectores(insumos: Insumos): ConectoresSeed {
           ? `${diferencias.length} diferencias de conciliación por ${formatMoneda(montoDiferencias)}`
           : "Facturas y pagos sincronizados sin diferencias",
       registros: facturas.length,
+    },
+    {
+      id: "sync-08",
+      integracionId: "MSPROJECT",
+      fecha: ultimoSyncProject,
+      resultado: "OK",
+      detalle: "Cronograma de obra importado desde cronograma-obra.mpp (simulado)",
+      registros: actividadesCronograma,
     },
   ];
   return { integraciones, eventosSync };

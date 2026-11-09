@@ -25,10 +25,11 @@ export function avanceEsperado(terreno: Terreno, hoy: FechaISO): number {
 }
 
 /**
- * Semáforo del proyecto: avance contra lo esperado a la fecha. Un proyecto
- * abierto está en verde; uno con la fecha objetivo vencida y sin terminar, en rojo.
+ * Semáforo del proyecto: el derivado del valor ganado si tiene obra; si no, el
+ * avance contra lo esperado a la fecha. Un proyecto abierto está en verde; uno con la fecha objetivo vencida y sin terminar, en rojo.
  */
 export function semaforoTerreno(terreno: Terreno, hoy: FechaISO): SemaforoTerreno {
+  if (terreno.semaforoObra) return terreno.semaforoObra;
   if (terreno.etapa === "ABIERTO") return "VERDE";
   if (terreno.avancePct < 100 && terreno.fechaObjetivo < hoy) return "ROJO";
   const brecha = avanceEsperado(terreno, hoy) - terreno.avancePct;

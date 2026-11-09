@@ -29,6 +29,16 @@ export function formatPorcentaje(fraccion: number): string {
   return porcentaje.format(fraccion);
 }
 
+const indice = new Intl.NumberFormat(LOCALE, {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/** Índice de desempeño (SPI, CPI) con dos decimales: 0.88. */
+export function formatIndice(valor: number): string {
+  return indice.format(valor);
+}
+
 const puntos = new Intl.NumberFormat(LOCALE, {
   minimumFractionDigits: 0,
   maximumFractionDigits: 2,

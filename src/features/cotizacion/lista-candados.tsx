@@ -1,5 +1,7 @@
 import { Check, ShieldCheck, X } from "lucide-react";
+import { Ayuda } from "@/components/shared";
 import type { Candado } from "@/domain";
+import { TEXTOS_PRECIO } from "@/features/local/textos-precio";
 import { cn } from "@/lib/utils";
 
 const ICONO = {
@@ -33,7 +35,13 @@ export function ListaCandados({
               <span className="sr-only">{ESTADO_TEXTO[c.estado]}</span>
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-brand-text">{c.nombre}</p>
+              <p className="text-sm font-medium text-brand-text">
+                {c.id === "PRECIO_MINIMO" ? (
+                  <Ayuda texto={TEXTOS_PRECIO.minimo.ayuda}>{c.nombre}</Ayuda>
+                ) : (
+                  c.nombre
+                )}
+              </p>
               <p className="text-xs text-brand-text-muted">
                 {detalles?.[c.id] ?? c.detalle}
               </p>
@@ -47,6 +55,6 @@ export function ListaCandados({
 
 const ESTADO_TEXTO = {
   CUMPLE: "Cumple",
-  EXCEPCION: "Excepción aprobada",
+  EXCEPCION: "Excepción aplicada",
   FALLA: "No cumple",
 } as const;

@@ -1,9 +1,7 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useState } from "react";
-import { CheckCircle2, Circle } from "lucide-react";
 import { PanelDetalle, StatusChip } from "@/components/shared";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -17,15 +15,8 @@ import {
 } from "@/domain";
 import { formatFecha, formatNumero } from "@/lib/format";
 import { DialogoActualizarAvance, DialogoMoverEtapa } from "./dialogos-terreno";
-
-const MiniMapa = dynamic(() => import("./mini-mapa"), {
-  ssr: false,
-  loading: () => (
-    <div className="absolute inset-0 flex items-center justify-center text-sm text-brand-text-muted">
-      Cargando mapa…
-    </div>
-  ),
-});
+import { HitosTerreno } from "./hitos-terreno";
+import { UbicacionTerreno } from "./ubicacion-terreno";
 
 interface DetalleTerrenoProps {
   terreno: Terreno;
@@ -99,45 +90,11 @@ export function DetalleTerreno({
           },
           {
             titulo: "Hitos",
-            contenido: (
-              <ol className="space-y-2">
-                {t.hitos.map((h) => (
-                  <li key={h.id} className="flex items-start gap-2">
-                    {h.cumplido ? (
-                      <CheckCircle2
-                        aria-label="Cumplido"
-                        className="mt-0.5 size-4 shrink-0 text-brand-secondary"
-                      />
-                    ) : (
-                      <Circle
-                        aria-label="Pendiente"
-                        className="mt-0.5 size-4 shrink-0 text-brand-text-muted"
-                      />
-                    )}
-                    <span className="min-w-0">
-                      <span className="block">{h.titulo}</span>
-                      <span className="block text-xs text-brand-text-muted">
-                        {formatFecha(h.fecha)}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            ),
+            contenido: <HitosTerreno hitos={t.hitos} />,
           },
           {
             titulo: "Ubicación",
-            contenido: posicion ? (
-              <div
-                role="img"
-                aria-label={`Ubicación de ${t.nombre}`}
-                className="relative h-44 overflow-hidden rounded-lg border border-brand-line"
-              >
-                <MiniMapa posicion={posicion} />
-              </div>
-            ) : (
-              "Sin ubicación."
-            ),
+            contenido: <UbicacionTerreno nombre={t.nombre} posicion={posicion} />,
           },
         ]}
         acciones={
@@ -150,11 +107,20 @@ export function DetalleTerreno({
                 >
                   Mover a etapa
                 </Button>
-                <Button variant="outline" onClick={() => setEditandoAvance(true)}>
-                  Actualizar avance
-                </Button>
+                {/* Con contratos de obra el avance se deriva de los cortes validados. */}
+                {t.semaforoObra ? null : (
+                  <Button variant="outline" onClick={() => setEditandoAvance(true)}>
+                    Actualizar avance
+                  </Button>
+                )}
               </>
             ) : null}
+            <Link
+              href={`/terrenos-y-proyectos/${t.id}`}
+              className={buttonVariants({ variant: "outline" })}
+            >
+              Ver expediente
+            </Link>
             {t.plazaId ? (
               <Link
                 href={`/plazas/${t.plazaId}`}

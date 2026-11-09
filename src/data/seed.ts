@@ -2,6 +2,7 @@ import {
   DEMO_TODAY,
   estatusCobro,
   proponerActualizacionAnual,
+  sumarDias,
   type CambioPropuesto,
   type Ciudad,
   type Contrato,
@@ -11,6 +12,7 @@ import {
   type EventoSync,
   type Factura,
   type Integracion,
+  type Licitacion,
   type Local,
   type Locatario,
   type Mantenimiento,
@@ -26,6 +28,8 @@ import { generarPlazas, repartir, type PlazaPlan } from "./generador";
 import { crearHeroe, PLAZA_HEROE_ID } from "./heroe";
 import { crearConectores } from "./integraciones";
 import { crearMantenimientos } from "./mantenimientos";
+import { crearLicitaciones } from "./licitaciones";
+import { crearObra, type DatosObra } from "./obra";
 import { crearPrng } from "./prng";
 import { crearProspectos } from "./prospectos";
 import { crearTerrenos } from "./terrenos";
@@ -51,6 +55,10 @@ export interface Seed {
   ultimoSync: string;
   prospectos: Prospecto[];
   terrenos: Terreno[];
+  /** Contratos de obra y cronograma de los proyectos con obra. */
+  obra: DatosObra;
+  /** Licitaciones de obra del héroe (adjudicadas y una en curso). */
+  licitaciones: Licitacion[];
   proveedores: Proveedor[];
   mantenimientos: Mantenimiento[];
   integraciones: Integracion[];
@@ -122,10 +130,11 @@ export function crearSeed(): Seed {
   );
 
   const cotizacionesGeneradas = generado.cotizaciones;
-  const excepciones = crearExcepciones(cotizacionesGeneradas, [
-    ...heroe.locales,
-    ...generado.locales,
-  ]);
+  const excepciones = crearExcepciones(
+    cotizacionesGeneradas,
+    [...heroe.locales, ...generado.locales],
+    [...heroe.excepciones, ...generado.excepciones],
+  );
 
   const locales = [...heroe.locales, ...generado.locales];
   const facturas = [...heroe.facturas, ...generado.facturas];
@@ -138,6 +147,7 @@ export function crearSeed(): Seed {
     contratos,
   );
   const terrenos = crearTerrenos(plazas, locales);
+  const obra = crearObra(terrenos);
   const diferenciasEnKontrol = crearDiferencias(facturas);
   const ultimoSync = `${DEMO_TODAY}T15:52:00`;
   const conectores = crearConectores({
@@ -145,6 +155,7 @@ export function crearSeed(): Seed {
     diferencias: diferenciasEnKontrol,
     locales,
     terrenos,
+    actividadesCronograma: obra.cronograma.length,
     ultimoSyncEnKontrol: ultimoSync,
   });
 
@@ -169,6 +180,8 @@ export function crearSeed(): Seed {
     ultimoSync,
     prospectos: prospeccion.prospectos,
     terrenos,
+    obra,
+    licitaciones: crearLicitaciones(obra.contratos),
     proveedores: PROVEEDORES.map((p) => ({
       ...p,
       especialidades: [...p.especialidades],
@@ -180,29 +193,36 @@ export function crearSeed(): Seed {
 }
 
 /**
- * Dos cotizaciones por debajo del mínimo: una con excepción pendiente (para
- * que la bandeja de Aprobaciones no nazca vacía) y otra ya aprobada.
+ * Dos cotizaciones por debajo del mínimo para demostrar los dos pasos: una
+ * PENDIENTE (espera a Dirección) y otra AUTORIZADA_DIRECCION (espera a la PMO).
+ * Las excepciones históricas APLICADAS de los contratos van después.
  */
 function crearExcepciones(
   cotizaciones: Cotizacion[],
   locales: Local[],
+  historicas: ExcepcionPrecio[],
 ): ExcepcionPrecio[] {
   const porId = new Map(locales.map((l) => [l.id, l]));
-  const estados = [
+  const casos: Pick<
+    ExcepcionPrecio,
+    "estado" | "motivo" | "autorizadaPor" | "autorizadaEn" | "comentarioDireccion"
+  >[] = [
     {
-      estado: "PENDIENTE" as const,
+      estado: "PENDIENTE",
       motivo:
         "El locatario es ancla de la plaza y cerró con otra plaza de la competencia; pedimos 3% bajo el mínimo a cambio de un contrato a 5 años.",
     },
     {
-      estado: "APROBADA" as const,
-      resueltaPor: "Laura Fuentes",
+      estado: "AUTORIZADA_DIRECCION",
       motivo:
         "Giro nuevo para el mix comercial de la plaza; el cliente firma con aval y un año de renta en depósito.",
-      comentario: "Aprobada: el plazo largo compensa la diferencia contra el mínimo.",
+      autorizadaPor: "Mariana López",
+      autorizadaEn: DEMO_TODAY,
+      comentarioDireccion:
+        "Autorizada: el plazo largo compensa la diferencia contra el mínimo.",
     },
   ];
-  return estados.map((resolucion, i) => {
+  const demo = casos.map((caso, i) => {
     const cotizacion = cotizaciones[i];
     const local = porId.get(cotizacion.localId)!;
     cotizacion.rentaMensual = Math.round((local.precioMinimo * 0.97) / 10) * 10;
@@ -213,9 +233,11 @@ function crearExcepciones(
       rentaSolicitada: cotizacion.rentaMensual,
       precioMinimo: local.precioMinimo,
       solicitadaPor: "Jorge Ramírez",
-      ...resolucion,
+      solicitadaEn: sumarDias(DEMO_TODAY, -(2 - i)),
+      ...caso,
     };
   });
+  return [...demo, ...historicas];
 }
 
 /**

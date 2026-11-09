@@ -1,6 +1,7 @@
 import {
   DEMO_TODAY,
   mismoIncremento,
+  ultimoRegistroPrecio,
   type FechaISO,
   type Local,
   type ReglaActualizacion,
@@ -66,13 +67,9 @@ export function validarMinimo(valor: number, precioVigente: number): string | nu
   return null;
 }
 
-function ultimoRegistro(historial: readonly RegistroPrecio[]): RegistroPrecio | null {
-  return [...historial].sort((a, b) => a.fecha.localeCompare(b.fecha)).at(-1) ?? null;
-}
-
 /** Año del último precio registrado (base del repricing), o `null` sin historial. */
 export function añoBaseRepricing(historial: readonly RegistroPrecio[]): number | null {
-  const ultimo = ultimoRegistro(historial);
+  const ultimo = ultimoRegistroPrecio(historial, "LISTA");
   return ultimo ? Number(ultimo.fecha.slice(0, 4)) : null;
 }
 
@@ -126,7 +123,7 @@ export function construirHistorial(
     .sort((a, b) => a.fecha.localeCompare(b.fecha))
     .map((r, i) => ({
       id: `precio-${i}`,
-      titulo: `Precio registrado: ${formatearMonto(r.precio)}`,
+      titulo: `${r.concepto === "MINIMO" ? "Mínimo autorizado registrado" : "Precio registrado"}: ${formatearMonto(r.precio)}`,
       detalle: r.motivo,
       fecha: r.fecha,
       tono: "primario",

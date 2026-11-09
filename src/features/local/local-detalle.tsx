@@ -113,8 +113,7 @@ export function LocalDetalle({ plazaId, localId }: { plazaId: string; localId: s
       </header>
       {!puedeEditarMinimo && !puedeEditarRegla ? (
         <p className="rounded-lg bg-brand-cream px-4 py-2.5 text-sm text-brand-text-muted ring-1 ring-brand-line">
-          Vista de solo lectura. El precio mínimo y la regla anual los gestiona
-          Superadmin.
+          Vista de solo lectura. El precio mínimo y la regla anual los gestiona la PMO.
         </p>
       ) : null}
 

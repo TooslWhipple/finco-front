@@ -8,6 +8,7 @@ import { PageHeader, SelectorPill } from "@/components/shared";
 import { buttonVariants } from "@/components/ui/button";
 import { can } from "@/config/permissions";
 import { useExcepciones, useLocales, usePlazas, useSesion } from "@/hooks";
+import { MetaIngresos } from "./meta-ingresos";
 import { PestanaExcepciones } from "@/features/aprobaciones/pestana-excepciones";
 import { BandejaActualizacionAnual } from "@/features/local/bandeja-actualizacion-anual";
 import { PrecioReglaLocal } from "@/features/local/precio-regla-local";
@@ -28,7 +29,9 @@ export function PreciosYReglas() {
   const { rol } = useSesion();
   const plazas = usePlazas().datos;
   const locales = useLocales().datos;
-  const excepcionesPend = useExcepciones().filter((e) => e.estado === "PENDIENTE").length;
+  const excepcionesAbiertas = useExcepciones().filter(
+    (e) => e.estado === "PENDIENTE" || e.estado === "AUTORIZADA_DIRECCION",
+  ).length;
 
   const idPedido = params.get("local") ?? LOCAL_POR_DEFECTO;
   const local = useMemo(
@@ -56,7 +59,10 @@ export function PreciosYReglas() {
     if (primero) elegirLocal(primero.id);
   }
 
-  const soloLectura = !can(rol, "excepcion.resolver");
+  const soloLectura =
+    !can(rol, "excepcion.autorizar") &&
+    !can(rol, "excepcion.aplicar") &&
+    !can(rol, "precioMinimo.editar");
 
   return (
     <div className="space-y-6">
@@ -92,8 +98,8 @@ export function PreciosYReglas() {
       />
       {soloLectura ? (
         <p className="rounded-lg bg-brand-cream px-4 py-2.5 text-sm text-brand-text-muted ring-1 ring-brand-line">
-          Vista de solo lectura. Solo Superadmin puede aprobar o rechazar cambios y
-          excepciones, y editar el precio mínimo y la regla.
+          Vista de solo lectura. Dirección autoriza las excepciones; la PMO las aplica y
+          edita el precio mínimo, la regla y la meta de ingresos.
         </p>
       ) : null}
 
@@ -104,12 +110,14 @@ export function PreciosYReglas() {
         </div>
       </div>
 
+      <MetaIngresos key={plaza.id} plaza={plaza} />
+
       <section aria-labelledby="titulo-excepciones" className="space-y-3">
         <h2
           id="titulo-excepciones"
           className="font-heading text-lg font-bold text-brand-primary"
         >
-          Excepciones de precio ({excepcionesPend})
+          Excepciones de precio ({excepcionesAbiertas})
         </h2>
         <PestanaExcepciones />
       </section>

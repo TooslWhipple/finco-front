@@ -7,12 +7,18 @@ import {
   avanceEsperado,
   diasEntre,
   embudoProspectos,
+  rentaVsMinimo,
   semaforoTerreno,
   type SemaforoTerreno,
 } from "@/domain";
 import { formatMoneda, formatNumero, formatPorcentaje } from "@/lib/format";
-import { margenSobreMinimo } from "@/features/local/calculos";
 import { resumirPlazasMapa } from "@/features/mapa/agregados";
+import {
+  contratosVigentes,
+  reporteCumplimientoPlan,
+  reporteDescuentos,
+  reporteRentasVsMinimo,
+} from "./calculos-rentas";
 import type { DatosReporte, FiltroReporte, ResultadoReporte, TonoBarra } from "./tipos";
 
 export const TODOS = "TODOS";
@@ -20,7 +26,15 @@ export const TODOS = "TODOS";
 export const FILTRO_INICIAL: FiltroReporte = { ciudadId: TODOS, plazaId: TODOS };
 
 export type IdReporte =
-  "OCUPACION" | "COBRANZA" | "PRECIOS" | "EMBUDO" | "VENCIMIENTOS" | "TERRENOS";
+  | "OCUPACION"
+  | "COBRANZA"
+  | "PRECIOS"
+  | "RENTAS_MINIMO"
+  | "DESCUENTOS"
+  | "CUMPLIMIENTO_PLAN"
+  | "EMBUDO"
+  | "VENCIMIENTOS"
+  | "TERRENOS";
 
 /** Margen sobre el mínimo por debajo del cual un local está "ajustado". */
 export const MARGEN_AJUSTADO = 0.05;
@@ -43,6 +57,7 @@ export function acotarDatos(datos: DatosReporte, filtro: FiltroReporte): DatosRe
     locales,
     contratos: datos.contratos.filter((c) => idsLocal.has(c.localId)),
     facturas: datos.facturas.filter((f) => idsLocal.has(f.localId)),
+    excepciones: datos.excepciones.filter((e) => idsLocal.has(e.localId)),
     prospectos: datos.prospectos.filter((p) => p.localIds.some((id) => idsLocal.has(id))),
     terrenos: datos.terrenos.filter(
       (t) =>
@@ -142,38 +157,49 @@ export function reporteCobranza(datos: DatosReporte): ResultadoReporte {
 }
 
 export function reportePrecios(datos: DatosReporte): ResultadoReporte {
+  const vigentes = contratosVigentes(datos);
   const filas = datos.plazas
     .filter((p) => p.estatus === "EN_OPERACION")
     .map((plaza) => {
       const locales = datos.locales.filter(
         (l) => l.plazaId === plaza.id && l.estatus !== "PREVENTA",
       );
-      const margenes = locales.map((l) => margenSobreMinimo(l).fraccion);
+      const rentados = locales.flatMap((l) => {
+        const contrato = vigentes.get(l.id);
+        return contrato ? [{ local: l, contrato }] : [];
+      });
+      const margenes = rentados.map(
+        ({ local, contrato }) =>
+          rentaVsMinimo(contrato.rentaMensual, local.precioMinimo).diferenciaPct / 100,
+      );
       return {
+        plazaId: plaza.id,
         plaza: plaza.nombre,
         locales: locales.length,
         precioPromedio: promedio(locales.map((l) => l.precioVigente)),
         minimoPromedio: promedio(locales.map((l) => l.precioMinimo)),
+        rentaPromedio: promedio(rentados.map(({ contrato }) => contrato.rentaMensual)),
         margen: promedio(margenes),
         ajustados: margenes.filter((m) => m < MARGEN_AJUSTADO).length,
+        rentados: rentados.length,
       };
     })
-    .filter((f) => f.locales > 0)
+    .filter((f) => f.rentados > 0)
     .toSorted((a, b) => a.margen - b.margen);
   const ajustados = filas.reduce((s, f) => s + f.ajustados, 0);
   const margenGlobal =
-    filas.reduce((s, f) => s + f.margen * f.locales, 0) /
+    filas.reduce((s, f) => s + f.margen * f.rentados, 0) /
     Math.max(
       1,
-      filas.reduce((s, f) => s + f.locales, 0),
+      filas.reduce((s, f) => s + f.rentados, 0),
     );
   return {
     resumen:
       filas.length === 0
-        ? "No hay plazas en operación en este alcance."
-        : `Margen promedio de ${formatPorcentaje(margenGlobal)} sobre el precio mínimo; ${formatNumero(ajustados)} locales están a menos de ${formatPorcentaje(MARGEN_AJUSTADO)} del mínimo.`,
+        ? "No hay plazas en operación con locales rentados en este alcance."
+        : `Las rentas contratadas están ${formatPorcentaje(margenGlobal)} sobre el precio mínimo en promedio; ${formatNumero(ajustados)} locales rentados están a menos de ${formatPorcentaje(MARGEN_AJUSTADO)} del mínimo.`,
     grafica: {
-      serie: "Margen sobre mínimo",
+      serie: "Renta sobre mínimo",
       formato: "porcentaje",
       puntos: filas.map((f) => ({
         etiqueta: f.plaza,
@@ -185,9 +211,18 @@ export function reportePrecios(datos: DatosReporte): ResultadoReporte {
       columnas: [
         { clave: "plaza", etiqueta: "Plaza" },
         { clave: "locales", etiqueta: "Locales", formato: "numero" },
-        { clave: "precioPromedio", etiqueta: "Precio promedio", formato: "moneda" },
+        {
+          clave: "precioPromedio",
+          etiqueta: "Precio de lista promedio",
+          formato: "moneda",
+        },
         { clave: "minimoPromedio", etiqueta: "Mínimo promedio", formato: "moneda" },
-        { clave: "margen", etiqueta: "Margen s/ mínimo", formato: "porcentaje" },
+        {
+          clave: "rentaPromedio",
+          etiqueta: "Renta contratada promedio",
+          formato: "moneda",
+        },
+        { clave: "margen", etiqueta: "Renta s/ mínimo", formato: "porcentaje" },
         { clave: "ajustados", etiqueta: "Locales ajustados", formato: "numero" },
       ],
       filas,
@@ -337,6 +372,13 @@ export function reporteTerrenos(datos: DatosReporte): ResultadoReporte {
   };
 }
 
+/** Al hacer clic en una fila, el reporte de `destino` se abre filtrado por esa plaza. */
+export interface Drilldown {
+  destino: IdReporte;
+  /** Clave de la fila que trae el id de la plaza. */
+  clavePlaza: string;
+}
+
 export interface DefinicionReporte {
   id: IdReporte;
   titulo: string;
@@ -344,6 +386,7 @@ export interface DefinicionReporte {
   /** Nombre del archivo CSV, sin extensión. */
   archivo: string;
   calcular: (datos: DatosReporte) => ResultadoReporte;
+  drilldown?: Drilldown;
 }
 
 /** Catálogo declarativo: agregar un reporte es agregar una entrada. */
@@ -365,9 +408,34 @@ export const REPORTES: readonly DefinicionReporte[] = [
   {
     id: "PRECIOS",
     titulo: "Precios vs. mínimo",
-    descripcion: "Margen de la renta vigente sobre el precio mínimo autorizado.",
+    descripcion:
+      "Margen del precio de lista sobre el mínimo autorizado, por plaza. Haz clic en una plaza para ver sus rentas local por local.",
     archivo: "precios-vs-minimo",
     calcular: reportePrecios,
+    drilldown: { destino: "RENTAS_MINIMO", clavePlaza: "plazaId" },
+  },
+  {
+    id: "RENTAS_MINIMO",
+    titulo: "Rentas vs mínimo por local",
+    descripcion: "Cuánto se rentó arriba del mínimo autorizado, local por local.",
+    archivo: "rentas-vs-minimo",
+    calcular: reporteRentasVsMinimo,
+  },
+  {
+    id: "DESCUENTOS",
+    titulo: "Descuentos y excepciones",
+    descripcion:
+      "Trazabilidad de cada renta bajo el mínimo: quién la pidió, autorizó y aplicó.",
+    archivo: "descuentos-excepciones",
+    calcular: reporteDescuentos,
+  },
+  {
+    id: "CUMPLIMIENTO_PLAN",
+    titulo: "Cumplimiento del plan de ingresos",
+    descripcion:
+      "Renta contratada contra la planeada por la PMO, con su meta y potencial.",
+    archivo: "cumplimiento-plan-ingresos",
+    calcular: reporteCumplimientoPlan,
   },
   {
     id: "EMBUDO",

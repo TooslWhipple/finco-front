@@ -1,9 +1,11 @@
 import {
   DEMO_TODAY,
+  META_CUMPLIMIENTO_DEFECTO,
   pactarRegla,
   sumarDias,
   type Contrato,
   type Cotizacion,
+  type ExcepcionPrecio,
   type EstatusLocal,
   type Factura,
   type FechaISO,
@@ -28,6 +30,12 @@ import { evidenciaAntes, evidenciaDespues } from "./fotos";
 import type { BorradorMantenimiento } from "./mantenimientos";
 import { geometriaHeroePA, geometriaHeroePB, LIENZO, PLANTA_HEROE_PB_ID } from "./planos";
 import { crearPrng } from "./prng";
+import {
+  FACTOR_MINIMO_HEROE,
+  rentaContratadaLocal,
+  rentaPlaneadaLocal,
+  respaldarContrato,
+} from "./rentas";
 
 export const PLAZA_HEROE_ID = "plz-alborada";
 export const LOCAL_HEROE = "A-09";
@@ -44,6 +52,8 @@ export interface ParteSeed {
   contratos: Contrato[];
   facturas: Factura[];
   cotizaciones: Cotizacion[];
+  /** Excepciones de precio históricas que respaldan contratos firmados bajo el mínimo. */
+  excepciones: ExcepcionPrecio[];
 }
 
 export const REGLA_DEFAULT_HEROE: ReglaActualizacion = {
@@ -207,6 +217,7 @@ export function crearHeroe(ctx: Contexto): ParteSeed {
     coordenadas: coordenadasPlaza(CIUDAD_PLAZA_HEROE, PLAZA_HEROE_ID),
     direccion: "Blvd. Las Palmas y Blvd. Costa Dorada, Fracc. Valle Alto",
     reglaDefault: REGLA_DEFAULT_HEROE,
+    metaCumplimientoPct: META_CUMPLIMIENTO_DEFECTO,
   };
 
   const locales: Local[] = [];
@@ -214,6 +225,7 @@ export function crearHeroe(ctx: Contexto): ParteSeed {
   const contratos: Contrato[] = [];
   const facturas: Factura[] = [];
   const cotizaciones: Cotizacion[] = [];
+  const excepciones: ExcepcionPrecio[] = [];
 
   const geoPB = geometriaHeroePB();
   const geoPA = geometriaHeroePA();
@@ -232,7 +244,8 @@ export function crearHeroe(ctx: Contexto): ParteSeed {
       estatus,
       areaM2: m2,
       precioVigente: precio,
-      precioMinimo: esHeroe ? 23_500 : minimoAutorizado(precio),
+      precioMinimo: esHeroe ? 23_500 : minimoAutorizado(precio, FACTOR_MINIMO_HEROE),
+      rentaPlaneada: 0,
       regla: reglaLocalHeroe(ocupado),
       geometria,
       historial: [],
@@ -242,6 +255,12 @@ export function crearHeroe(ctx: Contexto): ParteSeed {
     if (esHeroe) {
       local.historial = [
         { fecha: "2021-11-01", precio: 18_740, motivo: "Último contrato firmado" },
+        {
+          fecha: "2021-11-01",
+          precio: 17_700,
+          motivo: "Mínimo autorizado a la firma",
+          concepto: "MINIMO",
+        },
       ];
       local.libreDesde = "2026-10-15";
       local.giro = "Alimentos, servicios, retail";
@@ -254,7 +273,12 @@ export function crearHeroe(ctx: Contexto): ParteSeed {
       locatarios.push(locatario);
       local.locatarioId = locatario.id;
       local.giro = giro;
-      const datos = { localId: id, locatarioId: locatario.id, rentaMensual: precio };
+      // Las cuentas con atraso conservan su monto: la demo de cobranza fija esos totales.
+      const renta =
+        extra?.atraso === undefined
+          ? rentaContratadaLocal(id, local.precioMinimo).renta
+          : precio;
+      const datos = { localId: id, locatarioId: locatario.id, rentaMensual: renta };
       const plazo = rng.elegir([36, 48, 60]);
       const contrato = extra?.inicio
         ? contratoPorInicio(ctx, datos, extra.inicio, 36)
@@ -264,8 +288,12 @@ export function crearHeroe(ctx: Contexto): ParteSeed {
             extra?.fin ?? sumarDias(DEMO_TODAY, rng.entero(120, 1000)),
             plazo,
           );
+      const excepcion = respaldarContrato(ctx, contrato, local.precioMinimo);
+      if (excepcion) excepciones.push(excepcion);
       contratos.push(contrato);
-      local.historial = [{ fecha: contrato.inicio, precio, motivo: "Contrato firmado" }];
+      local.historial = [
+        { fecha: contrato.inicio, precio: renta, motivo: "Contrato firmado" },
+      ];
       facturas.push(crearFactura(ctx, rng, contrato, extra?.atraso));
     }
 
@@ -287,6 +315,7 @@ export function crearHeroe(ctx: Contexto): ParteSeed {
         ...pactarRegla(local.regla, REGLA_DEFAULT_HEROE),
       });
     }
+    local.rentaPlaneada = rentaPlaneadaLocal(id, local.precioMinimo);
     locales.push(local);
   };
 
@@ -341,6 +370,7 @@ export function crearHeroe(ctx: Contexto): ParteSeed {
     contratos,
     facturas,
     cotizaciones,
+    excepciones,
   };
 }
 

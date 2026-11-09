@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Check, CircleCheck, Inbox, X } from "lucide-react";
 import { toast } from "sonner";
-import { BarraFiltros, EmptyState, PillsFiltro } from "@/components/shared";
+import { Ayuda, BarraFiltros, EmptyState, PillsFiltro } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { can } from "@/config/permissions";
 import { DEMO_TODAY, INPC_ANUAL, type ReglaActualizacion } from "@/domain";
@@ -21,6 +21,7 @@ import { formatFecha, formatMoneda, formatNumero } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store";
 import { formatPuntosUnDecimal } from "./calculos";
+import { TEXTOS_PRECIO } from "./textos-precio";
 
 const TODAS = "TODAS";
 const ANIVERSARIO = "ANIVERSARIO";
@@ -245,8 +246,18 @@ export function BandejaActualizacionAnual({ localIdDestacado }: BandejaProps) {
                 <tr className="border-b border-brand-line text-left text-xs tracking-wide text-brand-text-muted uppercase">
                   <th className="w-12 py-2 pl-5" />
                   <th className="py-2 font-medium">Local / locatario</th>
-                  <th className="py-2 pr-4 text-right font-medium">Actual</th>
-                  <th className="py-2 pr-3 text-right font-medium">Propuesto</th>
+                  <th className="py-2 pr-4 text-right font-medium">
+                    <Ayuda texto={TEXTOS_PRECIO.lista.ayuda}>Lista</Ayuda>
+                    <span className="block font-normal normal-case">
+                      actual → propuesta
+                    </span>
+                  </th>
+                  <th className="py-2 pr-3 text-right font-medium">
+                    <Ayuda texto={TEXTOS_PRECIO.minimo.ayuda}>Mínimo</Ayuda>
+                    <span className="block font-normal normal-case">
+                      actual → propuesto
+                    </span>
+                  </th>
                   <th className="py-2 pr-5 text-right font-medium">Regla</th>
                 </tr>
               </thead>
@@ -281,11 +292,21 @@ export function BandejaActualizacionAnual({ localIdDestacado }: BandejaProps) {
                         </p>
                       ) : null}
                     </td>
-                    <td className="py-3 pr-4 text-right text-brand-text-muted tabular-nums">
-                      {formatMoneda(cambio.precioActual)}
+                    <td className="py-3 pr-4 text-right tabular-nums">
+                      <span className="block text-xs text-brand-text-muted">
+                        {formatMoneda(cambio.precioActual)}
+                      </span>
+                      <span className="font-semibold">
+                        {formatMoneda(cambio.precioPropuesto)}
+                      </span>
                     </td>
-                    <td className="py-3 pr-3 text-right font-semibold tabular-nums">
-                      {formatMoneda(cambio.precioPropuesto)}
+                    <td className="py-3 pr-3 text-right tabular-nums">
+                      <span className="block text-xs text-brand-text-muted">
+                        {formatMoneda(cambio.minimoActual)}
+                      </span>
+                      <span className="font-semibold">
+                        {formatMoneda(cambio.minimoPropuesto)}
+                      </span>
                     </td>
                     <td className="py-3 pr-5 text-right">
                       <span className="rounded-full bg-brand-secondary/15 px-2.5 py-0.5 text-xs font-medium whitespace-nowrap text-brand-primary">

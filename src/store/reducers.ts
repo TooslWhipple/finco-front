@@ -21,6 +21,20 @@ import {
   type Prospecto,
   type ReglaActualizacion,
   type Terreno,
+  type ContratoObra,
+  type ActividadCronograma,
+  type CorteSemanal,
+  type EntradaCorte,
+  type PagoObra,
+  type EntradaRonda,
+  type Licitacion,
+  conLicitacionAdjudicada,
+  conProveedorDescartado,
+  conRondaRegistrada,
+  corteSinErrores,
+  erroresCorte,
+  firmarCorte,
+  resolverCorte,
 } from "@/domain";
 
 /** Registro de un cambio hecho en vivo sobre un local (mínimo, regla). */
@@ -68,6 +82,15 @@ export interface ContratosState {
   nuevos: Contrato[];
 }
 
+/** Contratos de obra y cronograma de los proyectos (parten del seed). */
+export interface ObraState {
+  contratos: ContratoObra[];
+  cronograma: ActividadCronograma[];
+  cortes: CorteSemanal[];
+  pagos: PagoObra[];
+  licitaciones: Licitacion[];
+}
+
 export interface TerrenosState {
   terrenos: Terreno[];
 }
@@ -79,6 +102,11 @@ export interface MantenimientosState {
 export interface ReglasDefaultState {
   /** Regla de actualización por default editada en la demo, por id de plaza. */
   porPlaza: Record<string, ReglaActualizacion>;
+}
+
+export interface MetasState {
+  /** Meta de cumplimiento del plan de ingresos editada en la demo, en %, por id de plaza. */
+  porPlaza: Record<string, number>;
 }
 
 export interface LocalesState {
@@ -107,6 +135,12 @@ export function actualizarCotizacion(
 
 // --- aprobaciones ---------------------------------------------------------
 
+/** Estados en que la excepción sigue abierta: espera a Dirección o a la PMO. */
+const ESTADOS_ABIERTOS: readonly ExcepcionPrecio["estado"][] = [
+  "PENDIENTE",
+  "AUTORIZADA_DIRECCION",
+];
+
 /** Crea una excepción pendiente; una cotización solo tiene una abierta a la vez. */
 export function solicitarExcepcion(
   estado: AprobacionesState,
@@ -114,9 +148,10 @@ export function solicitarExcepcion(
   local: Pick<Local, "precioMinimo">,
   solicitadaPor: string,
   motivo: string,
+  hoy: FechaISO,
 ): AprobacionesState {
   const abierta = estado.excepciones.some(
-    (e) => e.cotizacionId === cotizacion.id && e.estado === "PENDIENTE",
+    (e) => e.cotizacionId === cotizacion.id && ESTADOS_ABIERTOS.includes(e.estado),
   );
   if (abierta) return estado;
   const nueva: ExcepcionPrecio = {
@@ -127,30 +162,87 @@ export function solicitarExcepcion(
     precioMinimo: local.precioMinimo,
     estado: "PENDIENTE",
     solicitadaPor,
+    solicitadaEn: hoy,
     motivo,
   };
   return { ...estado, excepciones: [...estado.excepciones, nueva] };
 }
 
-/** Resuelve una excepción pendiente. Rechazar exige comentario. */
-export function resolverExcepcion(
+/** Aplica `cambio` a la excepción `id` solo si está en el estado `desde`. */
+function transicionarExcepcion(
   estado: AprobacionesState,
   id: string,
-  resolucion: "APROBADA" | "RECHAZADA",
-  resueltaPor: string,
-  comentario?: string,
+  desde: ExcepcionPrecio["estado"],
+  cambio: Partial<ExcepcionPrecio>,
 ): AprobacionesState {
-  if (resolucion === "RECHAZADA" && !comentario?.trim()) {
-    throw new Error("Rechazar una excepción requiere comentario");
-  }
   return {
     ...estado,
     excepciones: estado.excepciones.map((e) =>
-      e.id === id && e.estado === "PENDIENTE"
-        ? { ...e, estado: resolucion, resueltaPor, comentario: comentario?.trim() }
-        : e,
+      e.id === id && e.estado === desde ? { ...e, ...cambio } : e,
     ),
   };
+}
+
+/** Dirección autoriza una excepción pendiente; el comentario es opcional. */
+export function autorizarExcepcion(
+  estado: AprobacionesState,
+  id: string,
+  autorizadaPor: string,
+  hoy: FechaISO,
+  comentario?: string,
+): AprobacionesState {
+  return transicionarExcepcion(estado, id, "PENDIENTE", {
+    estado: "AUTORIZADA_DIRECCION",
+    autorizadaPor,
+    autorizadaEn: hoy,
+    comentarioDireccion: comentario?.trim() || undefined,
+  });
+}
+
+/** La PMO aplica una excepción autorizada: desde aquí el candado de precio pasa. */
+export function aplicarExcepcion(
+  estado: AprobacionesState,
+  id: string,
+  aplicadaPor: string,
+  hoy: FechaISO,
+  comentario?: string,
+): AprobacionesState {
+  return transicionarExcepcion(estado, id, "AUTORIZADA_DIRECCION", {
+    estado: "APLICADA",
+    aplicadaPor,
+    aplicadaEn: hoy,
+    comentarioPmo: comentario?.trim() || undefined,
+  });
+}
+
+/**
+ * Rechaza una excepción abierta. Dirección rechaza las pendientes y la PMO las
+ * autorizadas; el comentario es obligatorio y queda en el campo de quien rechaza.
+ */
+export function rechazarExcepcion(
+  estado: AprobacionesState,
+  id: string,
+  rechazadaPor: string,
+  hoy: FechaISO,
+  comentario: string,
+): AprobacionesState {
+  const texto = comentario.trim();
+  if (!texto) throw new Error("Rechazar una excepción requiere comentario");
+  const actual = estado.excepciones.find((e) => e.id === id);
+  if (actual?.estado === "PENDIENTE") {
+    return transicionarExcepcion(estado, id, "PENDIENTE", {
+      estado: "RECHAZADA",
+      rechazadaPor,
+      rechazadaEn: hoy,
+      comentarioDireccion: texto,
+    });
+  }
+  return transicionarExcepcion(estado, id, "AUTORIZADA_DIRECCION", {
+    estado: "RECHAZADA",
+    rechazadaPor,
+    rechazadaEn: hoy,
+    comentarioPmo: texto,
+  });
 }
 
 /** Aprueba o rechaza cambios de la bandeja anual; solo mueve los pendientes. */
@@ -171,8 +263,14 @@ export function resolverCambiosAnuales(
   };
 }
 
-export function contarExcepcionesPendientes(estado: AprobacionesState): number {
+/** Excepciones que esperan la decisión de Dirección. */
+export function contarPorAutorizar(estado: AprobacionesState): number {
   return estado.excepciones.filter((e) => e.estado === "PENDIENTE").length;
+}
+
+/** Excepciones autorizadas que esperan a la PMO. */
+export function contarPorAplicar(estado: AprobacionesState): number {
+  return estado.excepciones.filter((e) => e.estado === "AUTORIZADA_DIRECCION").length;
 }
 
 export function contarCambiosPendientes(estado: AprobacionesState): number {
@@ -346,6 +444,95 @@ export function actualizarAvanceTerreno(
   };
 }
 
+// --- cortes de obra -------------------------------------------------------
+
+/**
+ * Registra y firma un corte semanal. Una captura inválida (volumen que excede lo
+ * contratado, semana repetida) no cambia nada: el diálogo ya la bloquea.
+ */
+export function registrarCorte(
+  estado: ObraState,
+  entrada: EntradaCorte,
+  autor: string,
+  hoy: FechaISO,
+  evidencia: Foto[],
+): ObraState {
+  const contrato = estado.contratos.find((c) => c.id === entrada.contratoObraId);
+  if (!contrato || !corteSinErrores(erroresCorte(contrato, estado.cortes, entrada))) {
+    return estado;
+  }
+  const id = `cor-${String(estado.cortes.length + 1).padStart(4, "0")}`;
+  return {
+    ...estado,
+    cortes: [...estado.cortes, firmarCorte(id, entrada, autor, hoy, evidencia)],
+  };
+}
+
+/** La PMO valida o rechaza (con comentario) un corte firmado. */
+export function resolverCorteObra(
+  estado: ObraState,
+  id: string,
+  resolucion: "VALIDADO_PMO" | "RECHAZADO",
+  autor: string,
+  hoy: FechaISO,
+  comentario?: string,
+): ObraState {
+  return {
+    ...estado,
+    cortes: estado.cortes.map((c) =>
+      c.id === id ? resolverCorte(c, resolucion, autor, hoy, comentario) : c,
+    ),
+  };
+}
+
+/** Aplica una transición de dominio a una licitación; las demás quedan igual. */
+function actualizarLicitacion(
+  estado: ObraState,
+  id: string,
+  transicion: (licitacion: Licitacion) => Licitacion,
+): ObraState {
+  return {
+    ...estado,
+    licitaciones: estado.licitaciones.map((l) => (l.id === id ? transicion(l) : l)),
+  };
+}
+
+/** La PMO captura una ronda de propuestas de una licitación en curso. */
+export function registrarRonda(
+  estado: ObraState,
+  id: string,
+  entrada: EntradaRonda,
+  hoy: FechaISO,
+): ObraState {
+  return actualizarLicitacion(estado, id, (l) => conRondaRegistrada(l, entrada, hoy));
+}
+
+/** La PMO saca a un proveedor de la competencia; el motivo es obligatorio. */
+export function descartarProveedor(
+  estado: ObraState,
+  id: string,
+  proveedorId: string,
+  motivo: string,
+): ObraState {
+  return actualizarLicitacion(estado, id, (l) =>
+    conProveedorDescartado(l, proveedorId, motivo),
+  );
+}
+
+/** La PMO adjudica la licitación al ganador de la última ronda, con motivo. */
+export function adjudicarLicitacion(
+  estado: ObraState,
+  id: string,
+  ganadorId: string,
+  motivo: string,
+  autor: string,
+  hoy: FechaISO,
+): ObraState {
+  return actualizarLicitacion(estado, id, (l) =>
+    conLicitacionAdjudicada(l, ganadorId, motivo, autor, hoy),
+  );
+}
+
 // --- mantenimientos -------------------------------------------------------
 
 /** Lo que captura el diálogo de alta: el resto lo fija el reducer (nace programado). */
@@ -426,7 +613,38 @@ export function aplicarReglaHeredada(
   return regla === local.regla ? local : { ...local, regla };
 }
 
+// --- meta de ingresos -----------------------------------------------------
+
+export function establecerMeta(
+  estado: MetasState,
+  plazaId: string,
+  metaPct: number,
+): MetasState {
+  return { porPlaza: { ...estado.porPlaza, [plazaId]: metaPct } };
+}
+
+/** Aplica la meta editada en la demo sobre una plaza del repositorio. */
+export function aplicarMeta<T extends { id: string; metaCumplimientoPct: number }>(
+  plaza: T,
+  estado: MetasState,
+): T {
+  const meta = estado.porPlaza[plaza.id];
+  return meta === undefined ? plaza : { ...plaza, metaCumplimientoPct: meta };
+}
+
 // --- locales --------------------------------------------------------------
+
+/** Anota un hecho en la bitácora del local sin tocar el resto de sus ajustes. */
+export function registrarBitacoraLocal(
+  estado: LocalesState,
+  localId: string,
+  entrada: EntradaBitacora,
+): LocalesState {
+  const actual = estado.ajustes[localId];
+  return ajustarLocal(estado, localId, {
+    bitacora: [...(actual?.bitacora ?? []), entrada],
+  });
+}
 
 export function ajustarLocal(
   estado: LocalesState,

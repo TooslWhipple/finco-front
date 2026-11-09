@@ -17,11 +17,18 @@ export interface Contexto {
   locatarios: number;
   contratos: number;
   facturas: number;
+  excepciones: number;
   nombresUsados: Set<string>;
 }
 
 export function crearContexto(): Contexto {
-  return { locatarios: 0, contratos: 0, facturas: 0, nombresUsados: new Set() };
+  return {
+    locatarios: 0,
+    contratos: 0,
+    facturas: 0,
+    excepciones: 0,
+    nombresUsados: new Set(),
+  };
 }
 
 const FOLIO_BASE = 3000;
@@ -160,7 +167,7 @@ export function crearFactura(
   return { ...factura, seguimiento: seguimientoInicial(factura, DEMO_TODAY, n) };
 }
 
-/** Precio mínimo autorizado de referencia: ~94.5 % de la lista, a múltiplos de $50. */
-export function minimoAutorizado(precioLista: number): number {
-  return Math.round((precioLista * 0.945) / 50) * 50;
+/** Precio mínimo autorizado: `factor` de la lista (por omisión 94.5 %), a múltiplos de $50. */
+export function minimoAutorizado(precioLista: number, factor = 0.945): number {
+  return Math.round((precioLista * factor) / 50) * 50;
 }
