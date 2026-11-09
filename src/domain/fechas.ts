@@ -33,3 +33,9 @@ export function sumarMeses(fecha: FechaISO, meses: number): FechaISO {
   const ultimoDia = new Date(Date.UTC(año, mes + 1, 0)).getUTCDate();
   return deUtc(Date.UTC(año, mes, Math.min(d, ultimoDia)));
 }
+
+/** Lunes ISO de la semana de `fecha` (la propia fecha si ya es lunes). */
+export function lunesDeSemana(fecha: FechaISO): FechaISO {
+  const diaSemana = new Date(aUtc(fecha)).getUTCDay();
+  return sumarDias(fecha, -((diaSemana + 6) % 7));
+}

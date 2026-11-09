@@ -7,6 +7,7 @@ import {
   type FechaISO,
   type Local,
 } from "@/domain";
+import { eventosExcepcion } from "@/features/aprobaciones/calculos";
 
 /** Condiciones económicas editables de una cotización. */
 export interface Terminos {
@@ -85,12 +86,15 @@ export function excepcionVigente(
     .at(-1);
 }
 
-export function excepcionPendiente(
+/** Excepción que sigue abierta: espera a Dirección (pendiente) o a la PMO (autorizada). */
+export function excepcionAbierta(
   excepciones: readonly ExcepcionPrecio[],
   cotizacionId: string,
 ): ExcepcionPrecio | undefined {
   return excepciones.find(
-    (e) => e.cotizacionId === cotizacionId && e.estado === "PENDIENTE",
+    (e) =>
+      e.cotizacionId === cotizacionId &&
+      (e.estado === "PENDIENTE" || e.estado === "AUTORIZADA_DIRECCION"),
   );
 }
 
@@ -118,13 +122,16 @@ export function derivarPasos(entrada: {
 }): PasoCotizacion[] {
   const { candados, excepcion, contratoGenerado } = entrada;
   const pendientes = candados.filter((c) => c.estado === "FALLA").length;
-  const enEspera = excepcion?.estado === "PENDIENTE";
+  const enEspera =
+    excepcion?.estado === "PENDIENTE" || excepcion?.estado === "AUTORIZADA_DIRECCION";
 
   // Índice (1-5) del paso en curso: los candados sin resolver retienen el flujo.
   const actual = contratoGenerado ? 4 : enEspera || pendientes > 0 ? 3 : 4;
 
   const notaCandados = enEspera
-    ? "En espera de Superadmin"
+    ? excepcion?.estado === "PENDIENTE"
+      ? "En espera de Dirección"
+      : "Autorizada, en espera de la PMO"
     : pendientes > 0
       ? `${pendientes} pendiente${pendientes === 1 ? "" : "s"}`
       : "Todos cumplen";
@@ -184,24 +191,7 @@ export function construirActividad(
         },
       ];
   for (const e of excepciones.filter((x) => x.cotizacionId === cotizacion.id)) {
-    eventos.push({
-      id: `${e.id}-solicitada`,
-      titulo: `Excepción de precio solicitada por ${e.solicitadaPor}`,
-      detalle: e.motivo,
-      fecha: DEMO_TODAY,
-      tono: "naranja",
-    });
-    if (e.estado !== "PENDIENTE") {
-      eventos.push({
-        id: `${e.id}-resuelta`,
-        titulo: `Excepción ${e.estado === "APROBADA" ? "aprobada" : "rechazada"}${
-          e.resueltaPor ? ` por ${e.resueltaPor}` : ""
-        }`,
-        detalle: e.comentario,
-        fecha: DEMO_TODAY,
-        tono: e.estado === "APROBADA" ? "verde" : "coral",
-      });
-    }
+    eventos.push(...eventosExcepcion(e));
   }
   if (cotizacion.estado === "CONTRATO_GENERADO") {
     eventos.push({

@@ -7,6 +7,8 @@ import {
   contratoDesdeCotizacion,
   DEMO_TODAY,
   type Cotizacion,
+  type EntradaCorte,
+  type EntradaRonda,
   type EstadoCambio,
   type EstatusMantenimiento,
   type EtapaTerreno,
@@ -16,14 +18,15 @@ import {
   type ReglaActualizacion,
   type Rol,
 } from "@/domain";
-import { evidenciaAntes, evidenciaDespues } from "@/data/fotos";
+import { evidenciaAntes, evidenciaCorte, evidenciaDespues } from "@/data/fotos";
 import { usuarioDeRol, usuarioPorId } from "@/config/usuarios";
+import { formatMoneda } from "@/lib/format";
 import { crearEstadoInicial, type DatosDemo } from "./estado-inicial";
 import * as r from "./reducers";
 
 export const CLAVE_STORAGE = "finco-demo";
 /** Subir al cambiar la forma del estado persistido: descarta lo viejo. */
-export const VERSION_STORAGE = 5;
+export const VERSION_STORAGE = 9;
 
 export interface Acciones {
   iniciarSesion(usuarioId: string): void;
@@ -32,11 +35,14 @@ export interface Acciones {
   crearCotizacion(cotizacion: Cotizacion): void;
   actualizarCotizacion(id: string, parche: Partial<Omit<Cotizacion, "id">>): void;
   solicitarExcepcion(cotizacion: Cotizacion, local: Local, motivo: string): void;
-  resolverExcepcion(
-    id: string,
-    resolucion: "APROBADA" | "RECHAZADA",
-    comentario?: string,
-  ): void;
+  /** Dirección autoriza una excepción pendiente. */
+  autorizarExcepcion(id: string, comentario?: string): void;
+  /** La PMO aplica una excepción autorizada y deja constancia en el local. */
+  aplicarExcepcion(id: string, comentario?: string): void;
+  /** Dirección (pendientes) o la PMO (autorizadas) rechazan; el comentario es obligatorio. */
+  rechazarExcepcion(id: string, comentario: string): void;
+  /** La PMO fija la meta de cumplimiento del plan de ingresos de una plaza, en %. */
+  establecerMetaPlaza(plazaId: string, metaPct: number): void;
   resolverCambiosAnuales(
     localIds: readonly string[],
     año: number,
@@ -70,6 +76,18 @@ export interface Acciones {
     destino: EstatusMantenimiento,
     costoReal?: number,
   ): void;
+  /** El Supervisor captura y firma el corte de la semana, con fotos simuladas de evidencia. */
+  registrarCorte(entrada: EntradaCorte): void;
+  /** La PMO valida un corte firmado: desde ahí cuenta para el avance. */
+  validarCorte(id: string): void;
+  /** La PMO rechaza un corte firmado; el comentario es obligatorio. */
+  rechazarCorte(id: string, comentario: string): void;
+  /** La PMO captura la siguiente ronda de propuestas de una licitación en curso. */
+  registrarRonda(licitacionId: string, entrada: EntradaRonda): void;
+  /** La PMO saca a un proveedor de la competencia; el motivo es obligatorio. */
+  descartarProveedor(licitacionId: string, proveedorId: string, motivo: string): void;
+  /** La PMO adjudica la licitación al ganador de la última ronda, con su motivo. */
+  adjudicarLicitacion(licitacionId: string, ganadorId: string, motivo: string): void;
   establecerReglaDefault(plazaId: string, regla: ReglaActualizacion): void;
   ajustarLocal(localId: string, ajuste: r.AjusteLocal): void;
   /** Vuelve todo al estado inicial, conservando la sesión actual. */
@@ -104,27 +122,76 @@ export const useAppStore = create<AppState>()(
               local,
               actor(),
               motivo,
+              DEMO_TODAY,
             ),
           })),
-        resolverExcepcion: (id, resolucion, comentario) =>
+        autorizarExcepcion: (id, comentario) =>
           set((s) => ({
-            aprobaciones: r.resolverExcepcion(
+            aprobaciones: r.autorizarExcepcion(
               s.aprobaciones,
               id,
-              resolucion,
               actor(),
+              DEMO_TODAY,
               comentario,
             ),
           })),
-        resolverCambiosAnuales: (localIds, año, resolucion) =>
+        aplicarExcepcion: (id, comentario) =>
+          set((s) => {
+            const excepcion = s.aprobaciones.excepciones.find((e) => e.id === id);
+            if (excepcion?.estado !== "AUTORIZADA_DIRECCION") return s;
+            return {
+              aprobaciones: r.aplicarExcepcion(
+                s.aprobaciones,
+                id,
+                actor(),
+                DEMO_TODAY,
+                comentario,
+              ),
+              locales: r.registrarBitacoraLocal(s.locales, excepcion.localId, {
+                fecha: DEMO_TODAY,
+                autor: actor(),
+                titulo: "Excepción de precio aplicada",
+                detalle: `Excepción ${excepcion.id} aplicada: renta ${formatMoneda(excepcion.rentaSolicitada)} (mínimo ${formatMoneda(excepcion.precioMinimo)})`,
+              }),
+            };
+          }),
+        rechazarExcepcion: (id, comentario) =>
           set((s) => ({
-            aprobaciones: r.resolverCambiosAnuales(
+            aprobaciones: r.rechazarExcepcion(
+              s.aprobaciones,
+              id,
+              actor(),
+              DEMO_TODAY,
+              comentario,
+            ),
+          })),
+        establecerMetaPlaza: (plazaId, metaPct) =>
+          set((s) => ({ metas: r.establecerMeta(s.metas, plazaId, metaPct) })),
+        resolverCambiosAnuales: (localIds, año, resolucion) =>
+          set((s) => {
+            const aprobaciones = r.resolverCambiosAnuales(
               s.aprobaciones,
               localIds,
               año,
               resolucion,
-            ),
-          })),
+            );
+            if (resolucion !== "APROBADO") return { aprobaciones };
+            const objetivo = new Set(localIds);
+            const aprobados = s.aprobaciones.cambiosAnuales.filter(
+              (c) => c.año === año && objetivo.has(c.localId) && c.estado === "PENDIENTE",
+            );
+            const locales = aprobados.reduce(
+              (estado, c) =>
+                r.registrarBitacoraLocal(estado, c.localId, {
+                  fecha: DEMO_TODAY,
+                  autor: actor(),
+                  titulo: `Actualización anual ${año} aprobada`,
+                  detalle: `Lista ${formatMoneda(c.precioActual)} → ${formatMoneda(c.precioPropuesto)} · mínimo ${formatMoneda(c.minimoActual)} → ${formatMoneda(c.minimoPropuesto)}, a partir del 1 de enero`,
+                }),
+              s.locales,
+            );
+            return { aprobaciones, locales };
+          }),
         registrarSeguimiento: (facturaId, texto) =>
           set((s) => ({
             cobranza: r.registrarSeguimiento(s.cobranza, facturaId, texto),
@@ -208,6 +275,50 @@ export const useAppStore = create<AppState>()(
               }),
             };
           }),
+        registrarCorte: (entrada) =>
+          set((s) => ({
+            obra: r.registrarCorte(
+              s.obra,
+              entrada,
+              actor(),
+              DEMO_TODAY,
+              evidenciaCorte(`${entrada.contratoObraId}-${entrada.semana}`),
+            ),
+          })),
+        validarCorte: (id) =>
+          set((s) => ({
+            obra: r.resolverCorteObra(s.obra, id, "VALIDADO_PMO", actor(), DEMO_TODAY),
+          })),
+        rechazarCorte: (id, comentario) =>
+          set((s) => ({
+            obra: r.resolverCorteObra(
+              s.obra,
+              id,
+              "RECHAZADO",
+              actor(),
+              DEMO_TODAY,
+              comentario,
+            ),
+          })),
+        registrarRonda: (licitacionId, entrada) =>
+          set((s) => ({
+            obra: r.registrarRonda(s.obra, licitacionId, entrada, DEMO_TODAY),
+          })),
+        descartarProveedor: (licitacionId, proveedorId, motivo) =>
+          set((s) => ({
+            obra: r.descartarProveedor(s.obra, licitacionId, proveedorId, motivo),
+          })),
+        adjudicarLicitacion: (licitacionId, ganadorId, motivo) =>
+          set((s) => ({
+            obra: r.adjudicarLicitacion(
+              s.obra,
+              licitacionId,
+              ganadorId,
+              motivo,
+              actor(),
+              DEMO_TODAY,
+            ),
+          })),
         establecerReglaDefault: (plazaId, regla) =>
           set((s) => ({
             reglasDefault: r.establecerReglaDefault(s.reglasDefault, plazaId, regla),
@@ -235,8 +346,10 @@ export const useAppStore = create<AppState>()(
         prospectos,
         contratos,
         terrenos,
+        obra,
         mantenimientos,
         reglasDefault,
+        metas,
       }): DatosDemo => ({
         session,
         cotizaciones,
@@ -247,8 +360,10 @@ export const useAppStore = create<AppState>()(
         prospectos,
         contratos,
         terrenos,
+        obra,
         mantenimientos,
         reglasDefault,
+        metas,
       }),
     },
   ),

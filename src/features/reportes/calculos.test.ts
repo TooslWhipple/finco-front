@@ -7,6 +7,7 @@ import {
   type Terreno,
 } from "@/domain";
 import { crearSeed } from "@/data/seed";
+import { formatMoneda } from "@/lib/format";
 import {
   FILTRO_INICIAL,
   REPORTES,
@@ -18,6 +19,11 @@ import {
   reporteTerrenos,
   reporteVencimientos,
 } from "./calculos";
+import {
+  reporteCumplimientoPlan,
+  reporteDescuentos,
+  reporteRentasVsMinimo,
+} from "./calculos-rentas";
 import { tablaACsv } from "./csv";
 import type { DatosReporte } from "./tipos";
 
@@ -30,6 +36,9 @@ const datos: DatosReporte = {
   facturas: seed.facturas,
   prospectos: seed.prospectos,
   terrenos: seed.terrenos,
+  locatarios: seed.locatarios,
+  cotizaciones: seed.cotizaciones,
+  excepciones: seed.excepciones,
   hoy: DEMO_TODAY,
 };
 
@@ -100,6 +109,65 @@ describe("reportes", () => {
   it("precios: ordena de menor a mayor margen", () => {
     const margenes = reportePrecios(datos).tabla.filas.map((f) => Number(f.margen));
     expect(margenes).toEqual(margenes.toSorted((a, b) => a - b));
+  });
+
+  it("precios: cada fila trae el id de la plaza para abrir sus rentas", () => {
+    const filas = reportePrecios(datos).tabla.filas;
+    expect(filas.every((f) => typeof f.plazaId === "string")).toBe(true);
+    expect(REPORTES.find((r) => r.id === "PRECIOS")?.drilldown?.destino).toBe(
+      "RENTAS_MINIMO",
+    );
+  });
+
+  it("rentas vs mínimo: una fila por contrato vigente y el extra suma solo las diferencias positivas", () => {
+    const r = reporteRentasVsMinimo(datos);
+    const vigentes = seed.contratos.filter((c) => c.estado === "VIGENTE");
+    expect(r.tabla.filas).toHaveLength(vigentes.length);
+    const extra = r.tabla.filas.reduce(
+      (s, f) => s + Math.max(0, Number(f.diferencia)),
+      0,
+    );
+    expect(r.resumen).toContain(formatMoneda(extra));
+    // La gráfica reparte todos los locales en los cinco rangos.
+    expect(r.grafica.puntos).toHaveLength(5);
+    expect(r.grafica.puntos.reduce((s, p) => s + p.valor, 0)).toBe(vigentes.length);
+    // Los que quedaron bajo el mínimo traen el folio de su excepción.
+    const bajo = r.tabla.filas.filter((f) => Number(f.diferencia) < 0);
+    expect(bajo.length).toBeGreaterThan(0);
+    expect(bajo.every((f) => String(f.excepcion).startsWith("EXC-"))).toBe(true);
+  });
+
+  it("rentas vs mínimo: el filtro por plaza deja solo sus locales", () => {
+    const r = reporteRentasVsMinimo(
+      acotarDatos(datos, { ciudadId: "TODOS", plazaId: "plz-alborada" }),
+    );
+    expect(new Set(r.tabla.filas.map((f) => f.plaza))).toEqual(
+      new Set(["Plaza Alborada"]),
+    );
+  });
+
+  it("descuentos: lista cada excepción con quién la pidió, autorizó y aplicó", () => {
+    const r = reporteDescuentos(datos);
+    expect(r.tabla.filas).toHaveLength(seed.excepciones.length);
+    const aplicada = r.tabla.filas.find((f) => f.estado === "Aplicada")!;
+    expect(aplicada).toMatchObject({
+      solicito: "Jorge Ramírez",
+      autorizo: "Mariana López",
+      aplico: "Ricardo Salas",
+    });
+    expect(Number(aplicada.mensual)).toBeGreaterThan(0);
+    const porAutorizar = r.tabla.filas.find((f) => f.estado === "Por autorizar")!;
+    expect(porAutorizar.autorizo).toBe("—");
+    expect(porAutorizar.cliente).not.toBe("—");
+  });
+
+  it("cumplimiento del plan: una fila por plaza en operación con su meta", () => {
+    const r = reporteCumplimientoPlan(datos);
+    expect(r.tabla.filas.length).toBeGreaterThan(10);
+    for (const f of r.tabla.filas) {
+      expect(Number(f.meta)).toBeCloseTo(0.98);
+      expect(Number(f.cumplimiento)).toBeGreaterThan(0.5);
+    }
   });
 
   it("embudo: coincide con el embudo del dominio", () => {

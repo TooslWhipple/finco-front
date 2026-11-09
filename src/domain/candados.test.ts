@@ -38,12 +38,17 @@ describe("evaluarCandados", () => {
     expect(c.filter((x) => x.estado === "FALLA")).toHaveLength(1);
     expect(contratoDesbloqueado(c)).toBe(false);
   });
-  it("excepción aprobada desbloquea; pendiente o rechazada no", () => {
+  it("solo la excepción aplicada desbloquea; pendiente, autorizada o rechazada no", () => {
     const cot = crearCotizacion({ rentaMensual: 22_900 });
     const local = crearLocal();
-    const aprobada = evaluarCandados(cot, local, HOY, excepcion("APROBADA"));
-    expect(aprobada[1].estado).toBe("EXCEPCION");
-    expect(contratoDesbloqueado(aprobada)).toBe(true);
+    const aplicada = evaluarCandados(cot, local, HOY, excepcion("APLICADA"));
+    expect(aplicada[1].estado).toBe("EXCEPCION");
+    expect(contratoDesbloqueado(aplicada)).toBe(true);
+    expect(
+      contratoDesbloqueado(
+        evaluarCandados(cot, local, HOY, excepcion("AUTORIZADA_DIRECCION")),
+      ),
+    ).toBe(false);
     expect(
       contratoDesbloqueado(evaluarCandados(cot, local, HOY, excepcion("PENDIENTE"))),
     ).toBe(false);

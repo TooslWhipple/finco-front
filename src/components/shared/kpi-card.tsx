@@ -20,7 +20,7 @@ export interface DeltaKpi {
 }
 
 interface KpiCardProps {
-  etiqueta: string;
+  etiqueta: ReactNode;
   valor: ReactNode;
   /** Variación con flecha bajo la cifra. */
   delta?: DeltaKpi;

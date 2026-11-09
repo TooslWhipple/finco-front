@@ -24,7 +24,9 @@ export const ACCIONES_MATRIZ: readonly {
   {
     modulo: "Precios y reglas",
     acciones: [
-      { accion: "excepcion.resolver", etiqueta: "Resolver excepciones" },
+      { accion: "excepcion.autorizar", etiqueta: "Autorizar excepciones de precio" },
+      { accion: "excepcion.aplicar", etiqueta: "Aplicar excepciones autorizadas" },
+      { accion: "metaIngresos.editar", etiqueta: "Editar meta de ingresos" },
       { accion: "precioMinimo.editar", etiqueta: "Editar precio mínimo" },
       { accion: "regla.editar", etiqueta: "Editar regla del local" },
       { accion: "actualizacionAnual.resolver", etiqueta: "Resolver actualización anual" },
@@ -44,6 +46,14 @@ export const ACCIONES_MATRIZ: readonly {
         accion: "mantenimientos.gestionar",
         etiqueta: "Crear mantenimientos y cambiar su estatus",
       },
+    ],
+  },
+  {
+    modulo: "Obra y licitación",
+    acciones: [
+      { accion: "obra.corteCapturar", etiqueta: "Capturar corte de obra" },
+      { accion: "obra.corteValidar", etiqueta: "Validar corte de obra" },
+      { accion: "licitacion.gestionar", etiqueta: "Gestionar licitación" },
     ],
   },
   {

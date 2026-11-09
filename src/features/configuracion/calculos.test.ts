@@ -21,8 +21,10 @@ describe("matrizPermisos", () => {
         expect(fila.permitido[rol]).toBe(PERMISOS[rol].includes(fila.accion));
   });
 
-  it("Dirección no tiene acciones y Superadmin las tiene todas", () => {
-    expect(filas.every((f) => !f.permitido.DIRECCION)).toBe(true);
+  it("Dirección solo autoriza excepciones y Superadmin las tiene todas", () => {
+    expect(filas.filter((f) => f.permitido.DIRECCION).map((f) => f.accion)).toEqual([
+      "excepcion.autorizar",
+    ]);
     expect(filas.every((f) => f.permitido.SUPERADMIN)).toBe(true);
   });
 

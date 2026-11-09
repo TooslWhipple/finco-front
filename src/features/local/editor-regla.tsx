@@ -136,7 +136,7 @@ export function EditorRegla({
           <p className="text-sm font-medium">{ETIQUETA_MODO[reglaGuardada.modo]}</p>
         </Fila>
         <p className="text-xs text-brand-text-muted">
-          Solo Superadmin puede cambiar la regla del local.
+          Solo la PMO puede cambiar la regla del local.
           {reglaPlaza ? ` Default de la plaza: ${describirIncremento(reglaPlaza)}.` : ""}
         </p>
       </div>

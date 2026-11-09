@@ -59,7 +59,8 @@ export function DialogoExcepcion({
             <DialogTitle>Solicitar excepción de precio</DialogTitle>
             <DialogDescription>
               Renta propuesta {formatMoneda(rentaSolicitada)} contra un mínimo autorizado
-              de {formatMoneda(precioMinimo)}. Superadmin decidirá en Precios y reglas.
+              de {formatMoneda(precioMinimo)}. Dirección la autoriza y la PMO la aplica
+              antes de generar el contrato.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">

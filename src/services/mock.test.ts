@@ -20,7 +20,8 @@ describe("repositorios mock", () => {
     expect(await repos.locales.listar()).toHaveLength(946);
     expect(await repos.locales.listarPorPlaza("plz-alborada")).toHaveLength(58);
     const contrato = await repos.locales.contratoVigenteDe("plz-alborada-B-02");
-    expect(contrato?.rentaMensual).toBe(21_300);
+    // La renta ya no es igual a la lista: se reparte sobre el mínimo del local (sub-plan C).
+    expect(contrato?.rentaMensual).toBe(20_750);
     expect(await repos.locales.contratoVigenteDe("plz-alborada-A-09")).toBeUndefined();
     expect(await repos.locales.listarCambiosPropuestos(2027)).toHaveLength(8);
     expect(await repos.locales.listarCambiosPropuestos(2030)).toHaveLength(0);
@@ -49,9 +50,9 @@ describe("repositorios mock", () => {
     expect(nuevo.ultimoSync).toBe(`${DEMO_TODAY}T15:50:00`);
   });
 
-  it("integraciones: lista las 3 con su log inicial", async () => {
+  it("integraciones: lista las 4 con su log inicial", async () => {
     const lista = await repos.integraciones.listar();
-    expect(lista.map((i) => i.id)).toEqual(["ENKONTROL", "EXCEL", "MONDAY"]);
+    expect(lista.map((i) => i.id)).toEqual(["ENKONTROL", "EXCEL", "MONDAY", "MSPROJECT"]);
     const eventos = await repos.integraciones.listarEventos();
     expect(eventos.length).toBeGreaterThan(0);
     expect(new Set(lista.map((i) => i.id))).toEqual(
@@ -68,7 +69,7 @@ describe("repositorios mock", () => {
   });
 
   it("configuración: usuarios, reglas por plaza y parámetros del dominio", async () => {
-    expect(await repos.configuracion.listarUsuarios()).toHaveLength(4);
+    expect(await repos.configuracion.listarUsuarios()).toHaveLength(6);
     const reglas = await repos.configuracion.reglasDefault();
     expect(reglas["plz-alborada"]).toBeDefined();
     const parametros = await repos.configuracion.obtenerParametros();

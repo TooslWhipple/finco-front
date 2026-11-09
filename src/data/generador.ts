@@ -1,6 +1,7 @@
 import {
   DEMO_TODAY,
   INPC_ANUAL,
+  META_CUMPLIMIENTO_DEFECTO,
   pactarRegla,
   repricingAlLiberar,
   sumarDias,
@@ -12,6 +13,7 @@ import {
   type Locatario,
   type Planta,
   type Plaza,
+  type RegistroPrecio,
   type ReglaActualizacion,
 } from "@/domain";
 import {
@@ -27,6 +29,12 @@ import { coordenadasPlaza } from "./coordenadas";
 import type { ParteSeed } from "./heroe";
 import { geometriaRejilla, LIENZO } from "./planos";
 import type { Prng } from "./prng";
+import {
+  factorMinimoPlaza,
+  rentaContratadaLocal,
+  rentaPlaneadaLocal,
+  respaldarContrato,
+} from "./rentas";
 
 /** Plaza por generar: lo que fija el catálogo y el reparto de locales. */
 export interface PlazaPlan {
@@ -106,6 +114,7 @@ export function generarPlazas(planes: PlazaPlan[], ctx: Contexto, rng: Prng): Ge
     contratos: [],
     facturas: [],
     cotizaciones: [],
+    excepciones: [],
     ocupadosPorPlaza: new Map(),
   };
   let folioCot = 300;
@@ -119,8 +128,10 @@ export function generarPlazas(planes: PlazaPlan[], ctx: Contexto, rng: Prng): Ge
       estatus: plan.preventa ? "PREVENTA" : "EN_OPERACION",
       coordenadas: coordenadasPlaza(plan.ciudad, plan.id),
       reglaDefault: regla,
+      metaCumplimientoPct: META_CUMPLIMIENTO_DEFECTO,
     };
     salida.plazas.push(plaza);
+    const factorMinimo = factorMinimoPlaza(plan.id);
 
     const enPlantaAlta = plan.locales >= 30 ? Math.round(plan.locales * 0.3) : 0;
     const plantaBaja: Planta = {
@@ -172,17 +183,26 @@ export function generarPlazas(planes: PlazaPlan[], ctx: Contexto, rng: Prng): Ge
         areaM2,
         precioVigente: precio,
         precioMinimo: 0,
+        rentaPlaneada: 0,
         regla: reglaLocal,
         geometria: (alta ? geoPA : geoPB)[indice],
         historial: [],
       };
 
+      let minimoReprecio: number | undefined;
       if (estado === "DISPONIBLE" || estado === "EN_COTIZACION") {
         // Un local liberado se reprecia con la regla acumulada desde su último contrato.
         if (rng.prob(0.6)) {
           const añoFirma = rng.entero(2021, 2025);
-          const historial = [
-            { fecha: `${añoFirma}-03-01`, precio, motivo: "Último contrato firmado" },
+          const fecha = `${añoFirma}-03-01`;
+          const historial: RegistroPrecio[] = [
+            { fecha, precio, motivo: "Último contrato firmado" },
+            {
+              fecha,
+              precio: minimoAutorizado(precio, factorMinimo),
+              motivo: "Mínimo autorizado a la firma",
+              concepto: "MINIMO",
+            },
           ];
           const años = Array.from(
             { length: 2026 - añoFirma },
@@ -193,25 +213,30 @@ export function generarPlazas(planes: PlazaPlan[], ctx: Contexto, rng: Prng): Ge
             local.historial = historial;
             precio = reprecio.precioFinal;
             local.precioVigente = precio;
+            minimoReprecio = reprecio.minimoFinal;
           }
         }
         local.libreDesde = sumarDias(DEMO_TODAY, -rng.entero(5, 150));
       }
-      local.precioMinimo = minimoAutorizado(precio);
+      local.precioMinimo = minimoReprecio ?? minimoAutorizado(precio, factorMinimo);
+      local.rentaPlaneada = rentaPlaneadaLocal(id, local.precioMinimo);
 
       if (estado === "OCUPADO") {
         const locatario: Locatario = crearLocatario(ctx, rng);
         salida.locatarios.push(locatario);
         local.locatarioId = locatario.id;
         local.giro = locatario.giro;
+        const { renta } = rentaContratadaLocal(id, local.precioMinimo);
         const contrato = crearContratoGenerado(ctx, rng, {
           localId: id,
           locatarioId: locatario.id,
-          rentaMensual: precio,
+          rentaMensual: renta,
         });
         local.historial = [
-          { fecha: contrato.contrato.inicio, precio, motivo: "Contrato firmado" },
+          { fecha: contrato.contrato.inicio, precio: renta, motivo: "Contrato firmado" },
         ];
+        const excepcion = respaldarContrato(ctx, contrato.contrato, local.precioMinimo);
+        if (excepcion) salida.excepciones.push(excepcion);
         salida.contratos.push(contrato.contrato);
         salida.facturas.push(crearFactura(ctx, rng, contrato.contrato, contrato.atraso));
         ocupadosPlaza.push(local);

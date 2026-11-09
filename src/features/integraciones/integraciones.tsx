@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Calculator, FileSpreadsheet, History, Layers } from "lucide-react";
+import { Calculator, FileSpreadsheet, GanttChart, History, Layers } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import type { EventoSync, IdIntegracion, Integracion } from "@/domain";
@@ -41,12 +41,14 @@ const ICONO: Readonly<Record<IdIntegracion, ReactNode>> = {
   ENKONTROL: <Calculator className="size-5" />,
   EXCEL: <FileSpreadsheet className="size-5" />,
   MONDAY: <Layers className="size-5" />,
+  MSPROJECT: <GanttChart className="size-5" />,
 };
 
 const DETALLE_SYNC_MANUAL: Readonly<Record<Exclude<IdIntegracion, "ENKONTROL">, string>> =
   {
     EXCEL: "Rent roll importado desde rent-roll-nov-2026.xlsx",
     MONDAY: "Tablero de proyectos actualizado",
+    MSPROJECT: "Cronograma de obra importado desde cronograma-obra.mpp (simulado)",
   };
 
 function ultimoSyncLegible(iso: string): string {
@@ -182,7 +184,7 @@ export function Integraciones() {
     <div className="space-y-6">
       <PageHeader
         titulo="Integraciones"
-        descripcion="Conexiones con EnKontrol, Excel y Monday: estado, último sync y bitácora."
+        descripcion="Conexiones con EnKontrol, Excel, Monday y MS Project: estado, último sync y bitácora."
       />
       {!puedeSincronizar ? (
         <p className="rounded-lg bg-brand-cream px-4 py-2.5 text-sm text-brand-text-muted ring-1 ring-brand-line">
@@ -190,7 +192,7 @@ export function Integraciones() {
         </p>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
         {(integraciones ?? []).map((i) => (
           <CardIntegracion
             key={i.id}

@@ -79,6 +79,23 @@ describe("construirHistorial", () => {
   });
 });
 
+describe("construirHistorial con las dos series", () => {
+  it("distingue el mínimo autorizado del precio", () => {
+    const h = construirHistorial(
+      [
+        { fecha: "2024-03-01", precio: 20_000, motivo: "Contrato" },
+        { fecha: "2024-03-01", precio: 18_000, motivo: "Mínimo", concepto: "MINIMO" },
+      ],
+      [],
+      (n) => `#${n}`,
+    );
+    expect(h.map((e) => e.titulo).sort()).toEqual([
+      "Mínimo autorizado registrado: #18000",
+      "Precio registrado: #20000",
+    ]);
+  });
+});
+
 describe("frenteLocalM", () => {
   it("deriva el frente del área con un decimal", () => {
     expect(frenteLocalM(62)).toBe(5.2);

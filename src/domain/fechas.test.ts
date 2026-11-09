@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diasEntre, sumarDias, sumarMeses } from "./fechas";
+import { diasEntre, lunesDeSemana, sumarDias, sumarMeses } from "./fechas";
 
 describe("sumarDias", () => {
   it("cruza fin de mes y de año", () => {
@@ -18,5 +18,18 @@ describe("sumarMeses", () => {
   });
   it("recorta al último día del mes destino", () => {
     expect(sumarMeses("2026-01-31", 1)).toBe("2026-02-28");
+  });
+});
+
+describe("lunesDeSemana", () => {
+  it("devuelve el mismo día si ya es lunes", () => {
+    expect(lunesDeSemana("2026-10-26")).toBe("2026-10-26");
+  });
+  it("retrocede hasta el lunes desde cualquier día, domingo incluido", () => {
+    expect(lunesDeSemana("2026-11-03")).toBe("2026-11-02");
+    expect(lunesDeSemana("2026-11-01")).toBe("2026-10-26");
+  });
+  it("cruza el fin de año", () => {
+    expect(lunesDeSemana("2027-01-01")).toBe("2026-12-28");
   });
 });

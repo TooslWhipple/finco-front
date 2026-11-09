@@ -15,6 +15,18 @@ export const USUARIOS_DEMO: readonly Usuario[] = [
   },
   { id: "usr-laura", nombre: "Laura Fuentes", rol: "SUPERADMIN", cargo: "Superadmin" },
   { id: "usr-patricia", nombre: "Patricia Gaxiola", rol: "COBRANZA", cargo: "Cobranza" },
+  {
+    id: "usr-pmo",
+    nombre: "Ricardo Salas",
+    rol: "PMO",
+    cargo: "PMO · Control de proyectos",
+  },
+  {
+    id: "usr-supervisor",
+    nombre: "Héctor Ramos",
+    rol: "SUPERVISOR_OBRA",
+    cargo: "Supervisor de obra",
+  },
 ];
 
 export const ETIQUETA_ROL: Record<Rol, string> = {
@@ -22,6 +34,8 @@ export const ETIQUETA_ROL: Record<Rol, string> = {
   VENTAS: "Ventas",
   SUPERADMIN: "Superadmin",
   COBRANZA: "Cobranza",
+  PMO: "PMO",
+  SUPERVISOR_OBRA: "Supervisor de obra",
 };
 
 export function usuarioPorId(id: string | null): Usuario | undefined {

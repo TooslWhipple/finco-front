@@ -44,7 +44,7 @@ import {
   aplicarTerminos,
   construirActividad,
   derivarPasos,
-  excepcionPendiente,
+  excepcionAbierta,
   excepcionVigente,
   resumenEconomico,
   terminosDe,
@@ -128,7 +128,7 @@ function EditorCotizacion({ cotizacion, local, plaza, ciudad }: EditorProps) {
   const excepcion = excepcionVigente(excepciones, cotizacion.id, terminos.rentaMensual);
   const candados = evaluarCandados(borrador, local, DEMO_TODAY, excepcion);
   const desbloqueado = contratoDesbloqueado(candados);
-  const abierta = excepcionPendiente(excepciones, cotizacion.id);
+  const abierta = excepcionAbierta(excepciones, cotizacion.id);
   const falloPrecio = candados.find((c) => c.id === "PRECIO_MINIMO")?.estado === "FALLA";
   const economico = resumenEconomico(terminos, local);
   const folioCtr = folioContrato(cotizacion.id);
@@ -163,7 +163,7 @@ function EditorCotizacion({ cotizacion, local, plaza, ciudad }: EditorProps) {
       solicitarExcepcion(aplicarTerminos(cotizacion, v), local, motivo);
       form.reset(v);
       toast.success("Excepción solicitada", {
-        description: "Superadmin la verá en Precios y reglas.",
+        description: "Dirección la verá en su campana y en Precios y reglas.",
       });
     })();
 
@@ -344,14 +344,16 @@ function EditorCotizacion({ cotizacion, local, plaza, ciudad }: EditorProps) {
               detalles={{
                 COTIZACION_OFICIAL: `${cotizacion.id} · vigente hasta ${formatFecha(cotizacion.vigenteHasta)}`,
                 PRECIO_MINIMO: falloPrecio
-                  ? `${formatMoneda(terminos.rentaMensual)} < ${formatMoneda(local.precioMinimo)} · requiere ajuste o excepción del superadmin`
+                  ? `${formatMoneda(terminos.rentaMensual)} < ${formatMoneda(local.precioMinimo)} · requiere ajuste o una excepción autorizada por Dirección y aplicada por la PMO`
                   : undefined,
               }}
             />
             {abierta ? (
               <p className="mt-3 rounded-lg bg-brand-cta/10 px-3 py-2 text-sm text-brand-text">
-                Excepción pendiente de {formatMoneda(abierta.rentaSolicitada)}: en espera
-                de Superadmin.
+                Excepción de {formatMoneda(abierta.rentaSolicitada)}:{" "}
+                {abierta.estado === "PENDIENTE"
+                  ? "en espera de que Dirección la autorice."
+                  : "autorizada por Dirección, en espera de que la PMO la aplique."}
               </p>
             ) : null}
           </SectionCard>

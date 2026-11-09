@@ -21,7 +21,7 @@ const SIN_BITACORA: readonly EntradaBitacora[] = [];
 
 /**
  * Precio y candados, regla de actualización y repricing de un local, con la edición
- * reservada a Superadmin. La comparten la ficha del local y "Precios y reglas".
+ * reservada a la PMO. La comparten la ficha del local y "Precios y reglas".
  */
 export function PrecioReglaLocal({ local, plaza }: { local: Local; plaza: Plaza }) {
   const { usuario, rol } = useSesion();

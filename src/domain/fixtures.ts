@@ -1,7 +1,10 @@
 import type {
   Contrato,
+  ContratoObra,
+  CorteSemanal,
   Cotizacion,
   Factura,
+  Licitacion,
   Local,
   Prospecto,
   ReglaActualizacion,
@@ -27,6 +30,7 @@ export function crearLocal(parcial: Partial<Local> = {}): Local {
     areaM2: 60,
     precioVigente: 24_860,
     precioMinimo: 23_500,
+    rentaPlaneada: 24_500,
     regla: REGLA_INPC_1PT,
     geometria: { x: 0, y: 0, w: 10, h: 10 },
     historial: [{ fecha: "2021-11-01", precio: 18_740, motivo: "Alta" }],
@@ -109,6 +113,82 @@ export function crearTerreno(parcial: Partial<Terreno> = {}): Terreno {
     areaM2: 4_000,
     localesProyectados: 30,
     hitos: [],
+    ...parcial,
+  };
+}
+
+export function crearContratoObra(parcial: Partial<ContratoObra> = {}): ContratoObra {
+  return {
+    id: "co-1",
+    folio: "CO-VR-01",
+    terrenoId: "ter-1",
+    partida: "CIMENTACION",
+    contratista: "Constructora Delta",
+    conceptos: [
+      {
+        id: "c-1",
+        clave: "CIM-01",
+        descripcion: "Zapatas de concreto",
+        unidad: "M3",
+        volumenContratado: 100,
+        precioUnitario: 1_000,
+      },
+    ],
+    inicioPlan: "2026-01-01",
+    finPlan: "2026-01-11",
+    ...parcial,
+  };
+}
+
+/** Corte validado de 10 unidades del concepto `c-1` en la semana del lunes 2026-01-05. */
+export function crearCorte(parcial: Partial<CorteSemanal> = {}): CorteSemanal {
+  return {
+    id: "cor-1",
+    contratoObraId: "co-1",
+    semana: "2026-01-05",
+    volumenes: [{ conceptoId: "c-1", volumen: 10 }],
+    estado: "VALIDADO_PMO",
+    capturadoPor: "Héctor Ramos",
+    firmadoPor: "Héctor Ramos",
+    firmadoEn: "2026-01-09",
+    validadoPor: "Ricardo Salas",
+    validadoEn: "2026-01-12",
+    evidencia: [],
+    ...parcial,
+  };
+}
+
+/** Licitación en curso con dos rondas: A, B y C respondieron la primera; B salió; la segunda la hicieron A y C. */
+export function crearLicitacion(parcial: Partial<Licitacion> = {}): Licitacion {
+  return {
+    id: "ter-x-lic-01",
+    folio: "LIC-X-01",
+    terrenoId: "ter-x",
+    partida: "MUROS",
+    presupuestoBase: 1_000_000,
+    invitados: ["A", "B", "C", "D"],
+    descartados: [{ proveedorId: "B", ronda: 1, motivo: "Fuera de presupuesto" }],
+    rondas: [
+      {
+        numero: 1,
+        fecha: "2026-09-01",
+        propuestas: [
+          { proveedorId: "A", respondio: true, monto: 1_100_000 },
+          { proveedorId: "B", respondio: true, monto: 1_300_000 },
+          { proveedorId: "C", respondio: true, monto: 1_150_000 },
+          { proveedorId: "D", respondio: false },
+        ],
+      },
+      {
+        numero: 2,
+        fecha: "2026-09-15",
+        propuestas: [
+          { proveedorId: "A", respondio: true, monto: 1_000_000 },
+          { proveedorId: "C", respondio: true, monto: 1_050_000 },
+        ],
+      },
+    ],
+    estado: "EN_CURSO",
     ...parcial,
   };
 }

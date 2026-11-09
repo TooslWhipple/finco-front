@@ -20,6 +20,7 @@ import type {
   PlazasRepository,
   ProspectosRepository,
   Repositorios,
+  ObraRepository,
   TerrenosRepository,
 } from "./tipos";
 
@@ -89,6 +90,15 @@ function crearTerrenosMock(seed: Seed): TerrenosRepository {
   return { listar: async () => [...seed.terrenos] };
 }
 
+function crearObraMock(seed: Seed): ObraRepository {
+  return {
+    listarContratos: async () => [...seed.obra.contratos],
+    listarCortes: async () => [...seed.obra.cortes],
+    listarPagos: async () => [...seed.obra.pagos],
+    listarCronograma: async () => [...seed.obra.cronograma],
+  };
+}
+
 function crearMantenimientosMock(seed: Seed): MantenimientosRepository {
   return {
     listar: async () => [...seed.mantenimientos],
@@ -142,6 +152,7 @@ export function crearRepositoriosMock(seed: Seed = crearSeed()): Repositorios {
     prospectos: crearProspectosMock(seed),
     contratos: crearContratosMock(seed),
     terrenos: crearTerrenosMock(seed),
+    obra: crearObraMock(seed),
     mantenimientos: crearMantenimientosMock(seed),
     integraciones: crearIntegracionesMock(seed),
     configuracion: crearConfiguracionMock(seed),

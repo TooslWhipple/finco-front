@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { crearSeed } from "@/data/seed";
-import { contratoDesdeCotizacion, evaluarCandados, DEMO_TODAY } from "@/domain";
-import type { Cotizacion, ReglaActualizacion } from "@/domain";
+import {
+  contratoDesdeCotizacion,
+  evaluarCandados,
+  proveedoresActivos,
+  DEMO_TODAY,
+} from "@/domain";
+import type { Cotizacion, ExcepcionPrecio, ReglaActualizacion } from "@/domain";
 import * as r from "./reducers";
 
 const seed = crearSeed();
+const HOY = DEMO_TODAY;
 const cotA09 = seed.cotizaciones.find((c) => c.id === "COT-2026-0418") as Cotizacion;
 const localA09 = seed.locales.find((l) => l.id === cotA09.localId)!;
 
@@ -14,6 +20,9 @@ const aprobaciones = (): r.AprobacionesState => ({
 });
 
 describe("excepciones de precio", () => {
+  const pedir = (por = "J") =>
+    r.solicitarExcepcion(aprobaciones(), cotA09, localA09, por, "m", HOY);
+
   it("solicitar crea una pendiente y no duplica la abierta", () => {
     const uno = r.solicitarExcepcion(
       aprobaciones(),
@@ -21,6 +30,7 @@ describe("excepciones de precio", () => {
       localA09,
       "Jorge Ramírez",
       "Cliente ancla",
+      HOY,
     );
     expect(uno.excepciones).toHaveLength(seed.excepciones.length + 1);
     const nueva = uno.excepciones.at(-1)!;
@@ -30,46 +40,91 @@ describe("excepciones de precio", () => {
       rentaSolicitada: cotA09.rentaMensual,
       precioMinimo: localA09.precioMinimo,
       motivo: "Cliente ancla",
+      solicitadaEn: HOY,
     });
-    expect(r.solicitarExcepcion(uno, cotA09, localA09, "Jorge", "otra")).toBe(uno);
+    expect(r.solicitarExcepcion(uno, cotA09, localA09, "Jorge", "otra", HOY)).toBe(uno);
   });
 
-  it("aprobar desbloquea el candado de precio mínimo", () => {
-    const pedida = r.solicitarExcepcion(aprobaciones(), cotA09, localA09, "J", "m");
+  it("tampoco duplica si la abierta ya fue autorizada y espera a la PMO", () => {
+    const pedida = pedir();
     const id = pedida.excepciones.at(-1)!.id;
-    const antes = evaluarCandados(
-      cotA09,
-      localA09,
-      DEMO_TODAY,
-      pedida.excepciones.at(-1),
+    const autorizada = r.autorizarExcepcion(pedida, id, "Mariana", HOY);
+    expect(r.solicitarExcepcion(autorizada, cotA09, localA09, "J", "otra", HOY)).toBe(
+      autorizada,
     );
-    expect(antes.find((c) => c.id === "PRECIO_MINIMO")?.estado).toBe("FALLA");
-
-    const resuelta = r.resolverExcepcion(pedida, id, "APROBADA", "Laura Fuentes");
-    const exc = resuelta.excepciones.find((e) => e.id === id)!;
-    expect(exc).toMatchObject({ estado: "APROBADA", resueltaPor: "Laura Fuentes" });
-    const despues = evaluarCandados(cotA09, localA09, DEMO_TODAY, exc);
-    expect(despues.find((c) => c.id === "PRECIO_MINIMO")?.estado).toBe("EXCEPCION");
   });
 
-  it("rechazar exige comentario y solo mueve pendientes", () => {
-    const pedida = r.solicitarExcepcion(aprobaciones(), cotA09, localA09, "J", "m");
+  it("el candado de precio solo pasa cuando la PMO aplica la excepción autorizada", () => {
+    const pedida = pedir();
     const id = pedida.excepciones.at(-1)!.id;
-    expect(() => r.resolverExcepcion(pedida, id, "RECHAZADA", "L", "  ")).toThrow();
-    const rechazada = r.resolverExcepcion(pedida, id, "RECHAZADA", "L", "Fuera de rango");
-    expect(rechazada.excepciones.find((e) => e.id === id)).toMatchObject({
-      estado: "RECHAZADA",
-      comentario: "Fuera de rango",
+    const estadoPrecio = (e: ExcepcionPrecio | undefined) =>
+      evaluarCandados(cotA09, localA09, DEMO_TODAY, e).find(
+        (c) => c.id === "PRECIO_MINIMO",
+      )?.estado;
+    expect(estadoPrecio(pedida.excepciones.at(-1))).toBe("FALLA");
+
+    const autorizada = r.autorizarExcepcion(pedida, id, "Mariana López", HOY, "Procede");
+    const aut = autorizada.excepciones.find((e) => e.id === id)!;
+    expect(aut).toMatchObject({
+      estado: "AUTORIZADA_DIRECCION",
+      autorizadaPor: "Mariana López",
+      autorizadaEn: HOY,
+      comentarioDireccion: "Procede",
     });
-    const reintento = r.resolverExcepcion(rechazada, id, "APROBADA", "L");
-    expect(reintento.excepciones.find((e) => e.id === id)?.estado).toBe("RECHAZADA");
+    expect(estadoPrecio(aut)).toBe("FALLA");
+
+    const aplicada = r.aplicarExcepcion(autorizada, id, "Ricardo Salas", HOY);
+    const apl = aplicada.excepciones.find((e) => e.id === id)!;
+    expect(apl).toMatchObject({ estado: "APLICADA", aplicadaPor: "Ricardo Salas" });
+    expect(estadoPrecio(apl)).toBe("EXCEPCION");
   });
 
-  it("cuenta las pendientes para el badge", () => {
+  it("no se puede aplicar sin autorizar ni autorizar dos veces", () => {
+    const pedida = pedir();
+    const id = pedida.excepciones.at(-1)!.id;
+    expect(r.aplicarExcepcion(pedida, id, "Ricardo", HOY)).toEqual(pedida);
+    const autorizada = r.autorizarExcepcion(pedida, id, "Mariana", HOY);
+    expect(r.autorizarExcepcion(autorizada, id, "Otra", HOY)).toEqual(autorizada);
+  });
+
+  it("rechazar exige comentario; Dirección rechaza pendientes y la PMO, autorizadas", () => {
+    const pedida = pedir();
+    const id = pedida.excepciones.at(-1)!.id;
+    expect(() => r.rechazarExcepcion(pedida, id, "L", HOY, "  ")).toThrow();
+    const porDireccion = r.rechazarExcepcion(
+      pedida,
+      id,
+      "Mariana",
+      HOY,
+      "Fuera de rango",
+    );
+    expect(porDireccion.excepciones.find((e) => e.id === id)).toMatchObject({
+      estado: "RECHAZADA",
+      rechazadaPor: "Mariana",
+      comentarioDireccion: "Fuera de rango",
+    });
+
+    const autorizada = r.autorizarExcepcion(pedida, id, "Mariana", HOY);
+    const porPmo = r.rechazarExcepcion(autorizada, id, "Ricardo", HOY, "Rompe el plan");
+    expect(porPmo.excepciones.find((e) => e.id === id)).toMatchObject({
+      estado: "RECHAZADA",
+      rechazadaPor: "Ricardo",
+      comentarioPmo: "Rompe el plan",
+    });
+    // Una rechazada ya no se mueve.
+    expect(r.aplicarExcepcion(porPmo, id, "Ricardo", HOY)).toEqual(porPmo);
+  });
+
+  it("cuenta lo que espera a Dirección y a la PMO para los avisos", () => {
     const base = aprobaciones();
-    const pendientes = r.contarExcepcionesPendientes(base);
-    const mas = r.solicitarExcepcion(base, cotA09, localA09, "J", "m");
-    expect(r.contarExcepcionesPendientes(mas)).toBe(pendientes + 1);
+    const porAutorizar = r.contarPorAutorizar(base);
+    const porAplicar = r.contarPorAplicar(base);
+    const pedida = r.solicitarExcepcion(base, cotA09, localA09, "J", "m", HOY);
+    expect(r.contarPorAutorizar(pedida)).toBe(porAutorizar + 1);
+    const id = pedida.excepciones.at(-1)!.id;
+    const autorizada = r.autorizarExcepcion(pedida, id, "M", HOY);
+    expect(r.contarPorAutorizar(autorizada)).toBe(porAutorizar);
+    expect(r.contarPorAplicar(autorizada)).toBe(porAplicar + 1);
   });
 });
 
@@ -317,5 +372,139 @@ describe("mantenimientos", () => {
     expect(
       r.transicionarMantenimiento(e, terminado.id, "CANCELADO", { hoy: DEMO_TODAY }),
     ).toBe(e);
+  });
+});
+
+describe("cortes de obra", () => {
+  const obra: r.ObraState = {
+    contratos: seed.obra.contratos,
+    cronograma: seed.obra.cronograma,
+    cortes: seed.obra.cortes,
+    pagos: seed.obra.pagos,
+    licitaciones: seed.licitaciones,
+  };
+  const muros = obra.contratos.find(
+    (c) => c.terrenoId === "ter-09" && c.partida === "MUROS",
+  )!;
+  const entrada = (volumen: number) => ({
+    contratoObraId: muros.id,
+    semana: "2026-10-26",
+    volumenes: [{ conceptoId: muros.conceptos[0].id, volumen }],
+  });
+
+  it("registrar firma el corte como el actor, con la evidencia recibida", () => {
+    const fotos = [{ src: "/a.webp", alt: "a", ancho: 1, alto: 1 }];
+    const est = r.registrarCorte(obra, entrada(200), "Héctor Ramos", DEMO_TODAY, fotos);
+    const nuevo = est.cortes.at(-1)!;
+    expect(est.cortes).toHaveLength(obra.cortes.length + 1);
+    expect(nuevo).toMatchObject({
+      estado: "FIRMADO_SUPERVISOR",
+      capturadoPor: "Héctor Ramos",
+      semana: "2026-10-26",
+      evidencia: fotos,
+    });
+    expect(new Set(est.cortes.map((c) => c.id)).size).toBe(est.cortes.length);
+  });
+
+  it("una captura que excede lo contratado o repite semana no cambia nada", () => {
+    expect(r.registrarCorte(obra, entrada(1e9), "Héctor Ramos", DEMO_TODAY, [])).toBe(
+      obra,
+    );
+    const uno = r.registrarCorte(obra, entrada(200), "Héctor Ramos", DEMO_TODAY, []);
+    expect(r.registrarCorte(uno, entrada(10), "Héctor Ramos", DEMO_TODAY, [])).toBe(uno);
+  });
+
+  it("la PMO valida un firmado, y un validado ya no cambia", () => {
+    const uno = r.registrarCorte(obra, entrada(200), "Héctor Ramos", DEMO_TODAY, []);
+    const id = uno.cortes.at(-1)!.id;
+    const validado = r.resolverCorteObra(
+      uno,
+      id,
+      "VALIDADO_PMO",
+      "Ricardo Salas",
+      DEMO_TODAY,
+    );
+    expect(validado.cortes.at(-1)).toMatchObject({
+      estado: "VALIDADO_PMO",
+      validadoPor: "Ricardo Salas",
+    });
+    const intento = r.resolverCorteObra(
+      validado,
+      id,
+      "RECHAZADO",
+      "Ricardo Salas",
+      DEMO_TODAY,
+      "x",
+    );
+    expect(intento.cortes.at(-1)!.estado).toBe("VALIDADO_PMO");
+  });
+
+  it("rechazar sin comentario no hace nada; con comentario lo deja rechazado y libera la semana", () => {
+    const uno = r.registrarCorte(obra, entrada(200), "Héctor Ramos", DEMO_TODAY, []);
+    const id = uno.cortes.at(-1)!.id;
+    const sin = r.resolverCorteObra(uno, id, "RECHAZADO", "Ricardo Salas", DEMO_TODAY);
+    expect(sin.cortes.at(-1)!.estado).toBe("FIRMADO_SUPERVISOR");
+    const con = r.resolverCorteObra(
+      uno,
+      id,
+      "RECHAZADO",
+      "Ricardo Salas",
+      DEMO_TODAY,
+      "No coincide",
+    );
+    expect(con.cortes.at(-1)).toMatchObject({
+      estado: "RECHAZADO",
+      comentario: "No coincide",
+    });
+    expect(
+      r.registrarCorte(con, entrada(150), "Héctor Ramos", DEMO_TODAY, []).cortes,
+    ).toHaveLength(con.cortes.length + 1);
+  });
+});
+
+describe("licitaciones de obra", () => {
+  const obra: r.ObraState = {
+    contratos: seed.obra.contratos,
+    cronograma: seed.obra.cronograma,
+    cortes: seed.obra.cortes,
+    pagos: seed.obra.pagos,
+    licitaciones: seed.licitaciones,
+  };
+  const enCurso = obra.licitaciones.find((l) => l.estado === "EN_CURSO")!;
+  const activos = proveedoresActivos(enCurso);
+
+  it("registrarRonda agrega la ronda y respeta licitaciones ajenas", () => {
+    const entrada = Object.fromEntries(activos.map((id, i) => [id, 6_000_000 + i]));
+    const e = r.registrarRonda(obra, enCurso.id, entrada, DEMO_TODAY);
+    const actual = e.licitaciones.find((l) => l.id === enCurso.id)!;
+    expect(actual.rondas).toHaveLength(enCurso.rondas.length + 1);
+    expect(e.licitaciones.filter((l) => l.id !== enCurso.id)).toEqual(
+      obra.licitaciones.filter((l) => l.id !== enCurso.id),
+    );
+  });
+
+  it("descartar sin motivo deja el estado igual; con motivo suma el descarte", () => {
+    expect(r.descartarProveedor(obra, enCurso.id, activos[0], "  ")).toEqual(obra);
+    const e = r.descartarProveedor(obra, enCurso.id, activos[0], "Sin experiencia");
+    expect(e.licitaciones.find((l) => l.id === enCurso.id)!.descartados).toHaveLength(
+      enCurso.descartados.length + 1,
+    );
+  });
+
+  it("adjudicar exige motivo y fija ganador, monto y autor", () => {
+    expect(
+      r.adjudicarLicitacion(obra, enCurso.id, activos[0], "", "Ana", DEMO_TODAY),
+    ).toEqual(obra);
+    const e = r.adjudicarLicitacion(
+      obra,
+      enCurso.id,
+      activos[0],
+      "Mejor precio",
+      "Ana",
+      DEMO_TODAY,
+    );
+    const actual = e.licitaciones.find((l) => l.id === enCurso.id)!;
+    expect(actual.estado).toBe("ADJUDICADA");
+    expect(actual.adjudicadaPor).toBe("Ana");
   });
 });

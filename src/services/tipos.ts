@@ -17,6 +17,10 @@ import type {
   Proveedor,
   ReglaActualizacion,
   Terreno,
+  ContratoObra,
+  CorteSemanal,
+  PagoObra,
+  ActividadCronograma,
   Usuario,
 } from "@/domain";
 
@@ -93,6 +97,13 @@ export interface TerrenosRepository {
   listar(): Promise<Terreno[]>;
 }
 
+export interface ObraRepository {
+  listarContratos(): Promise<ContratoObra[]>;
+  listarCortes(): Promise<CorteSemanal[]>;
+  listarPagos(): Promise<PagoObra[]>;
+  listarCronograma(): Promise<ActividadCronograma[]>;
+}
+
 export interface MantenimientosRepository {
   /** Mantenimientos del seed; los de la demo viven en el store. */
   listar(): Promise<Mantenimiento[]>;
@@ -124,6 +135,7 @@ export interface Repositorios {
   prospectos: ProspectosRepository;
   contratos: ContratosRepository;
   terrenos: TerrenosRepository;
+  obra: ObraRepository;
   mantenimientos: MantenimientosRepository;
   integraciones: IntegracionesService;
   configuracion: ConfiguracionRepository;

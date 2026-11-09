@@ -37,7 +37,8 @@ export const ESTATUS = {
   CONTRATO_GENERADO: { etiqueta: "Contrato generado", tono: "verde" },
   // Excepciones y cambios anuales
   PENDIENTE: { etiqueta: "Pendiente", tono: "naranja" },
-  APROBADA: { etiqueta: "Aprobada", tono: "verde" },
+  AUTORIZADA_DIRECCION: { etiqueta: "Autorizada por Dirección", tono: "indigo" },
+  APLICADA: { etiqueta: "Aplicada", tono: "verde" },
   APROBADO: { etiqueta: "Aprobado", tono: "verde" },
   RECHAZADA: { etiqueta: "Rechazada", tono: "coral" },
   RECHAZADO: { etiqueta: "Rechazado", tono: "coral" },
@@ -71,6 +72,12 @@ export const ESTATUS = {
   ERROR: { etiqueta: "Error", tono: "coral" },
   OK: { etiqueta: "Correcto", tono: "verde" },
   ADVERTENCIA: { etiqueta: "Advertencia", tono: "naranja" },
+  IMPORTADO_SIMULADO: { etiqueta: "Importado de MS Project · simulado", tono: "neutro" },
+  // Licitaciones de obra
+  EN_CURSO: { etiqueta: "En curso", tono: "naranja" },
+  ADJUDICADA: { etiqueta: "Adjudicada", tono: "verde" },
+  SIN_RESPUESTA: { etiqueta: "No respondió", tono: "neutro" },
+  DESCARTADO: { etiqueta: "Descartado", tono: "coral" },
   // Candados
   CUMPLE: { etiqueta: "Cumple", tono: "verde" },
   FALLA: { etiqueta: "No cumple", tono: "coral" },

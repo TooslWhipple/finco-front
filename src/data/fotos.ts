@@ -338,3 +338,20 @@ export function evidenciaDespues(
 ): Foto[] {
   return evidenciaSimulada(categoria, `${semilla}-despues`, 1, existentes);
 }
+
+/** Fotos que acompañan a cada corte semanal. */
+export const FOTOS_POR_CORTE = 2;
+
+/**
+ * Evidencia simulada de un corte: obra gris del catálogo, rotada por el hash de
+ * `semilla` (el mismo corte siempre muestra las mismas fotos).
+ */
+export function evidenciaCorte(semilla: string): Foto[] {
+  const fotos = CATALOGO_FOTOS.vacio;
+  const offset = hashCadena(semilla) % fotos.length;
+  const total = Math.min(FOTOS_POR_CORTE, fotos.length);
+  return Array.from({ length: total }, (_, i) => {
+    const { src, alt, ancho, alto } = fotos[(offset + i) % fotos.length];
+    return { src, alt, ancho, alto };
+  });
+}

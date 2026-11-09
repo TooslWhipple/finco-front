@@ -50,6 +50,21 @@ describe("semaforoTerreno", () => {
     ).toBe("ROJO");
   });
 
+  it("con obra manda el semáforo derivado del valor ganado, sin importar el avance manual", () => {
+    expect(
+      semaforoTerreno(
+        crearTerreno({ ...base, avancePct: 95, semaforoObra: "ROJO" }),
+        HOY,
+      ),
+    ).toBe("ROJO");
+    expect(
+      semaforoTerreno(
+        crearTerreno({ ...base, avancePct: 10, semaforoObra: "VERDE" }),
+        HOY,
+      ),
+    ).toBe("VERDE");
+  });
+
   it("un proyecto abierto siempre está en verde", () => {
     expect(
       semaforoTerreno(

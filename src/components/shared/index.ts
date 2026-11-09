@@ -13,3 +13,6 @@ export * from "./tablero-kanban";
 export * from "./panel-detalle";
 export * from "./card-integracion";
 export * from "./galeria-fotos";
+export * from "./barra-progreso";
+export * from "./ayuda";
+export * from "./grafica-lineas";

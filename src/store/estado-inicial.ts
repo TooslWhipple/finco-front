@@ -6,7 +6,9 @@ import type {
   CotizacionesState,
   IntegracionesState,
   LocalesState,
+  MetasState,
   MantenimientosState,
+  ObraState,
   ProspectosState,
   ReglasDefaultState,
   TerrenosState,
@@ -26,8 +28,10 @@ export interface DatosDemo {
   prospectos: ProspectosState;
   contratos: ContratosState;
   terrenos: TerrenosState;
+  obra: ObraState;
   mantenimientos: MantenimientosState;
   reglasDefault: ReglasDefaultState;
+  metas: MetasState;
 }
 
 /**
@@ -50,7 +54,15 @@ export function crearEstadoInicial(): DatosDemo {
     prospectos: { prospectos: seed.prospectos },
     contratos: { nuevos: [] },
     terrenos: { terrenos: seed.terrenos },
+    obra: {
+      contratos: seed.obra.contratos,
+      cronograma: seed.obra.cronograma,
+      cortes: seed.obra.cortes,
+      pagos: seed.obra.pagos,
+      licitaciones: seed.licitaciones,
+    },
     mantenimientos: { mantenimientos: seed.mantenimientos },
     reglasDefault: { porPlaza: {} },
+    metas: { porPlaza: {} },
   };
 }

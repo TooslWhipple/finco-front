@@ -10,7 +10,7 @@ import { COTIZACION_HEROE } from "@/data/heroe";
 import {
   construirActividad,
   derivarPasos,
-  excepcionPendiente,
+  excepcionAbierta,
   excepcionVigente,
   resumenEconomico,
   siguienteFolio,
@@ -87,14 +87,18 @@ describe("folios", () => {
 
 describe("excepciones", () => {
   it("una excepción no cubre una renta menor a la solicitada", () => {
-    const lista = [excepcion("APROBADA")];
-    expect(excepcionVigente(lista, cotizacion.id, 22_900)?.estado).toBe("APROBADA");
+    const lista = [excepcion("APLICADA")];
+    expect(excepcionVigente(lista, cotizacion.id, 22_900)?.estado).toBe("APLICADA");
     expect(excepcionVigente(lista, cotizacion.id, 22_000)).toBeUndefined();
   });
 
-  it("detecta la excepción pendiente", () => {
-    expect(excepcionPendiente([excepcion("PENDIENTE")], cotizacion.id)).toBeDefined();
-    expect(excepcionPendiente([excepcion("APROBADA")], cotizacion.id)).toBeUndefined();
+  it("detecta la excepción abierta: pendiente o autorizada, no la aplicada", () => {
+    expect(excepcionAbierta([excepcion("PENDIENTE")], cotizacion.id)).toBeDefined();
+    expect(
+      excepcionAbierta([excepcion("AUTORIZADA_DIRECCION")], cotizacion.id),
+    ).toBeDefined();
+    expect(excepcionAbierta([excepcion("APLICADA")], cotizacion.id)).toBeUndefined();
+    expect(excepcionAbierta([excepcion("RECHAZADA")], cotizacion.id)).toBeUndefined();
   });
 });
 
@@ -127,11 +131,24 @@ describe("pasos", () => {
       contratoGenerado: false,
     });
     expect(actual(pasos)).toBe(3);
-    expect(pasos[2].nota).toBe("En espera de Superadmin");
+    expect(pasos[2].nota).toBe("En espera de Dirección");
   });
 
-  it("excepción aprobada habilita el paso 4 y el contrato lo deja hecho", () => {
-    const exc = excepcion("APROBADA");
+  it("excepción autorizada sigue en el paso 3 hasta que la PMO la aplique", () => {
+    const exc = excepcion("AUTORIZADA_DIRECCION");
+    const candados = evaluarCandados(cotizacion, local, hoy, exc);
+    const pasos = derivarPasos({
+      ...base,
+      candados,
+      excepcion: exc,
+      contratoGenerado: false,
+    });
+    expect(actual(pasos)).toBe(3);
+    expect(pasos[2].nota).toBe("Autorizada, en espera de la PMO");
+  });
+
+  it("excepción aplicada habilita el paso 4 y el contrato lo deja hecho", () => {
+    const exc = excepcion("APLICADA");
     const candados = evaluarCandados(cotizacion, local, hoy, exc);
     const listo = derivarPasos({
       ...base,
@@ -154,17 +171,22 @@ describe("pasos", () => {
 
 describe("actividad", () => {
   it("ordena emisión, excepción y contrato", () => {
-    const aprobada = { ...excepcion("APROBADA"), resueltaPor: "Laura Fuentes" };
+    const aplicada = {
+      ...excepcion("APLICADA"),
+      autorizadaPor: "Mariana López",
+      aplicadaPor: "Ricardo Salas",
+    };
     const eventos = construirActividad(
       { ...cotizacion, estado: "CONTRATO_GENERADO", contratoGeneradoEl: "2026-11-03" },
-      [aprobada],
+      [aplicada],
     );
     expect(eventos.map((e) => e.id)).toEqual([
       "visita",
       "enviada",
       "intento",
       "exc-1-solicitada",
-      "exc-1-resuelta",
+      "exc-1-autorizada",
+      "exc-1-aplicada",
       "contrato",
     ]);
   });

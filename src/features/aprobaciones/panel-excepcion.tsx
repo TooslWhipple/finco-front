@@ -1,25 +1,46 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { Check, X } from "lucide-react";
 import { toast } from "sonner";
-import { MoneyAmount, SectionCard, StatusChip } from "@/components/shared";
+import {
+  Ayuda,
+  KpiCard,
+  MoneyAmount,
+  SectionCard,
+  StatusChip,
+  Timeline,
+} from "@/components/shared";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import type { Cotizacion, ExcepcionPrecio, Local } from "@/domain";
+import type { Cotizacion, ExcepcionPrecio, ImpactoPlanExcepcion, Local } from "@/domain";
+import { TEXTOS_PRECIO } from "@/features/local/textos-precio";
+import { formatFecha } from "@/lib/format";
+import { formatPuntosUnDecimal } from "@/features/local/calculos";
 import { useAppStore } from "@/store";
-import { impactoExcepcion } from "./calculos";
+import { eventosExcepcion, impactoExcepcion } from "./calculos";
+import { DialogoRechazo } from "./dialogo-rechazo";
 
 interface PanelExcepcionProps {
   excepcion: ExcepcionPrecio;
   cotizacion?: Cotizacion;
   local?: Local;
   plaza?: string;
-  puedeResolver: boolean;
+  /** Meta de cumplimiento del plan de la plaza, en %. */
+  metaPct: number;
+  /** Simulación sobre el plan de ingresos; ausente si no se conoce el local. */
+  simulacion?: ImpactoPlanExcepcion;
+  puedeAutorizar: boolean;
+  puedeAplicar: boolean;
 }
 
-function Dato({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
+function Dato({
+  etiqueta,
+  children,
+}: {
+  etiqueta: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <div>
       <dt className="text-xs text-brand-text-muted">{etiqueta}</dt>
@@ -28,39 +49,39 @@ function Dato({ etiqueta, children }: { etiqueta: string; children: React.ReactN
   );
 }
 
+/** Detalle de una excepción: datos, simulación contra el plan, línea de tiempo y acciones del paso que toca. */
 export function PanelExcepcion({
   excepcion,
   cotizacion,
   local,
   plaza,
-  puedeResolver,
+  metaPct,
+  simulacion,
+  puedeAutorizar,
+  puedeAplicar,
 }: PanelExcepcionProps) {
-  const resolver = useAppStore((s) => s.resolverExcepcion);
+  const autorizar = useAppStore((s) => s.autorizarExcepcion);
+  const aplicar = useAppStore((s) => s.aplicarExcepcion);
+  const rechazar = useAppStore((s) => s.rechazarExcepcion);
   const [rechazando, setRechazando] = useState(false);
-  const [comentario, setComentario] = useState("");
-  const [error, setError] = useState<string>();
 
-  const pendiente = excepcion.estado === "PENDIENTE";
   const precioLista = local?.precioVigente ?? excepcion.precioMinimo;
   const impacto = impactoExcepcion(excepcion, precioLista, cotizacion?.plazoMeses ?? 0);
+  const toca =
+    excepcion.estado === "PENDIENTE" && puedeAutorizar
+      ? "AUTORIZAR"
+      : excepcion.estado === "AUTORIZADA_DIRECCION" && puedeAplicar
+        ? "APLICAR"
+        : undefined;
 
-  function aprobar() {
-    resolver(excepcion.id, "APROBADA");
-    toast.success(`Excepción aprobada. Ventas ya puede generar el contrato.`);
-  }
-
-  function rechazar(evento: FormEvent) {
-    evento.preventDefault();
-    const texto = comentario.trim();
-    if (texto.length === 0) {
-      setError("Escribe el motivo del rechazo");
-      return;
+  function confirmar() {
+    if (toca === "AUTORIZAR") {
+      autorizar(excepcion.id);
+      toast.success("Excepción autorizada. Ahora la PMO debe aplicarla.");
+    } else {
+      aplicar(excepcion.id);
+      toast.success("Excepción aplicada. Ventas ya puede generar el contrato.");
     }
-    resolver(excepcion.id, "RECHAZADA", texto);
-    toast.success("Excepción rechazada");
-    setRechazando(false);
-    setComentario("");
-    setError(undefined);
   }
 
   return (
@@ -70,12 +91,16 @@ export function PanelExcepcion({
     >
       <dl className="grid grid-cols-2 gap-4">
         <Dato etiqueta="Cotización">
-          <Link
-            href={`/cotizaciones/${excepcion.cotizacionId}`}
-            className="text-brand-primary hover:underline"
-          >
-            {excepcion.cotizacionId}
-          </Link>
+          {cotizacion ? (
+            <Link
+              href={`/cotizaciones/${excepcion.cotizacionId}`}
+              className="text-brand-primary hover:underline"
+            >
+              {excepcion.cotizacionId}
+            </Link>
+          ) : (
+            excepcion.cotizacionId
+          )}
         </Dato>
         <Dato etiqueta="Local">
           {local?.codigo ?? excepcion.localId}
@@ -83,10 +108,22 @@ export function PanelExcepcion({
         </Dato>
         <Dato etiqueta="Prospecto">{cotizacion?.prospecto.nombre ?? "—"}</Dato>
         <Dato etiqueta="Solicitada por">{excepcion.solicitadaPor}</Dato>
-        <Dato etiqueta="Precio de lista">
+        <Dato
+          etiqueta={
+            <Ayuda texto={TEXTOS_PRECIO.lista.ayuda}>
+              {TEXTOS_PRECIO.lista.etiqueta}
+            </Ayuda>
+          }
+        >
           <MoneyAmount valor={precioLista} sufijo="/mes" />
         </Dato>
-        <Dato etiqueta="Mínimo autorizado">
+        <Dato
+          etiqueta={
+            <Ayuda texto={TEXTOS_PRECIO.minimo.ayuda}>
+              {TEXTOS_PRECIO.minimo.etiqueta}
+            </Ayuda>
+          }
+        >
           <MoneyAmount valor={excepcion.precioMinimo} sufijo="/mes" />
         </Dato>
         <Dato etiqueta="Renta ofrecida">
@@ -99,77 +136,70 @@ export function PanelExcepcion({
             className="text-brand-danger"
           />
         </Dato>
-        <Dato etiqueta="Diferencia mensual vs. lista">
-          <MoneyAmount valor={-impacto.diferenciaMensual} conSigno />
-        </Dato>
-        <Dato
-          etiqueta={`Diferencia en la vigencia (${cotizacion?.plazoMeses ?? "—"} meses)`}
-        >
-          <MoneyAmount valor={-impacto.diferenciaVigencia} conSigno />
-        </Dato>
       </dl>
 
-      <div className="mt-4 rounded-lg bg-brand-cream p-3">
-        <p className="text-xs text-brand-text-muted">Motivo de Ventas</p>
-        <p className="mt-1 text-sm text-brand-text">
-          {excepcion.motivo ?? "Sin motivo."}
-        </p>
+      {simulacion ? (
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-medium text-brand-text-muted">
+            Impacto en el plan de ingresos de {plaza ?? "la plaza"}
+          </p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <KpiCard
+              etiqueta="Cumplimiento del plan"
+              valor={`${formatPuntosUnDecimal(simulacion.cumplimientoActualPct)} → ${formatPuntosUnDecimal(simulacion.cumplimientoNuevoPct)}`}
+              detalle={
+                simulacion.bajoMeta
+                  ? `Bajo la meta de ${formatPuntosUnDecimal(metaPct)}`
+                  : `Cumple la meta de ${formatPuntosUnDecimal(metaPct)}`
+              }
+              tono={simulacion.bajoMeta ? "peligro" : "positivo"}
+            />
+            <KpiCard
+              etiqueta="Impacto mensual"
+              valor={<MoneyAmount valor={-simulacion.impactoMensual} conSigno />}
+              subtexto="contra la renta planeada"
+            />
+            <KpiCard
+              etiqueta={`En el contrato (${cotizacion?.plazoMeses ?? "—"} meses)`}
+              valor={<MoneyAmount valor={-simulacion.impactoVida} conSigno />}
+              subtexto="en la vida del contrato"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-4">
+        <p className="mb-2 text-xs font-medium text-brand-text-muted">Línea de tiempo</p>
+        <Timeline
+          eventos={eventosExcepcion(excepcion).map((e) => ({
+            id: e.id,
+            titulo: e.titulo,
+            detalle: e.detalle,
+            fecha: e.fecha ? formatFecha(e.fecha) : undefined,
+            tono: e.tono,
+          }))}
+        />
       </div>
 
-      {!pendiente ? (
-        <div className="mt-4 rounded-lg border border-brand-line p-3 text-sm">
-          <p className="text-brand-text-muted">
-            Resuelta por {excepcion.resueltaPor ?? "—"}
-          </p>
-          {excepcion.comentario ? (
-            <p className="mt-1 text-brand-text">{excepcion.comentario}</p>
-          ) : null}
+      {toca ? (
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setRechazando(true)}>
+            <X aria-hidden /> Rechazar
+          </Button>
+          <Button onClick={confirmar}>
+            <Check aria-hidden /> {toca === "AUTORIZAR" ? "Autorizar" : "Aplicar"}
+          </Button>
         </div>
-      ) : puedeResolver ? (
-        rechazando ? (
-          <form onSubmit={rechazar} className="mt-4 space-y-2">
-            <label htmlFor="comentario-rechazo" className="text-sm font-medium">
-              Motivo del rechazo (obligatorio)
-            </label>
-            <Textarea
-              id="comentario-rechazo"
-              value={comentario}
-              onChange={(e) => setComentario(e.target.value)}
-              placeholder="Indica a Ventas por qué no procede"
-              aria-invalid={error ? true : undefined}
-            />
-            {error ? (
-              <p role="alert" className="text-xs text-brand-danger">
-                {error}
-              </p>
-            ) : null}
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setRechazando(false);
-                  setError(undefined);
-                }}
-              >
-                Cancelar
-              </Button>
-              <Button type="submit" variant="destructive">
-                Confirmar rechazo
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <div className="mt-4 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setRechazando(true)}>
-              <X /> Rechazar
-            </Button>
-            <Button onClick={aprobar}>
-              <Check /> Aprobar excepción
-            </Button>
-          </div>
-        )
       ) : null}
+      <DialogoRechazo
+        abierto={rechazando}
+        onCambioAbierto={setRechazando}
+        destinatario={toca === "AUTORIZAR" ? "Ventas" : "Ventas y Dirección"}
+        onConfirmar={(comentario) => {
+          rechazar(excepcion.id, comentario);
+          toast.success("Excepción rechazada");
+        }}
+      />
     </SectionCard>
   );
 }
