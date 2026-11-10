@@ -4,6 +4,7 @@ import type {
   Coordenadas,
   ContratoObra,
   CorteSemanal,
+  EstimacionObra,
   FechaISO,
   Licitacion,
   PagoObra,
@@ -21,6 +22,8 @@ export interface ContextoExpediente {
   /** Cortes del proyecto, del más reciente al más antiguo. */
   cortes: readonly CorteSemanal[];
   pagos: readonly PagoObra[];
+  /** Estimaciones de pago del proyecto, de la más reciente a la más antigua. */
+  estimaciones: readonly EstimacionObra[];
   licitaciones: readonly Licitacion[];
   /** Licitación que se abre al entrar a su pestaña (viene del enlace "Ver licitación"). */
   licitacionEnfocadaId: string | null;

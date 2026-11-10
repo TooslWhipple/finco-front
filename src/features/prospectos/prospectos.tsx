@@ -11,6 +11,7 @@ import {
   KpiRow,
   PageHeader,
   PillsFiltro,
+  TablaConDetalle,
   SectionCard,
   SegmentedControl,
   SelectorPill,
@@ -20,6 +21,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { can } from "@/config/permissions";
 import {
+  DEMO_TODAY,
+  diasSinContacto,
+  temperaturaProspecto,
   ETAPAS_PROSPECTO,
   ETIQUETA_ETAPA_PROSPECTO,
   ETIQUETA_ORIGEN_PROSPECTO,
@@ -42,6 +46,7 @@ import {
   filtrarProspectos,
   kpisProspectos,
   prospectosDeEtapa,
+  textoDiasSinContacto,
 } from "./agregados";
 import { DetalleProspecto } from "./detalle-prospecto";
 import { DialogoRegistrarProspecto } from "./dialogo-registrar-prospecto";
@@ -60,6 +65,20 @@ interface ProspectosProps {
   prospectoInicialId?: string;
 }
 
+/** "Hace N días" más el chip de temperatura (los cerrados no lo llevan). */
+function ContactoProspecto({ prospecto }: { prospecto: Prospecto }) {
+  const dias = diasSinContacto(prospecto, DEMO_TODAY);
+  const temperatura = temperaturaProspecto(dias);
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5 text-xs text-brand-text">
+      {textoDiasSinContacto(dias)}
+      {temperatura && temperatura !== "AL_DIA" ? (
+        <StatusChip estatus={temperatura} />
+      ) : null}
+    </span>
+  );
+}
+
 export function Prospectos({ localInicialId, prospectoInicialId }: ProspectosProps) {
   const { rol } = useSesion();
   const prospectos = useProspectos().datos;
@@ -67,7 +86,8 @@ export function Prospectos({ localInicialId, prospectoInicialId }: ProspectosPro
   const locales = useLocales().datos;
   const cotizaciones = useCotizaciones();
   const avanzarProspecto = useAppStore((s) => s.avanzarProspecto);
-  const descartarProspecto = useAppStore((s) => s.descartarProspecto);
+  const registrarContacto = useAppStore((s) => s.registrarContactoProspecto);
+  const marcarPerdido = useAppStore((s) => s.marcarProspectoPerdido);
 
   const [vista, setVista] = useState<Vista>("TABLERO");
   const [filtro, setFiltro] = useState({
@@ -132,6 +152,13 @@ export function Prospectos({ localInicialId, prospectoInicialId }: ProspectosPro
           p.localIds.map((id) => localesPorId.get(id)?.codigo ?? id).join(", "),
       },
       {
+        id: "ultimoContacto",
+        header: "Último contacto",
+        // Los cerrados no tienen días: van al final al ordenar de menor a mayor.
+        accessorFn: (p) => diasSinContacto(p, DEMO_TODAY) ?? Number.MAX_SAFE_INTEGER,
+        cell: ({ row }) => <ContactoProspecto prospecto={row.original} />,
+      },
+      {
         id: "alta",
         header: "Alta",
         accessorFn: (p) => p.creadoEl,
@@ -141,6 +168,8 @@ export function Prospectos({ localInicialId, prospectoInicialId }: ProspectosPro
     [localesPorId],
   );
 
+  const conteoTemperatura = (temperatura: string) =>
+    filtrarProspectos(prospectos, { ...filtro, temperatura }, plazaDeLocal).length;
   const conteoEtapa = (etapa: string) =>
     filtrarProspectos(prospectos, { ...filtro, etapa }, plazaDeLocal).length;
 
@@ -180,6 +209,9 @@ export function Prospectos({ localInicialId, prospectoInicialId }: ProspectosPro
             <span className="mt-1.5 block truncate text-xs text-brand-text">
               Local {codigosLocales(p)}
             </span>
+            <span className="mt-1.5 block">
+              <ContactoProspecto prospecto={p} />
+            </span>
           </button>
         )}
       />
@@ -188,6 +220,7 @@ export function Prospectos({ localInicialId, prospectoInicialId }: ProspectosPro
         columns={columnas}
         data={visibles}
         tamanoPagina={12}
+        ocultarEnVertical={["giro", "origen", "alta"]}
         onFilaClick={(p) => setSeleccionadoId(p.id)}
       />
     );
@@ -232,6 +265,11 @@ export function Prospectos({ localInicialId, prospectoInicialId }: ProspectosPro
           subtexto={`con cotización enviada · ${formatNumero(kpis.porCotizar)} con visita, por cotizar`}
         />
         <KpiCard
+          etiqueta="Prospectos fríos"
+          valor={formatNumero(kpis.frios)}
+          subtexto="30 días o más sin contacto"
+        />
+        <KpiCard
           etiqueta="Tasa de cierre"
           valor={kpis.tasaCierre === null ? "—" : formatPorcentaje(kpis.tasaCierre)}
           subtexto="ganados entre cerrados"
@@ -272,19 +310,31 @@ export function Prospectos({ localInicialId, prospectoInicialId }: ProspectosPro
           </>
         }
       >
-        <PillsFiltro
-          etiqueta="Filtrar por etapa"
-          valor={filtro.etapa}
-          onChange={(etapa) => setFiltro((f) => ({ ...f, etapa }))}
-          opciones={[
-            { valor: TODOS, etiqueta: "Todas", conteo: conteoEtapa(TODOS) },
-            ...ETAPAS_PROSPECTO.map((etapa) => ({
-              valor: etapa,
-              etiqueta: ETIQUETA_ETAPA_PROSPECTO[etapa],
-              conteo: conteoEtapa(etapa),
-            })),
-          ]}
-        />
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          <PillsFiltro
+            etiqueta="Filtrar por etapa"
+            valor={filtro.etapa}
+            onChange={(etapa) => setFiltro((f) => ({ ...f, etapa }))}
+            opciones={[
+              { valor: TODOS, etiqueta: "Todas", conteo: conteoEtapa(TODOS) },
+              ...ETAPAS_PROSPECTO.map((etapa) => ({
+                valor: etapa,
+                etiqueta: ETIQUETA_ETAPA_PROSPECTO[etapa],
+                conteo: conteoEtapa(etapa),
+              })),
+            ]}
+          />
+          <PillsFiltro
+            etiqueta="Filtrar por temperatura"
+            valor={filtro.temperatura}
+            onChange={(temperatura) => setFiltro((f) => ({ ...f, temperatura }))}
+            opciones={[
+              { valor: TODOS, etiqueta: "Todas", conteo: conteoTemperatura(TODOS) },
+              { valor: "FRIO", etiqueta: "Fríos", conteo: conteoTemperatura("FRIO") },
+              { valor: "TIBIO", etiqueta: "Tibios", conteo: conteoTemperatura("TIBIO") },
+            ]}
+          />
+        </div>
       </BarraFiltros>
       {filtro.localId !== TODOS ? (
         <p className="flex items-center gap-2 text-sm text-brand-text-muted">
@@ -303,33 +353,36 @@ export function Prospectos({ localInicialId, prospectoInicialId }: ProspectosPro
         </p>
       ) : null}
 
-      <div
-        className={cn(
-          "grid items-start gap-6",
-          seleccionado && "xl:grid-cols-[minmax(0,1fr)_24rem]",
-        )}
-      >
-        <SectionCard
-          titulo={`${vista === "TABLERO" ? "Embudo" : "Prospectos"} (${formatNumero(visibles.length)})`}
-          className="min-w-0"
-        >
-          {lista}
-        </SectionCard>
-        {seleccionado ? (
-          <DetalleProspecto
-            className="max-h-[48rem]"
-            prospecto={seleccionado}
-            locales={localesPorId}
-            plazas={plazasPorId}
-            cotizaciones={cotizaciones}
-            puedeGestionar={puedeGestionar}
-            puedeCotizar={can(rol, "cotizaciones.crear")}
-            onAvanzar={avanzarProspecto}
-            onDescartar={descartarProspecto}
-            onCerrar={() => setSeleccionadoId(null)}
-          />
-        ) : null}
-      </div>
+      <TablaConDetalle
+        anchoPanel="24rem"
+        etiqueta="Detalle del prospecto"
+        onCerrar={() => setSeleccionadoId(null)}
+        lista={
+          <SectionCard
+            titulo={`${vista === "TABLERO" ? "Embudo" : "Prospectos"} (${formatNumero(visibles.length)})`}
+            className="min-w-0"
+          >
+            {lista}
+          </SectionCard>
+        }
+        detalle={
+          seleccionado ? (
+            <DetalleProspecto
+              className="max-h-[48rem]"
+              prospecto={seleccionado}
+              locales={localesPorId}
+              plazas={plazasPorId}
+              cotizaciones={cotizaciones}
+              puedeGestionar={puedeGestionar}
+              puedeCotizar={can(rol, "cotizaciones.crear")}
+              onAvanzar={avanzarProspecto}
+              onRegistrarContacto={registrarContacto}
+              onMarcarPerdido={marcarPerdido}
+              onCerrar={() => setSeleccionadoId(null)}
+            />
+          ) : null
+        }
+      />
 
       <DialogoRegistrarProspecto
         abierto={registrando}

@@ -4,7 +4,6 @@ import {
   pactarRegla,
   sumarDias,
   type Contrato,
-  type Cotizacion,
   type ExcepcionPrecio,
   type EstatusLocal,
   type Factura,
@@ -30,6 +29,7 @@ import { evidenciaAntes, evidenciaDespues } from "./fotos";
 import type { BorradorMantenimiento } from "./mantenimientos";
 import { geometriaHeroePA, geometriaHeroePB, LIENZO, PLANTA_HEROE_PB_ID } from "./planos";
 import { crearPrng } from "./prng";
+import type { CotizacionBase } from "./vendedores";
 import {
   FACTOR_MINIMO_HEROE,
   rentaContratadaLocal,
@@ -40,6 +40,8 @@ import {
 export const PLAZA_HEROE_ID = "plz-alborada";
 export const LOCAL_HEROE = "A-09";
 export const COTIZACION_HEROE = "COT-2026-0418";
+/** Cotización del local C-11 que la demo PMO usa en la escena del candado del mínimo. */
+export const COTIZACION_CANDADO = "COT-2026-0415";
 
 const CIUDAD_PLAZA_HEROE = CATALOGO.find((c) => c.id === CIUDAD_HEROE)!;
 
@@ -51,7 +53,7 @@ export interface ParteSeed {
   locatarios: Locatario[];
   contratos: Contrato[];
   facturas: Factura[];
-  cotizaciones: Cotizacion[];
+  cotizaciones: CotizacionBase[];
   /** Excepciones de precio históricas que respaldan contratos firmados bajo el mínimo. */
   excepciones: ExcepcionPrecio[];
 }
@@ -188,7 +190,7 @@ const PLANTA_ALTA: Fila[] = [
 const COTIZACIONES_EN_CURSO: Record<string, { folio: string; prospecto: string }> = {
   "A-10": { folio: "COT-2026-0409", prospecto: "Clínica Veterinaria Huellas" },
   "B-10": { folio: "COT-2026-0411", prospecto: "Heladería Polo Norte" },
-  "C-11": { folio: "COT-2026-0415", prospecto: "Estudio Fotográfico Lente" },
+  "C-11": { folio: COTIZACION_CANDADO, prospecto: "Estudio Fotográfico Lente" },
 };
 
 /**
@@ -224,7 +226,7 @@ export function crearHeroe(ctx: Contexto): ParteSeed {
   const locatarios: Locatario[] = [];
   const contratos: Contrato[] = [];
   const facturas: Factura[] = [];
-  const cotizaciones: Cotizacion[] = [];
+  const cotizaciones: CotizacionBase[] = [];
   const excepciones: ExcepcionPrecio[] = [];
 
   const geoPB = geometriaHeroePB();
@@ -340,7 +342,6 @@ export function crearHeroe(ctx: Contexto): ParteSeed {
     mesesGracia: 1,
     inicioContrato: "2026-12-01",
     giro: "Cafetería y repostería",
-    elaboro: "Jorge Ramírez · Ventas",
     actividad: [
       {
         id: "visita",
@@ -355,7 +356,7 @@ export function crearHeroe(ctx: Contexto): ParteSeed {
       },
       {
         id: "intento",
-        titulo: "Jorge Ramírez intentó generar el contrato: bloqueado por precio mínimo",
+        titulo: "Sofía Medina intentó generar el contrato: bloqueado por precio mínimo",
         fecha: DEMO_TODAY,
         hora: "15:21",
       },
@@ -556,6 +557,28 @@ export function mantenimientosHeroe(): BorradorMantenimiento[] {
       costoEstimado: 14_000,
       cargoA: "PLAZA",
       evidencia: [],
+    },
+    {
+      ...base,
+      proveedorId: "prv-2",
+      titulo: "Modernización a luminarias LED del estacionamiento",
+      descripcion:
+        "Cambio de las luminarias del estacionamiento y pasillos exteriores a LED. Rebasa el presupuesto anual: espera la autorización de Dirección.",
+      tipo: "PREVENTIVO",
+      categoria: "ELECTRICO",
+      origen: "ADMINISTRACION",
+      estatus: "PROGRAMADO",
+      fechaProgramada: dias(12),
+      costoEstimado: 62_000,
+      cargoA: "PLAZA",
+      evidencia: [],
+      autorizacionSobregiro: {
+        estado: "PENDIENTE",
+        solicitadoPor: "Laura Fuentes",
+        solicitadoEl: dias(-1),
+        // Consumo de Alborada sin este trabajo ($358,300) + $62,000 − presupuesto de $400,000.
+        excedente: 20_300,
+      },
     },
     {
       ...base,

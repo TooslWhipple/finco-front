@@ -28,7 +28,7 @@ export function SelectorPill({
         aria-label={etiqueta}
         value={valor}
         onChange={(e) => onChange(e.target.value)}
-        className="h-9 appearance-none rounded-full border border-brand-line bg-card pr-8 pl-4 text-sm font-medium text-brand-text outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="h-9 appearance-none rounded-full border border-brand-line bg-card pr-8 pl-4 text-sm font-medium text-brand-text outline-none focus-visible:ring-3 focus-visible:ring-ring/50 max-lg:h-11 pointer-coarse:h-11"
       >
         {opciones.map((o) => (
           <option key={o.valor} value={o.valor}>

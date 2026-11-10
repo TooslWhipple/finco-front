@@ -44,6 +44,7 @@ export function prospectoDesdeFormulario(
   v: NuevoProspectoValidado,
   id: string,
   hoy: FechaISO,
+  vendedorId: string,
 ): Prospecto {
   return {
     id,
@@ -57,6 +58,7 @@ export function prospectoDesdeFormulario(
     documentosCompletos: v.documentosCompletos,
     aval: v.avalRegistrado ? "Aval solidario registrado" : undefined,
     creadoEl: hoy,
+    vendedorId,
     actividad: [
       {
         id: "alta",

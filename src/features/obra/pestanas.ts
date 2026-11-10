@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import type { ContextoExpediente } from "./contexto";
 import { PestanaContratos } from "./pestana-contratos";
 import { PestanaCortes } from "./pestana-cortes";
+import { PestanaEstimaciones } from "./pestana-estimaciones";
 import { PestanaCronograma } from "./pestana-cronograma";
 import { PestanaLicitaciones } from "./licitaciones/pestana-licitaciones";
 import { PestanaValorGanado } from "./pestana-valor-ganado";
@@ -37,6 +38,12 @@ export const PESTANAS: readonly PestanaExpediente[] = [
     etiqueta: "Cortes",
     visible: (c) => c.contratos.length > 0,
     Componente: PestanaCortes,
+  },
+  {
+    id: "estimaciones",
+    etiqueta: "Estimaciones",
+    visible: (c) => c.contratos.length > 0,
+    Componente: PestanaEstimaciones,
   },
   {
     id: "valor-ganado",

@@ -255,4 +255,43 @@ describe("store de la demo", () => {
       validadoPor: "Ricardo Salas",
     });
   });
+
+  it("liberar el local de un contrato por vencer lo deja disponible con el repricing aplicado", () => {
+    const seed = crearSeed();
+    const local = seed.locales.find((l) => l.id === "plz-alborada-A-05")!;
+    const contrato = seed.contratos.find((c) => c.localId === local.id)!;
+    expect(contrato.estado).toBe("VIGENTE");
+    const s = useAppStore.getState();
+    s.iniciarSesion("usr-pmo");
+    s.liberarLocal(local, contrato, "2026-11-10", "Fin de relación");
+    const est = useAppStore.getState();
+    expect(est.contratos.terminaciones[contrato.id]).toEqual({
+      fecha: "2026-11-10",
+      motivo: "Fin de relación",
+    });
+    const ajuste = est.locales.ajustes[local.id];
+    expect(ajuste.estatus).toBe("DISPONIBLE");
+    expect(ajuste.precioVigente).toBeGreaterThan(local.precioVigente);
+    expect(ajuste.precioMinimo).toBeGreaterThan(local.precioMinimo);
+    expect(ajuste.historial?.slice(-2).map((h) => h.concepto)).toEqual([
+      "LISTA",
+      "MINIMO",
+    ]);
+    expect(ajuste.historial?.at(-1)?.motivo).toContain("Repricing al liberar (regla");
+    expect(ajuste.bitacora?.at(-1)?.titulo).toBe("Local liberado");
+    // Liberar dos veces no vuelve a repreciar.
+    useAppStore.getState().liberarLocal(local, contrato, "2026-11-11", "Otra vez");
+    expect(useAppStore.getState().locales.ajustes[local.id]).toEqual(ajuste);
+  });
+
+  it("un contrato no vigente no se libera", () => {
+    const seed = crearSeed();
+    const local = seed.locales.find((l) => l.id === "plz-alborada-A-05")!;
+    const contrato = {
+      ...seed.contratos.find((c) => c.localId === local.id)!,
+      estado: "TERMINADO" as const,
+    };
+    useAppStore.getState().liberarLocal(local, contrato, "2026-11-10", "x");
+    expect(useAppStore.getState().locales.ajustes[local.id]).toBeUndefined();
+  });
 });

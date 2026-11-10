@@ -54,6 +54,8 @@ export function crearCotizacion(parcial: Partial<Cotizacion> = {}): Cotizacion {
     estado: "BORRADOR",
     reglaPactada: REGLA_INPC_1PT,
     origenRegla: "HEREDADA",
+    vendedorId: "usr-sofia",
+    ofertas: [],
     ...parcial,
   };
 }
@@ -95,6 +97,7 @@ export function crearProspecto(parcial: Partial<Prospecto> = {}): Prospecto {
     etapa: "NUEVO",
     localIds: ["A-09"],
     creadoEl: "2026-10-01",
+    vendedorId: "usr-sofia",
     actividad: [],
     ...parcial,
   };
@@ -136,6 +139,8 @@ export function crearContratoObra(parcial: Partial<ContratoObra> = {}): Contrato
     ],
     inicioPlan: "2026-01-01",
     finPlan: "2026-01-11",
+    anticipoPct: 0.3,
+    fondoGarantiaPct: 0.05,
     ...parcial,
   };
 }

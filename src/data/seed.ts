@@ -9,30 +9,48 @@ import {
   type Cotizacion,
   type DiferenciaConciliacion,
   type ExcepcionPrecio,
+  type EnvioAviso,
   type EventoSync,
   type Factura,
   type Integracion,
   type Licitacion,
   type Local,
   type Locatario,
+  type FacturaSat,
   type Mantenimiento,
   type Planta,
+  type PlantillaAviso,
   type Plaza,
+  type PresupuestoMantenimiento,
+  type ProgramacionAvisos,
   type Prospecto,
   type Proveedor,
   type Terreno,
 } from "@/domain";
+import {
+  crearEnviosAviso,
+  crearPlantillasAviso,
+  crearProgramacionAvisos,
+} from "./avisos";
 import { crearContexto } from "./cartera";
 import { CATALOGO, CIUDAD_HEROE, NOMBRES_PLAZA, PROVEEDORES } from "./catalogo";
 import { generarPlazas, repartir, type PlazaPlan } from "./generador";
-import { crearHeroe, PLAZA_HEROE_ID } from "./heroe";
+import {
+  COTIZACION_CANDADO,
+  COTIZACION_HEROE,
+  crearHeroe,
+  PLAZA_HEROE_ID,
+} from "./heroe";
 import { crearConectores } from "./integraciones";
+import { crearFacturasSat } from "./facturas-sat";
 import { crearMantenimientos } from "./mantenimientos";
+import { crearPresupuestosMantenimiento } from "./presupuestos-mantenimiento";
 import { crearLicitaciones } from "./licitaciones";
 import { crearObra, type DatosObra } from "./obra";
 import { crearPrng } from "./prng";
 import { crearProspectos } from "./prospectos";
 import { crearTerrenos } from "./terrenos";
+import { asignarVendedores, type CotizacionBase } from "./vendedores";
 
 export const SEMILLA_SEED = 2026;
 export const AÑO_ACTUALIZACION = 2027;
@@ -61,9 +79,17 @@ export interface Seed {
   licitaciones: Licitacion[];
   proveedores: Proveedor[];
   mantenimientos: Mantenimiento[];
+  /** Presupuesto anual de mantenimiento por plaza. */
+  presupuestosMantenimiento: PresupuestoMantenimiento[];
+  /** CFDI recibidos simulados (ligados y libres). */
+  facturasSat: FacturaSat[];
   integraciones: Integracion[];
   /** Log de sincronizaciones, del más antiguo al más reciente. */
   eventosSync: EventoSync[];
+  plantillasAviso: PlantillaAviso[];
+  programacionAvisos: ProgramacionAvisos;
+  /** Bitácora de envíos simulados de las dos semanas previas. */
+  enviosAviso: EnvioAviso[];
 }
 
 /** Cantidad de plazas a generar por ciudad (la héroe se escribe a mano). */
@@ -140,16 +166,21 @@ export function crearSeed(): Seed {
   const facturas = [...heroe.facturas, ...generado.facturas];
   const locatarios = [...heroe.locatarios, ...generado.locatarios];
   const contratos = [...heroe.contratos, ...generado.contratos];
-  const prospeccion = crearProspectos(
+  const cotizacionesSeed = asignarVendedores(
     [...heroe.cotizaciones, ...cotizacionesGeneradas],
-    locales,
-    locatarios,
-    contratos,
+    new Set([
+      COTIZACION_HEROE,
+      COTIZACION_CANDADO,
+      ...excepciones.slice(0, 2).map((e) => e.cotizacionId),
+    ]),
   );
+  const prospeccion = crearProspectos(cotizacionesSeed, locales, locatarios, contratos);
   const terrenos = crearTerrenos(plazas, locales);
   const obra = crearObra(terrenos);
+  const mantenimientos = crearMantenimientos(plazas, locales);
   const diferenciasEnKontrol = crearDiferencias(facturas);
   const ultimoSync = `${DEMO_TODAY}T15:52:00`;
+  const programacionAvisos = crearProgramacionAvisos();
   const conectores = crearConectores({
     facturas,
     diferencias: diferenciasEnKontrol,
@@ -186,9 +217,14 @@ export function crearSeed(): Seed {
       ...p,
       especialidades: [...p.especialidades],
     })),
-    mantenimientos: crearMantenimientos(plazas, locales),
+    mantenimientos,
+    presupuestosMantenimiento: crearPresupuestosMantenimiento(plazas, mantenimientos),
+    facturasSat: crearFacturasSat(mantenimientos),
     integraciones: conectores.integraciones,
     eventosSync: conectores.eventosSync,
+    plantillasAviso: crearPlantillasAviso(),
+    programacionAvisos,
+    enviosAviso: crearEnviosAviso(facturas, programacionAvisos),
   };
 }
 
@@ -198,7 +234,7 @@ export function crearSeed(): Seed {
  * Las excepciones históricas APLICADAS de los contratos van después.
  */
 function crearExcepciones(
-  cotizaciones: Cotizacion[],
+  cotizaciones: CotizacionBase[],
   locales: Local[],
   historicas: ExcepcionPrecio[],
 ): ExcepcionPrecio[] {
@@ -232,7 +268,7 @@ function crearExcepciones(
       localId: local.id,
       rentaSolicitada: cotizacion.rentaMensual,
       precioMinimo: local.precioMinimo,
-      solicitadaPor: "Jorge Ramírez",
+      solicitadaPor: "Sofía Medina",
       solicitadaEn: sumarDias(DEMO_TODAY, -(2 - i)),
       ...caso,
     };

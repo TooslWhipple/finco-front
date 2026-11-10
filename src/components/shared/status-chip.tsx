@@ -66,6 +66,8 @@ export const ESTATUS = {
   ATRASADO: { etiqueta: "Atrasado", tono: "coral" },
   PREVENTIVO: { etiqueta: "Preventivo", tono: "primario" },
   CORRECTIVO: { etiqueta: "Correctivo", tono: "coral" },
+  REQUIERE_AUTORIZACION: { etiqueta: "Requiere autorización", tono: "naranja" },
+  SOBREGIRO_AUTORIZADO: { etiqueta: "Sobregiro autorizado", tono: "verde" },
   // Integraciones y log de sincronización
   CONECTADA: { etiqueta: "Conectada", tono: "verde" },
   CON_DIFERENCIAS: { etiqueta: "Con diferencias", tono: "naranja" },
@@ -78,6 +80,12 @@ export const ESTATUS = {
   ADJUDICADA: { etiqueta: "Adjudicada", tono: "verde" },
   SIN_RESPUESTA: { etiqueta: "No respondió", tono: "neutro" },
   DESCARTADO: { etiqueta: "Descartado", tono: "coral" },
+  // Temperatura de prospectos
+  AL_DIA: { etiqueta: "Al día", tono: "verde" },
+  TIBIO: { etiqueta: "Tibio", tono: "naranja" },
+  FRIO: { etiqueta: "Frío", tono: "coral" },
+  // Avisos de cobranza
+  SIMULADO: { etiqueta: "Simulado", tono: "neutro" },
   // Candados
   CUMPLE: { etiqueta: "Cumple", tono: "verde" },
   FALLA: { etiqueta: "No cumple", tono: "coral" },

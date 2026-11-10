@@ -7,7 +7,6 @@ import {
   sumarDias,
   sumarMeses,
   type Contrato,
-  type Cotizacion,
   type EstatusLocal,
   type Local,
   type Locatario,
@@ -29,6 +28,7 @@ import { coordenadasPlaza } from "./coordenadas";
 import type { ParteSeed } from "./heroe";
 import { geometriaRejilla, LIENZO } from "./planos";
 import type { Prng } from "./prng";
+import type { CotizacionBase } from "./vendedores";
 import {
   factorMinimoPlaza,
   rentaContratadaLocal,
@@ -296,7 +296,7 @@ function cotizacionGenerada(
   local: Local,
   reglaPlaza: ReglaActualizacion,
   id: string,
-): Cotizacion {
+): CotizacionBase {
   const emitida = sumarDias(DEMO_TODAY, -rng.entero(1, 10));
   return {
     id,

@@ -16,6 +16,8 @@ import {
   type OpcionPill,
 } from "@/components/shared";
 import { Button } from "@/components/ui/button";
+import { can } from "@/config/permissions";
+import { IDS_VENDEDORES, nombreDeUsuario } from "@/config/usuarios";
 import { DEMO_TODAY } from "@/domain";
 import {
   useCiudades,
@@ -27,6 +29,7 @@ import {
   useLocatarios,
   usePlazas,
   useProspectos,
+  useSesion,
   useTerrenos,
 } from "@/hooks";
 import { MES_DEMO } from "@/lib/tiempo";
@@ -75,6 +78,7 @@ export function Reportes({
 }: {
   vistaInicial?: VistaReportes;
 }) {
+  const { rol } = useSesion();
   const ciudades = useCiudades().datos;
   const plazas = usePlazas().datos;
   const locales = useLocales().datos;
@@ -121,14 +125,18 @@ export function Reportes({
     ],
   );
 
-  const definicion = REPORTES.find((r) => r.id === idReporte) ?? REPORTES[0]!;
+  const disponibles = useMemo(
+    () => REPORTES.filter((r) => !r.requiere || can(rol, r.requiere)),
+    [rol],
+  );
+  const definicion = disponibles.find((r) => r.id === idReporte) ?? disponibles[0]!;
   const resultado = useMemo(
     () => (datos ? definicion.calcular(acotarDatos(datos, filtro)) : undefined),
     [datos, definicion, filtro],
   );
   const columnas = useMemo(() => (resultado ? columnasDe(resultado) : []), [resultado]);
 
-  const opcionesReporte: OpcionPill<IdReporte>[] = REPORTES.map((r) => ({
+  const opcionesReporte: OpcionPill<IdReporte>[] = disponibles.map((r) => ({
     valor: r.id,
     etiqueta: r.titulo,
   }));
@@ -137,6 +145,10 @@ export function Reportes({
     ...(ciudades ?? [])
       .filter((c) => plazas?.some((p) => p.ciudadId === c.id))
       .map((c) => ({ valor: c.id, etiqueta: c.nombre })),
+  ];
+  const opcionesVendedor = [
+    { valor: TODOS, etiqueta: "Todos los vendedores" },
+    ...IDS_VENDEDORES.map((id) => ({ valor: id, etiqueta: nombreDeUsuario(id) })),
   ];
   const opcionesPlaza = [
     { valor: TODOS, etiqueta: "Todas las plazas" },
@@ -203,11 +215,21 @@ export function Reportes({
             envolver
             derecha={
               <>
+                {definicion.id === "OFERTAS_VENDEDOR" ? (
+                  <SelectorPill
+                    etiqueta="Vendedor"
+                    valor={filtro.vendedorId ?? TODOS}
+                    opciones={opcionesVendedor}
+                    onChange={(vendedorId) => setFiltro((f) => ({ ...f, vendedorId }))}
+                  />
+                ) : null}
                 <SelectorPill
                   etiqueta="Ciudad"
                   valor={filtro.ciudadId}
                   opciones={opcionesCiudad}
-                  onChange={(ciudadId) => setFiltro({ ciudadId, plazaId: TODOS })}
+                  onChange={(ciudadId) =>
+                    setFiltro((f) => ({ ...f, ciudadId, plazaId: TODOS }))
+                  }
                 />
                 <SelectorPill
                   etiqueta="Plaza"
@@ -222,7 +244,10 @@ export function Reportes({
               etiqueta="Reporte"
               opciones={opcionesReporte}
               valor={idReporte}
-              onChange={setIdReporte}
+              onChange={(id) => {
+                setIdReporte(id);
+                setFiltro((f) => ({ ...f, plazaId: TODOS }));
+              }}
               envolver
             />
           </BarraFiltros>

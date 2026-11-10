@@ -104,3 +104,107 @@ export function formatMesAnio(valor: Date | string): string {
     .toLocaleDateString(LOCALE, { month: "short", year: "numeric" })
     .replace(/\./g, "");
 }
+
+const UNIDADES = [
+  "cero",
+  "un",
+  "dos",
+  "tres",
+  "cuatro",
+  "cinco",
+  "seis",
+  "siete",
+  "ocho",
+  "nueve",
+  "diez",
+  "once",
+  "doce",
+  "trece",
+  "catorce",
+  "quince",
+  "dieciséis",
+  "diecisiete",
+  "dieciocho",
+  "diecinueve",
+  "veinte",
+  "veintiún",
+  "veintidós",
+  "veintitrés",
+  "veinticuatro",
+  "veinticinco",
+  "veintiséis",
+  "veintisiete",
+  "veintiocho",
+  "veintinueve",
+] as const;
+const DECENAS = [
+  "",
+  "",
+  "",
+  "treinta",
+  "cuarenta",
+  "cincuenta",
+  "sesenta",
+  "setenta",
+  "ochenta",
+  "noventa",
+] as const;
+const CENTENAS = [
+  "",
+  "ciento",
+  "doscientos",
+  "trescientos",
+  "cuatrocientos",
+  "quinientos",
+  "seiscientos",
+  "setecientos",
+  "ochocientos",
+  "novecientos",
+] as const;
+
+/** Entero de 1 a 999 en letra, con apócope ("un") porque siempre precede a un sustantivo. */
+function centenasEnLetra(n: number): string {
+  if (n === 100) return "cien";
+  const c = Math.floor(n / 100);
+  const resto = n % 100;
+  const partes: string[] = [];
+  if (c > 0) partes.push(CENTENAS[c]);
+  if (resto > 0) {
+    if (resto < 30) partes.push(UNIDADES[resto]);
+    else {
+      const u = resto % 10;
+      partes.push(
+        u === 0
+          ? DECENAS[resto / 10]
+          : `${DECENAS[Math.floor(resto / 10)]} y ${UNIDADES[u]}`,
+      );
+    }
+  }
+  return partes.join(" ");
+}
+
+function enteroEnLetra(n: number): string {
+  if (n === 0) return "cero";
+  const millones = Math.floor(n / 1_000_000);
+  const miles = Math.floor((n % 1_000_000) / 1000);
+  const resto = n % 1000;
+  const partes: string[] = [];
+  if (millones > 0)
+    partes.push(millones === 1 ? "un millón" : `${centenasEnLetra(millones)} millones`);
+  if (miles > 0) partes.push(miles === 1 ? "mil" : `${centenasEnLetra(miles)} mil`);
+  if (resto > 0) partes.push(centenasEnLetra(resto));
+  return partes.join(" ");
+}
+
+/**
+ * Monto en letra al estilo de los contratos mexicanos:
+ * 18740 -> "dieciocho mil setecientos cuarenta pesos 00/100 M.N.". Admite hasta 999,999,999.
+ */
+export function montoEnLetra(monto: number): string {
+  const centavosTotales = Math.round(monto * 100);
+  const pesos = Math.floor(centavosTotales / 100);
+  const centavos = String(centavosTotales % 100).padStart(2, "0");
+  const sustantivo =
+    pesos === 1 ? "peso" : pesos % 1_000_000 === 0 && pesos > 0 ? "de pesos" : "pesos";
+  return `${enteroEnLetra(pesos)} ${sustantivo} ${centavos}/100 M.N.`;
+}

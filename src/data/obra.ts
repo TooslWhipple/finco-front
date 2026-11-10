@@ -4,19 +4,24 @@ import {
   cierreSemana,
   DEMO_TODAY,
   ETIQUETA_PARTIDA,
+  firmarEstimacion,
   lunesDeSemana,
+  pagoDeEstimacion,
+  resolverEstimacion,
   sumarDias,
   type ActividadCronograma,
   type ConceptoObra,
   type ContratoObra,
   type CorteSemanal,
   type EstadoCorte,
+  type EstimacionObra,
   type FaseCronograma,
   type FechaISO,
   type PagoObra,
   type PartidaObra,
   type Terreno,
   type UnidadObra,
+  type VolumenCorte,
 } from "@/domain";
 import { evidenciaCorte } from "./fotos";
 import { crearPrng, type Prng } from "./prng";
@@ -51,6 +56,12 @@ interface SpecContrato {
   /** Días de desfase del arranque y cierre reales respecto al plan. */
   atraso: number;
   ejecucion: SpecEjecucion;
+  /**
+   * Qué pasa con el último corte validado cuando la obra lleva estimaciones:
+   * `pendiente` es una estimación firmada que espera a la PMO; `libre` queda sin
+   * estimar para que el Supervisor la registre en la demo.
+   */
+  colaEstimacion?: "pendiente" | "libre";
   conceptos: readonly SpecConcepto[];
 }
 
@@ -69,6 +80,8 @@ interface SpecObra {
   prefijo: string;
   /** Variación (fracción) de los volúmenes; 0 conserva los de la especificación. */
   variacion: number;
+  /** La obra paga por estimaciones: anticipo de 30% y últimos pagos ligados a estimaciones autorizadas. */
+  conEstimaciones?: boolean;
   previas: readonly SpecHito[];
   contratos: readonly SpecContrato[];
   entrega: SpecHito;
@@ -78,6 +91,7 @@ const VALLE_REAL: SpecObra = {
   terreno: "Terreno Valle Real",
   prefijo: "VR",
   variacion: 0,
+  conEstimaciones: true,
   previas: [
     {
       titulo: "Diseño del proyecto ejecutivo",
@@ -128,6 +142,7 @@ const VALLE_REAL: SpecObra = {
         pendiente: "2026-10-26",
         costo: 1.0526,
       },
+      colaEstimacion: "pendiente",
       conceptos: [
         ["CIM-01", "Plantilla de concreto pobre de 5 cm", "M2", 1_800, 210],
         ["CIM-02", "Zapatas de concreto f'c=250 kg/cm²", "M3", 620, 3_850],
@@ -147,6 +162,7 @@ const VALLE_REAL: SpecObra = {
         semanas: { "2026-10-19": 0.8, "2026-10-26": 0 },
         costo: 1.05,
       },
+      colaEstimacion: "libre",
       conceptos: [
         ["MUR-01", "Muro de block hueco de 15 cm", "M2", 7_800, 520],
         ["MUR-02", "Castillos de concreto armado", "ML", 4_200, 410],
@@ -429,7 +445,14 @@ export interface DatosObra {
   cronograma: ActividadCronograma[];
   cortes: CorteSemanal[];
   pagos: PagoObra[];
+  estimaciones: EstimacionObra[];
 }
+
+/** Anticipo de los contratos de obra que se pagan por estimación. */
+const ANTICIPO_PCT = 0.3;
+
+/** Fondo de garantía que se retiene de cada estimación. */
+const FONDO_GARANTIA_PCT = 0.05;
 
 /** Última semana con corte posible: la anterior a la de "hoy", que aún corre. */
 const ULTIMA_SEMANA_CON_CORTE = sumarDias(lunesDeSemana(DEMO_TODAY), -7);
@@ -457,6 +480,161 @@ function semanasDeEjecucion(contrato: ContratoObra): FechaISO[] {
 interface CortesDeContrato {
   cortes: CorteSemanal[];
   pagos: PagoObra[];
+  estimaciones: EstimacionObra[];
+}
+
+/** Corte validado ya listo para cobrarse: lo que alimenta pagos y estimaciones. */
+interface CorteCobrable {
+  semana: FechaISO;
+  firmadoEn: FechaISO;
+  volumenes: VolumenCorte[];
+  /** Volumen × precio unitario. */
+  importe: number;
+}
+
+/** Máximo de estimaciones autorizadas que genera la semilla por contrato. */
+const MAX_ESTIMACIONES_AUTORIZADAS = 3;
+
+function enGrupos<T>(lista: readonly T[], tamano: number): T[][] {
+  const grupos: T[][] = [];
+  for (let i = 0; i < lista.length; i += tamano) grupos.push(lista.slice(i, i + tamano));
+  return grupos;
+}
+
+/** Suma los volúmenes de varios cortes por concepto. */
+function volumenesDelGrupo(grupo: readonly CorteCobrable[]): VolumenCorte[] {
+  const acumulado = new Map<string, number>();
+  for (const corte of grupo) {
+    for (const { conceptoId, volumen } of corte.volumenes) {
+      acumulado.set(conceptoId, (acumulado.get(conceptoId) ?? 0) + volumen);
+    }
+  }
+  return [...acumulado].map(([conceptoId, volumen]) => ({
+    conceptoId,
+    volumen: Math.round(volumen * 100) / 100,
+  }));
+}
+
+/**
+ * Paga lo validado al costo del contrato, un pago por cada par de cortes. Es el
+ * historial de un contrato que no lleva estimaciones.
+ */
+function pagosPorCortes(
+  contrato: ContratoObra,
+  validados: readonly CorteCobrable[],
+  costo: number,
+): PagoObra[] {
+  const pagos: PagoObra[] = [];
+  let ganado = 0;
+  let pagado = 0;
+  for (const grupo of enGrupos(validados, CORTES_POR_PAGO)) {
+    ganado += grupo.reduce((suma, c) => suma + c.importe, 0);
+    const monto = Math.round(ganado * costo) - pagado;
+    if (monto <= 0) continue;
+    pagado += monto;
+    pagos.push({
+      id: `pago-${contrato.id}-${pagos.length + 1}`,
+      contratoObraId: contrato.id,
+      fecha: grupo[grupo.length - 1].firmadoEn,
+      monto,
+      folioFactura: `FAC-${contrato.folio}-${pagos.length + 1}`,
+    });
+  }
+  return pagos;
+}
+
+/**
+ * Pagos y estimaciones de un contrato que se paga por estimación. Los últimos
+ * grupos de cortes son estimaciones autorizadas, cuyo pago es su importe bruto;
+ * lo anterior es historial. El sobrecosto del contrato (`costo`) se reparte en el
+ * historial para que el CPI del héroe no cambie. El último corte puede quedar como
+ * estimación pendiente de la PMO o sin estimar; en ambos casos ya se había pagado
+ * a cuenta, como parte del historial.
+ */
+function liquidarPorEstimaciones(
+  contrato: ContratoObra,
+  validados: readonly CorteCobrable[],
+  ejecucion: SpecEjecucion,
+  cola: SpecContrato["colaEstimacion"],
+  siguienteIdEstimacion: () => string,
+): Pick<CortesDeContrato, "pagos" | "estimaciones"> {
+  const supervisor = usuarioDeRol("SUPERVISOR_OBRA").nombre;
+  const pmo = usuarioDeRol("PMO").nombre;
+  const ultimo = validados.at(-1);
+  const colaCorte = cola && ultimo ? ultimo : undefined;
+  const pagables = colaCorte ? validados.slice(0, -1) : validados;
+  const grupos = enGrupos(pagables, CORTES_POR_PAGO);
+  // Sin corte de cola, el historial debe conservar un grupo que absorba el sobrecosto.
+  const nAutorizadas = Math.min(
+    MAX_ESTIMACIONES_AUTORIZADAS,
+    colaCorte || grupos.length === 1 ? grupos.length : grupos.length - 1,
+  );
+  const estimados = grupos.slice(grupos.length - nAutorizadas);
+  // El último corte (pendiente de estimar o sin estimar) se pagó a cuenta, igual que el historial.
+  const historial: CorteCobrable[][] = [
+    ...grupos.slice(0, grupos.length - nAutorizadas),
+    ...(colaCorte ? [[colaCorte]] : []),
+  ];
+
+  const estimaciones: EstimacionObra[] = [];
+  const pagosEstimacion: PagoObra[] = [];
+  const crear = (grupo: readonly CorteCobrable[]): EstimacionObra => {
+    const id = siguienteIdEstimacion();
+    const fecha = grupo[grupo.length - 1].firmadoEn;
+    const firmada = firmarEstimacion(
+      id,
+      contrato,
+      { contratoObraId: contrato.id, volumenes: volumenesDelGrupo(grupo) },
+      estimaciones,
+      supervisor,
+      fecha,
+      evidenciaCorte(`${id}-${fecha}`),
+    );
+    return {
+      ...firmada,
+      periodo: {
+        desde: grupo[0].semana,
+        hasta: cierreSemana(grupo[grupo.length - 1].semana),
+      },
+    };
+  };
+  for (const grupo of estimados) {
+    const fecha = grupo[grupo.length - 1].firmadoEn;
+    const autorizada = resolverEstimacion(crear(grupo), "AUTORIZADA_PMO", pmo, fecha);
+    const pago = pagoDeEstimacion(autorizada, contrato, fecha);
+    estimaciones.push({ ...autorizada, pagoId: pago.id });
+    pagosEstimacion.push(pago);
+  }
+  if (colaCorte && cola === "pendiente") {
+    estimaciones.push(crear([colaCorte]));
+  }
+
+  // Lo que el contratista cobró de más sobre el valor ganado va al historial.
+  const objetivo = Math.round(
+    validados.reduce((suma, c) => suma + c.importe, 0) * ejecucion.costo,
+  );
+  const brutoEstimado = pagosEstimacion.reduce((suma, p) => suma + p.monto, 0);
+  const restante = objetivo - brutoEstimado;
+  const ganadoHistorial = historial.flat().reduce((suma, c) => suma + c.importe, 0);
+  const pagosHistorial: PagoObra[] = [];
+  let repartido = 0;
+  historial.forEach((grupo, i) => {
+    const importe = grupo.reduce((suma, c) => suma + c.importe, 0);
+    const monto =
+      i === historial.length - 1
+        ? restante - repartido
+        : Math.round((restante * importe) / ganadoHistorial);
+    repartido += monto;
+    if (monto <= 0) return;
+    pagosHistorial.push({
+      id: `pago-${contrato.id}-${pagosHistorial.length + 1}`,
+      contratoObraId: contrato.id,
+      fecha: grupo[grupo.length - 1].firmadoEn,
+      monto,
+      folioFactura: `FAC-${contrato.folio}-${pagosHistorial.length + 1}`,
+    });
+  });
+  return { pagos: [...pagosHistorial, ...pagosEstimacion], estimaciones };
 }
 
 /**
@@ -466,32 +644,17 @@ interface CortesDeContrato {
  */
 function ejecutarContrato(
   contrato: ContratoObra,
-  ejecucion: SpecEjecucion,
+  spec: SpecContrato,
+  conEstimaciones: boolean,
   siguienteIdCorte: () => string,
+  siguienteIdEstimacion: () => string,
 ): CortesDeContrato {
+  const { ejecucion } = spec;
   const supervisor = usuarioDeRol("SUPERVISOR_OBRA").nombre;
   const pmo = usuarioDeRol("PMO").nombre;
   const cortes: CorteSemanal[] = [];
-  const pagos: PagoObra[] = [];
+  const validados: CorteCobrable[] = [];
   let fraccion = 0;
-  let ganado = 0;
-  let pagado = 0;
-  let validados = 0;
-  let ultimoValidado: FechaISO | undefined;
-
-  /** Paga al contratista lo ganado hasta ahora (al costo del contrato) que aún no se le paga. */
-  const registrarPago = (fecha: FechaISO) => {
-    const monto = Math.round(ganado * ejecucion.costo) - pagado;
-    if (monto <= 0) return;
-    pagado += monto;
-    pagos.push({
-      id: `pago-${contrato.id}-${pagos.length + 1}`,
-      contratoObraId: contrato.id,
-      fecha,
-      monto,
-      folioFactura: `FAC-${contrato.folio}-${pagos.length + 1}`,
-    });
-  };
 
   const volumenesHasta = (acumulada: number, anterior: number) =>
     contrato.conceptos
@@ -565,13 +728,30 @@ function ejecutarContrato(
       }),
     );
 
-    ganado += volumenes.reduce((suma, v) => suma + v.volumen * v.precio, 0);
-    validados += 1;
-    ultimoValidado = firmadoEn;
-    if (validados % CORTES_POR_PAGO === 0) registrarPago(firmadoEn);
+    validados.push({
+      semana,
+      firmadoEn,
+      volumenes: base.volumenes,
+      importe: volumenes.reduce((suma, v) => suma + v.volumen * v.precio, 0),
+    });
   }
-  if (ultimoValidado) registrarPago(ultimoValidado);
-  return { cortes, pagos };
+  if (conEstimaciones) {
+    return {
+      cortes,
+      ...liquidarPorEstimaciones(
+        contrato,
+        validados,
+        ejecucion,
+        spec.colaEstimacion,
+        siguienteIdEstimacion,
+      ),
+    };
+  }
+  return {
+    cortes,
+    pagos: pagosPorCortes(contrato, validados, ejecucion.costo),
+    estimaciones: [],
+  };
 }
 
 /**
@@ -584,8 +764,12 @@ export function crearObra(terrenos: readonly Terreno[]): DatosObra {
   const cronograma: ActividadCronograma[] = [];
   const cortes: CorteSemanal[] = [];
   const pagos: PagoObra[] = [];
+  const estimaciones: EstimacionObra[] = [];
   let consecutivoCorte = 0;
   const siguienteIdCorte = () => `cor-${String(++consecutivoCorte).padStart(4, "0")}`;
+  let consecutivoEstimacion = 0;
+  const siguienteIdEstimacion = () =>
+    `est-${String(++consecutivoEstimacion).padStart(4, "0")}`;
 
   for (const spec of OBRAS) {
     const terreno = terrenoDe(spec, terrenos);
@@ -612,11 +796,20 @@ export function crearObra(terrenos: readonly Terreno[]): DatosObra {
         conceptos: conceptosDe(id, c.conceptos, spec.variacion, rng),
         inicioPlan: c.inicio,
         finPlan: c.fin,
+        anticipoPct: spec.conEstimaciones ? ANTICIPO_PCT : 0,
+        fondoGarantiaPct: FONDO_GARANTIA_PCT,
       };
       contratos.push(contrato);
-      const ejecutado = ejecutarContrato(contrato, c.ejecucion, siguienteIdCorte);
+      const ejecutado = ejecutarContrato(
+        contrato,
+        c,
+        spec.conEstimaciones === true,
+        siguienteIdCorte,
+        siguienteIdEstimacion,
+      );
       cortes.push(...ejecutado.cortes);
       pagos.push(...ejecutado.pagos);
+      estimaciones.push(...ejecutado.estimaciones);
       cronograma.push({
         id: `${terreno.id}-act-construccion-${i + 1}`,
         terrenoId: terreno.id,
@@ -630,5 +823,5 @@ export function crearObra(terrenos: readonly Terreno[]): DatosObra {
     });
     cronograma.push(hito(spec.entrega, 1));
   }
-  return { contratos, cronograma, cortes, pagos };
+  return { contratos, cronograma, cortes, pagos, estimaciones };
 }

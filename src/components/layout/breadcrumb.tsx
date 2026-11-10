@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment } from "react";
-import { useLocal, usePlaza } from "@/hooks";
+import { useLocal, usePlaza, useTerrenos } from "@/hooks";
 
 const ETIQUETAS: Readonly<Record<string, string>> = {
   plazas: "Plazas y locales",
@@ -34,12 +34,18 @@ function CodigoLocal({ id }: { id: string }) {
   return <>{datos ? `Local ${datos.codigo}` : id}</>;
 }
 
+function NombreTerreno({ id }: { id: string }) {
+  const terreno = useTerrenos().datos.find((t) => t.id === id);
+  return <>{terreno?.nombre ?? id}</>;
+}
+
 /** Etiqueta de un segmento de la ruta; los ids se resuelven contra los datos. */
 function Etiqueta({ segmentos, indice }: { segmentos: string[]; indice: number }) {
   const segmento = segmentos[indice];
   const previo = segmentos[indice - 1];
   if (previo === "plazas") return <NombrePlaza id={segmento} />;
   if (previo === "locales") return <CodigoLocal id={segmento} />;
+  if (previo === "terrenos-y-proyectos") return <NombreTerreno id={segmento} />;
   if (segmento === "locales") return <>Locales</>;
   return <>{ETIQUETAS[segmento] ?? segmento}</>;
 }

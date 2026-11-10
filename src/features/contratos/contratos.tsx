@@ -6,6 +6,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   BarraFiltros,
   DataTable,
+  TablaConDetalle,
   EmptyState,
   ESTATUS,
   KpiCard,
@@ -28,7 +29,7 @@ import { VistaPreviaContrato } from "@/features/cotizacion/vista-previa-contrato
 import {
   useCiudades,
   useContratosVivos,
-  useCotizaciones,
+  useTodasLasCotizaciones,
   useLocales,
   useLocatarios,
   usePlazas,
@@ -62,7 +63,7 @@ export function Contratos({ contratoInicialId }: ContratosProps) {
   const locatarios = useLocatarios().datos;
   const ciudades = useCiudades().datos;
   const prospectos = useProspectos().datos;
-  const cotizaciones = useCotizaciones();
+  const cotizaciones = useTodasLasCotizaciones();
   const enviarContratoAFirma = useAppStore((s) => s.enviarContratoAFirma);
   const registrarFirmaContrato = useAppStore((s) => s.registrarFirmaContrato);
 
@@ -261,57 +262,61 @@ export function Contratos({ contratoInicialId }: ContratosProps) {
         />
       </BarraFiltros>
 
-      <div
-        className={cn(
-          "grid items-start gap-6",
-          seleccionado && "xl:grid-cols-[minmax(0,1fr)_26rem]",
-        )}
-      >
-        <SectionCard
-          titulo={`Contratos (${formatNumero(visibles.length)})`}
-          className="min-w-0"
-        >
-          {visibles.length === 0 ? (
-            <EmptyState
-              icono={FileX}
-              titulo="Sin contratos con estos filtros"
-              descripcion="Quita un filtro para ver más contratos."
-            />
-          ) : (
-            <DataTable
-              columns={columnas}
-              data={visibles}
-              tamanoPagina={12}
-              onFilaClick={(c) => setSeleccionadoId(c.id)}
-            />
-          )}
-        </SectionCard>
-        {seleccionado ? (
-          <div className="min-w-0 space-y-6">
-            <DetalleContrato
-              contrato={seleccionado}
-              hoy={DEMO_TODAY}
-              locatario={nombreDe(seleccionado)}
-              local={localSel}
-              plaza={plazaSel}
-              cotizacion={cotizacionSel}
-              puedeGestionar={puedeGestionar}
-              onEnviarAFirma={enviarContratoAFirma}
-              onRegistrarFirma={(id) => registrarFirmaContrato(id, AHORA_DEMO)}
-              onCerrar={() => setSeleccionadoId(null)}
-            />
-            {cotizacionSel && localSel && plazaSel ? (
-              <VistaPreviaContrato
-                cotizacion={cotizacionSel}
+      <TablaConDetalle
+        anchoPanel="26rem"
+        etiqueta="Detalle del contrato"
+        onCerrar={() => setSeleccionadoId(null)}
+        lista={
+          <SectionCard
+            titulo={`Contratos (${formatNumero(visibles.length)})`}
+            className="min-w-0"
+          >
+            {visibles.length === 0 ? (
+              <EmptyState
+                icono={FileX}
+                titulo="Sin contratos con estos filtros"
+                descripcion="Quita un filtro para ver más contratos."
+              />
+            ) : (
+              <DataTable
+                columns={columnas}
+                data={visibles}
+                tamanoPagina={12}
+                ocultarEnVertical={["fin", "dias"]}
+                onFilaClick={(c) => setSeleccionadoId(c.id)}
+              />
+            )}
+          </SectionCard>
+        }
+        detalle={
+          seleccionado ? (
+            <div className="min-w-0 space-y-6">
+              <DetalleContrato
+                contrato={seleccionado}
+                hoy={DEMO_TODAY}
+                locatario={nombreDe(seleccionado)}
                 local={localSel}
                 plaza={plazaSel}
-                ciudad={ciudadSel}
-                folioContrato={seleccionado.folio ?? seleccionado.id}
+                cotizacion={cotizacionSel}
+                puedeGestionar={puedeGestionar}
+                onEnviarAFirma={enviarContratoAFirma}
+                onRegistrarFirma={(id) => registrarFirmaContrato(id, AHORA_DEMO)}
+                onCerrar={() => setSeleccionadoId(null)}
               />
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+              {cotizacionSel && localSel && plazaSel ? (
+                <VistaPreviaContrato
+                  cotizacion={cotizacionSel}
+                  local={localSel}
+                  plaza={plazaSel}
+                  ciudad={ciudadSel}
+                  folioContrato={seleccionado.folio ?? seleccionado.id}
+                  contratoGenerado
+                />
+              ) : null}
+            </div>
+          ) : null
+        }
+      />
     </div>
   );
 }

@@ -16,3 +16,4 @@ export * from "./galeria-fotos";
 export * from "./barra-progreso";
 export * from "./ayuda";
 export * from "./grafica-lineas";
+export * from "./tabla-con-detalle";

@@ -16,8 +16,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Campo, CLASE_SELECT } from "@/features/cotizacion/campo";
 import {
   CATEGORIAS_MANTENIMIENTO,
+  consumoPresupuesto,
   DEMO_TODAY,
   erroresMantenimiento,
+  excedenteSobregiro,
+  requiereAutorizacion,
   ETIQUETA_CATEGORIA_MANTENIMIENTO,
   ETIQUETA_TIPO_MANTENIMIENTO,
   sumarDias,
@@ -31,7 +34,7 @@ import {
   type Proveedor,
   type TipoMantenimiento,
 } from "@/domain";
-import { useLocales } from "@/hooks";
+import { useLocales, useMantenimientos, usePresupuestosMantenimiento } from "@/hooks";
 import { formatMoneda } from "@/lib/format";
 import type { NuevoMantenimiento } from "@/store/reducers";
 
@@ -91,6 +94,7 @@ function FormularioFinalizar({
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           aria-invalid={error ? true : undefined}
+          className="h-11 md:text-base"
         />
       </Campo>
       <DialogFooter>
@@ -232,6 +236,21 @@ function FormularioNuevo({
     { local, proveedor: proveedores.find((p) => p.id === proveedorId) },
   )[0];
   const invalido = Boolean(errorTitulo || errorCosto || errorFecha || errorDominio);
+
+  // Aviso (no error): pasar del presupuesto de la plaza deja el trabajo pendiente de Dirección.
+  const presupuestos = usePresupuestosMantenimiento();
+  const todos = useMantenimientos().datos;
+  const excedente = useMemo(() => {
+    if (errorCosto || fecha === "") return 0;
+    const año = Number(fecha.slice(0, 4));
+    const presupuesto = presupuestos.find((p) => p.plazaId === plazaId && p.año === año);
+    if (!presupuesto) return 0;
+    const consumo = consumoPresupuesto(plazaId, año, todos);
+    const m = { costoEstimado: Math.round(costo), costoReal: undefined };
+    return requiereAutorizacion(m, presupuesto, consumo)
+      ? excedenteSobregiro(m, presupuesto, consumo)
+      : 0;
+  }, [errorCosto, fecha, presupuestos, plazaId, todos, costo]);
 
   return (
     <form
@@ -414,6 +433,7 @@ function FormularioNuevo({
             value={costoTexto}
             onChange={(e) => setCostoTexto(e.target.value)}
             aria-invalid={intentado && errorCosto ? true : undefined}
+            className="h-11 md:text-base"
           />
         </Campo>
       </div>
@@ -439,6 +459,16 @@ function FormularioNuevo({
           </option>
         </select>
       </Campo>
+
+      {excedente > 0 ? (
+        <p
+          role="status"
+          className="rounded-lg bg-brand-cream px-3 py-2 text-sm text-brand-text ring-1 ring-brand-cta"
+        >
+          Este trabajo pasa del presupuesto de la plaza por {formatMoneda(excedente)}.
+          Quedará pendiente de autorización de Dirección y no podrá iniciarse antes.
+        </p>
+      ) : null}
 
       {intentado && errorDominio ? (
         <p role="alert" className="text-xs text-brand-danger">

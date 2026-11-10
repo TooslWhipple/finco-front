@@ -9,8 +9,8 @@ function activos(ruta: string): string[] {
 }
 
 describe("menú", () => {
-  it("tiene 13 ítems (los 12 del PDF más Mantenimientos, que pidió el jefe el 2026-11-04) ", () => {
-    expect(ITEMS).toHaveLength(13);
+  it("tiene 14 ítems (los 12 del PDF, Mantenimientos del 2026-11-04 y Disponibilidad del vendedor)", () => {
+    expect(ITEMS).toHaveLength(14);
     expect(ITEMS.some((i) => "accion" in i)).toBe(false);
   });
 
@@ -42,12 +42,13 @@ describe("visibilidad por rol", () => {
     itemsVisibles(rol).flatMap((g) => g.items.map((i) => i.id));
 
   it("Dirección y Superadmin ven todo", () => {
-    expect(ids("DIRECCION")).toHaveLength(13);
-    expect(ids("SUPERADMIN")).toHaveLength(13);
+    expect(ids("DIRECCION")).toHaveLength(14);
+    expect(ids("SUPERADMIN")).toHaveLength(14);
   });
 
   it("Ventas", () => {
     expect(ids("VENTAS")).toEqual([
+      "disponibilidad",
       "inicio",
       "mapa",
       "plazas",
@@ -56,6 +57,18 @@ describe("visibilidad por rol", () => {
       "contratos",
       "reportes",
     ]);
+  });
+
+  it("el Gerente comercial ve lo mismo que Ventas", () => {
+    expect(ids("GERENTE_COMERCIAL")).toEqual(ids("VENTAS"));
+    expect(ids("GERENTE_COMERCIAL")).toContain("reportes");
+  });
+
+  it("Disponibilidad es solo de los vendedores", () => {
+    expect(rutaPermitida("PMO", "/disponibilidad")).toBe(false);
+    expect(rutaPermitida("COBRANZA", "/disponibilidad")).toBe(false);
+    expect(rutaPermitida("VENTAS", "/disponibilidad")).toBe(true);
+    expect(activos("/disponibilidad")).toEqual(["disponibilidad"]);
   });
 
   it("Cobranza", () => {
@@ -75,6 +88,7 @@ describe("visibilidad por rol", () => {
       "mapa",
       "plazas",
       "contratos",
+      "mantenimientos",
       "precios-y-reglas",
       "terrenos",
       "reportes",

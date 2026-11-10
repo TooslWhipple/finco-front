@@ -13,6 +13,7 @@ import {
 import { formatFecha, formatMoneda, formatNumero } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { mantenimientosDeEstatus } from "./agregados";
+import { ChipSobregiro } from "./chip-sobregiro";
 import type { ContextoMantenimiento } from "./contexto";
 
 /** Las columnas ya cerradas se acotan a lo más reciente para no alargar el tablero. */
@@ -76,6 +77,7 @@ export function TableroMantenimientos({
               <span className="flex flex-wrap justify-end gap-1">
                 {estaAtrasado(m, DEMO_TODAY) ? <StatusChip estatus="ATRASADO" /> : null}
                 <StatusChip estatus={m.tipo} />
+                <ChipSobregiro mantenimiento={m} />
               </span>
             </span>
             <span className="block font-medium text-brand-primary">{m.titulo}</span>

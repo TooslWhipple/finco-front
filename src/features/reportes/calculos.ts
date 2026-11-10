@@ -19,6 +19,8 @@ import {
   reporteDescuentos,
   reporteRentasVsMinimo,
 } from "./calculos-rentas";
+import type { Accion } from "@/config/permissions";
+import { reporteOfertasVendedor } from "./calculos-ofertas";
 import type { DatosReporte, FiltroReporte, ResultadoReporte, TonoBarra } from "./tipos";
 
 export const TODOS = "TODOS";
@@ -34,15 +36,21 @@ export type IdReporte =
   | "CUMPLIMIENTO_PLAN"
   | "EMBUDO"
   | "VENCIMIENTOS"
-  | "TERRENOS";
+  | "TERRENOS"
+  | "OFERTAS_VENDEDOR";
 
 /** Margen sobre el mínimo por debajo del cual un local está "ajustado". */
 export const MARGEN_AJUSTADO = 0.05;
 
 /** Reduce los datos a la ciudad o plaza elegida; lo que no depende de ellas se conserva. */
 export function acotarDatos(datos: DatosReporte, filtro: FiltroReporte): DatosReporte {
-  const { ciudadId, plazaId } = filtro;
-  if (ciudadId === TODOS && plazaId === TODOS) return datos;
+  const { ciudadId, plazaId, vendedorId = TODOS } = filtro;
+  const cotizaciones =
+    vendedorId === TODOS
+      ? datos.cotizaciones
+      : datos.cotizaciones.filter((c) => c.vendedorId === vendedorId);
+  if (ciudadId === TODOS && plazaId === TODOS)
+    return vendedorId === TODOS ? datos : { ...datos, cotizaciones };
   const plazas = datos.plazas.filter(
     (p) =>
       (ciudadId === TODOS || p.ciudadId === ciudadId) &&
@@ -58,6 +66,7 @@ export function acotarDatos(datos: DatosReporte, filtro: FiltroReporte): DatosRe
     contratos: datos.contratos.filter((c) => idsLocal.has(c.localId)),
     facturas: datos.facturas.filter((f) => idsLocal.has(f.localId)),
     excepciones: datos.excepciones.filter((e) => idsLocal.has(e.localId)),
+    cotizaciones: cotizaciones.filter((c) => idsLocal.has(c.localId)),
     prospectos: datos.prospectos.filter((p) => p.localIds.some((id) => idsLocal.has(id))),
     terrenos: datos.terrenos.filter(
       (t) =>
@@ -387,6 +396,8 @@ export interface DefinicionReporte {
   archivo: string;
   calcular: (datos: DatosReporte) => ResultadoReporte;
   drilldown?: Drilldown;
+  /** Acción que debe tener el rol para ver el reporte; sin ella lo ven todos. */
+  requiere?: Accion;
 }
 
 /** Catálogo declarativo: agregar un reporte es agregar una entrada. */
@@ -457,5 +468,14 @@ export const REPORTES: readonly DefinicionReporte[] = [
     descripcion: "Proyectos en desarrollo: avance, semáforo y responsable.",
     archivo: "avance-terrenos",
     calcular: reporteTerrenos,
+  },
+  {
+    id: "OFERTAS_VENDEDOR",
+    titulo: "Ofertas por vendedor",
+    descripcion:
+      "Cada oferta hecha a un cliente: quién la hizo, qué local, qué día, a qué hora y a qué precio.",
+    archivo: "ofertas-por-vendedor",
+    calcular: reporteOfertasVendedor,
+    requiere: "comercial.verEquipo",
   },
 ];

@@ -3,6 +3,9 @@ import type { FechaISO } from "./tipos";
 /** "Hoy" fijo de la demo: martes 3 de noviembre de 2026. */
 export const DEMO_TODAY: FechaISO = "2026-11-03";
 
+/** Hora fija de la demo ("HH:mm"): la misma de `DEMO_TODAY` en `lib/tiempo.ts`. */
+export const HORA_DEMO = "15:56";
+
 const MS_DIA = 86_400_000;
 
 function aUtc(fecha: FechaISO): number {

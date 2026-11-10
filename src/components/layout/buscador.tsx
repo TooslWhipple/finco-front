@@ -196,13 +196,16 @@ export function Buscador() {
       <button
         type="button"
         onClick={() => setAbierto(true)}
-        className="flex h-10 w-56 items-center gap-2 rounded-lg border border-brand-line bg-brand-cream px-3 text-sm text-brand-text-muted transition-colors outline-none hover:border-brand-secondary focus-visible:ring-3 focus-visible:ring-ring/50"
+        aria-label="Buscar"
+        className="flex h-11 w-11 items-center justify-center gap-2 rounded-lg border border-brand-line bg-brand-cream px-3 text-sm text-brand-text-muted transition-colors outline-none hover:border-brand-secondary focus-visible:ring-3 focus-visible:ring-ring/50 xl:w-56 xl:justify-start"
       >
         <Search className="size-4" aria-hidden />
-        <span className="flex-1 truncate text-left">
+        <span className="hidden flex-1 truncate text-left xl:inline">
           Buscar plaza, local, locatario o contrato…
         </span>
-        <kbd className="rounded border border-brand-line bg-white px-1.5 text-xs">⌘K</kbd>
+        <kbd className="hidden rounded border border-brand-line bg-white px-1.5 text-xs xl:inline">
+          ⌘K
+        </kbd>
       </button>
       <CommandDialog
         open={abierto}

@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  añosHastaFecha,
   DEMO_TODAY,
   antiguedadSaldos,
   carteraVencida,
+  consumoPresupuesto,
+  excedenteSobregiro,
+  requiereAutorizacion,
   contratosPorVencer,
   diasAtraso,
+  diasSinContacto,
   erroresMantenimiento,
   kpisMantenimiento,
   consecutivoDeFolio,
@@ -18,10 +23,16 @@ import {
   prospectosPorLocal,
   repricingAlLiberar,
   semaforoTerreno,
+  temperaturaProspecto,
   rentaVsMinimo,
 } from "@/domain";
 import { CATALOGO, PROVEEDORES } from "./catalogo";
-import { COTIZACION_HEROE, LOCAL_HEROE, PLAZA_HEROE_ID } from "./heroe";
+import {
+  COTIZACION_CANDADO,
+  COTIZACION_HEROE,
+  LOCAL_HEROE,
+  PLAZA_HEROE_ID,
+} from "./heroe";
 import { crearSeed } from "./seed";
 
 const seed = crearSeed();
@@ -356,6 +367,79 @@ describe("prospectos", () => {
       expect(p.creadoEl).toBe(fechas[0]);
     }
   });
+
+  it("cada vendedor tiene al menos 3 prospectos fríos y 3 tibios", () => {
+    for (const vendedorId of ["usr-sofia", "usr-luis", "usr-jorge"]) {
+      const temperaturas = seed.prospectos
+        .filter((p) => p.vendedorId === vendedorId)
+        .map((p) => temperaturaProspecto(diasSinContacto(p, DEMO_TODAY)));
+      expect(
+        temperaturas.filter((t) => t === "FRIO").length,
+        vendedorId,
+      ).toBeGreaterThanOrEqual(3);
+      expect(
+        temperaturas.filter((t) => t === "TIBIO").length,
+        vendedorId,
+      ).toBeGreaterThanOrEqual(3);
+    }
+  });
+});
+
+describe("vendedores y ofertas", () => {
+  const idsVendedores = new Set(["usr-sofia", "usr-luis", "usr-jorge"]);
+  const prospectoPorId = new Map(seed.prospectos.map((p) => [p.id, p]));
+
+  it("cada cotización y prospecto tiene un vendedor demo, y el reparto ronda 45/35/20", () => {
+    for (const c of seed.cotizaciones)
+      expect(idsVendedores.has(c.vendedorId), c.id).toBe(true);
+    for (const p of seed.prospectos)
+      expect(idsVendedores.has(p.vendedorId), p.id).toBe(true);
+    const cuenta = (id: string) =>
+      seed.cotizaciones.filter((c) => c.vendedorId === id).length;
+    const total = seed.cotizaciones.length;
+    expect(cuenta("usr-sofia") / total).toBeGreaterThan(0.35);
+    expect(cuenta("usr-luis") / total).toBeGreaterThan(0.2);
+    expect(cuenta("usr-jorge") / total).toBeGreaterThan(0.05);
+    expect(cuenta("usr-sofia")).toBeGreaterThan(cuenta("usr-luis"));
+    expect(cuenta("usr-luis")).toBeGreaterThan(cuenta("usr-jorge"));
+  });
+
+  it("la cotización héroe, la del candado y las de la demo PMO son de Sofía; el prospecto sigue a su cotización", () => {
+    for (const id of [COTIZACION_HEROE, COTIZACION_CANDADO]) {
+      const cotizacion = seed.cotizaciones.find((c) => c.id === id)!;
+      expect(cotizacion.vendedorId, id).toBe("usr-sofia");
+      expect(
+        cotizacion.ofertas.every((o) => o.vendedorId === "usr-sofia"),
+        id,
+      ).toBe(true);
+    }
+    for (const e of seed.excepciones.slice(0, 2)) {
+      expect(seed.cotizaciones.find((c) => c.id === e.cotizacionId)?.vendedorId).toBe(
+        "usr-sofia",
+      );
+      expect(e.solicitadaPor).toBe("Sofía Medina");
+    }
+    for (const c of seed.cotizaciones)
+      expect(prospectoPorId.get(c.prospectoId ?? "")?.vendedorId, c.id).toBe(
+        c.vendedorId,
+      );
+  });
+
+  it("cada cotización trae de 1 a 3 ofertas cronológicas que terminan en sus términos", () => {
+    for (const c of seed.cotizaciones) {
+      expect(c.ofertas.length, c.id).toBeGreaterThanOrEqual(1);
+      expect(c.ofertas.length, c.id).toBeLessThanOrEqual(3);
+      const momentos = c.ofertas.map((o) => `${o.fecha} ${o.hora}`);
+      expect(momentos, c.id).toEqual([...momentos].sort());
+      expect(c.ofertas[0].fecha, c.id).toBe(c.emitidaEl);
+      expect(c.ofertas.at(-1)!.fecha <= DEMO_TODAY, c.id).toBe(true);
+      expect(c.ofertas.at(-1)).toMatchObject({
+        rentaMensual: c.rentaMensual,
+        plazoMeses: c.plazoMeses,
+      });
+      expect(c.ofertas.every((o) => o.vendedorId === c.vendedorId)).toBe(true);
+    }
+  });
 });
 
 describe("contratos", () => {
@@ -513,5 +597,83 @@ describe("mantenimientos", () => {
 
   it("el seed es determinista", () => {
     expect(crearSeed().mantenimientos).toEqual(seed.mantenimientos);
+  });
+});
+
+describe("presupuesto y facturas SAT de mantenimiento", () => {
+  const año = Number(DEMO_TODAY.slice(0, 4));
+  const presupuestoDe = (plazaId: string) =>
+    seed.presupuestosMantenimiento.find((p) => p.plazaId === plazaId && p.año === año)!;
+
+  it("cada plaza con trabajos tiene su presupuesto y solo Alborada está cerca del tope", () => {
+    const conTrabajos = new Set(seed.mantenimientos.map((m) => m.plazaId));
+    expect(new Set(seed.presupuestosMantenimiento.map((p) => p.plazaId))).toEqual(
+      conTrabajos,
+    );
+    for (const plazaId of conTrabajos) {
+      const consumo = consumoPresupuesto(plazaId, año, seed.mantenimientos);
+      const pct = consumo / presupuestoDe(plazaId).monto;
+      expect(pct, plazaId).toBeLessThanOrEqual(plazaId === PLAZA_HEROE_ID ? 0.95 : 0.9);
+    }
+    const pctHeroe =
+      consumoPresupuesto(PLAZA_HEROE_ID, año, seed.mantenimientos) /
+      presupuestoDe(PLAZA_HEROE_ID).monto;
+    expect(pctHeroe).toBeGreaterThanOrEqual(0.85);
+  });
+
+  it("Alborada tiene un único trabajo pendiente y su excedente cuadra con el presupuesto", () => {
+    const pendientes = seed.mantenimientos.filter(
+      (m) => m.autorizacionSobregiro?.estado === "PENDIENTE",
+    );
+    expect(pendientes).toHaveLength(1);
+    const [m] = pendientes;
+    expect(m.plazaId).toBe(PLAZA_HEROE_ID);
+    const consumo = consumoPresupuesto(PLAZA_HEROE_ID, año, seed.mantenimientos, m.id);
+    const presupuesto = presupuestoDe(PLAZA_HEROE_ID);
+    expect(requiereAutorizacion(m, presupuesto, consumo)).toBe(true);
+    expect(m.autorizacionSobregiro!.excedente).toBe(
+      excedenteSobregiro(m, presupuesto, consumo),
+    );
+    expect(m.estatus).toBe("PROGRAMADO");
+  });
+
+  it("hay unas 15 facturas con RFC y UUID de formato válido, ligadas y libres", () => {
+    expect(seed.facturasSat.length).toBeGreaterThanOrEqual(13);
+    expect(seed.facturasSat.length).toBeLessThanOrEqual(17);
+    expect(new Set(seed.facturasSat.map((f) => f.uuid)).size).toBe(
+      seed.facturasSat.length,
+    );
+    for (const f of seed.facturasSat) {
+      expect(f.uuid, f.id).toMatch(
+        /^[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/,
+      );
+      expect(f.rfcEmisor, f.id).toMatch(/^[A-ZÑ&]{3}\d{6}[A-Z0-9]{3}$/);
+      expect(Math.abs(f.subtotal + f.iva - f.total), f.id).toBeLessThan(0.011);
+      expect(f.fecha <= DEMO_TODAY, f.id).toBe(true);
+    }
+    expect(seed.facturasSat.some((f) => f.mantenimientoId)).toBe(true);
+    expect(seed.facturasSat.some((f) => !f.mantenimientoId)).toBe(true);
+  });
+
+  it("la factura ligada es de la misma plaza y su total es el costo real del trabajo", () => {
+    const porId = new Map(seed.mantenimientos.map((m) => [m.id, m]));
+    for (const f of seed.facturasSat.filter((x) => x.mantenimientoId)) {
+      const m = porId.get(f.mantenimientoId!)!;
+      expect(m, f.id).toBeDefined();
+      expect(m.plazaId, f.id).toBe(f.plazaId);
+      expect(f.total, f.id).toBe(m.costoReal);
+    }
+  });
+});
+
+describe("caso demo de liberación", () => {
+  it("hay un contrato por vencer con 3 años o más sin actualización de precio", () => {
+    const seed = crearSeed();
+    const porVencer = contratosPorVencer(seed.contratos, DEMO_TODAY);
+    const conSalto = porVencer.filter((c) => {
+      const local = seed.locales.find((l) => l.id === c.localId)!;
+      return añosHastaFecha(local.historial, DEMO_TODAY).length >= 3;
+    });
+    expect(conSalto.map((c) => c.localId)).toContain("plz-alborada-A-05");
   });
 });

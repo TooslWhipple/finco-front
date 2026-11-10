@@ -51,7 +51,7 @@ export function PanelDetalle({
             type="button"
             onClick={onCerrar}
             aria-label="Cerrar detalle"
-            className="rounded-md p-1 text-brand-text-muted hover:bg-brand-cream hover:text-brand-primary"
+            className="-m-1 rounded-md p-1 text-brand-text-muted hover:bg-brand-cream hover:text-brand-primary max-lg:p-3.5 pointer-coarse:p-3.5"
           >
             <X className="size-4" aria-hidden />
           </button>

@@ -8,16 +8,29 @@ import { useBadges, useSesion } from "@/hooks";
 import { cn } from "@/lib/utils";
 import { AvatarUsuario } from "./avatar-usuario";
 
+/** Sidebar fijo desde `lg`; debajo de `lg` lo reemplaza el drawer de `MenuMovil`. */
 export function Sidebar() {
+  return (
+    <aside
+      data-no-imprimir
+      className="hidden h-full w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:flex"
+    >
+      <ContenidoSidebar />
+    </aside>
+  );
+}
+
+/** Logo, navegación y usuario. `onNavegar` permite al drawer cerrarse al elegir un destino. */
+export function ContenidoSidebar({ onNavegar }: { onNavegar?: () => void }) {
   const ruta = usePathname();
   const { usuario } = useSesion();
   const badges = useBadges();
   const grupos = usuario ? itemsVisibles(usuario.rol) : [];
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground">
-      <div className="px-6 pt-7 pb-5">
-        <Link href="/" aria-label="Ir al inicio">
+    <>
+      <div className="px-6 pt-[max(1.75rem,env(safe-area-inset-top))] pb-5">
+        <Link href="/" aria-label="Ir al inicio" onClick={onNavegar}>
           <Image
             src="/brand/logo.png"
             alt="Plazas Finco"
@@ -48,8 +61,9 @@ export function Sidebar() {
                       <Link
                         href={item.ruta}
                         aria-current={activo ? "page" : undefined}
+                        onClick={onNavegar}
                         className={cn(
-                          "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[0.95rem] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/60",
+                          "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-[0.95rem] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/60",
                           activo
                             ? "bg-sidebar-accent text-sidebar-accent-foreground"
                             : "text-white/85 hover:bg-white/10",
@@ -72,7 +86,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t border-white/15 px-4 py-4">
+      <div className="border-t border-white/15 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {usuario ? (
           <div className="flex items-center gap-3">
             <AvatarUsuario nombre={usuario.nombre} />
@@ -86,6 +100,6 @@ export function Sidebar() {
           Finco · Portal de Plazas · by Whipple
         </p>
       </div>
-    </aside>
+    </>
   );
 }

@@ -1,30 +1,49 @@
 import {
+  aplicarParcheConOferta,
+  consumoPresupuesto,
+  crearOferta,
+  excedenteSobregiro,
+  requiereAutorizacion,
+  resolverSobregiro,
   siguienteFolio,
+  solicitarSobregiro,
   transicionar,
   ETIQUETA_ETAPA_PROSPECTO,
+  ETIQUETA_TIPO_CONTACTO,
+  prospectoActivo,
   ETAPAS_TERRENO,
   reglaEfectiva,
   siguienteEtapaProspecto,
   type CambioPropuesto,
+  type CanalAviso,
   type Contrato,
   type Cotizacion,
   type EstadoCambio,
   type EtapaTerreno,
+  type EnvioAviso,
   type EventoSync,
   type ExcepcionPrecio,
   type FechaISO,
+  type Liberacion,
   type EstatusMantenimiento,
   type Foto,
   type IdIntegracion,
   type Local,
+  type FacturaSat,
   type Mantenimiento,
+  type PresupuestoMantenimiento,
+  type ProgramacionAvisos,
+  type PlantillaAviso,
   type Prospecto,
+  type TipoContactoProspecto,
   type ReglaActualizacion,
   type Terreno,
   type ContratoObra,
   type ActividadCronograma,
   type CorteSemanal,
   type EntradaCorte,
+  type EntradaEstimacion,
+  type EstimacionObra,
   type PagoObra,
   type EntradaRonda,
   type Licitacion,
@@ -33,8 +52,13 @@ import {
   conRondaRegistrada,
   corteSinErrores,
   erroresCorte,
+  erroresEstimacion,
+  estimacionSinErrores,
   firmarCorte,
+  firmarEstimacion,
+  pagoDeEstimacion,
   resolverCorte,
+  resolverEstimacion,
 } from "@/domain";
 
 /** Registro de un cambio hecho en vivo sobre un local (mínimo, regla). */
@@ -48,7 +72,14 @@ export interface EntradaBitacora {
 /** Campos del local que la demo puede editar en vivo (mínimo, lista y regla) y su bitácora. */
 export type AjusteLocal = Partial<
   Pick<Local, "precioMinimo" | "precioVigente" | "regla" | "historial">
-> & { bitacora?: EntradaBitacora[] };
+> & {
+  bitacora?: EntradaBitacora[];
+  /** Estatus y fecha de liberación fijados al terminar el contrato en la demo. */
+  estatus?: Local["estatus"];
+  libreDesde?: FechaISO;
+  /** El local ya no tiene locatario (se liberó). */
+  sinLocatario?: boolean;
+};
 
 export interface CotizacionesState {
   cotizaciones: Cotizacion[];
@@ -64,6 +95,17 @@ export interface CobranzaState {
   seguimientos: Record<string, string[]>;
   /** Facturas con aviso enviado. */
   avisados: string[];
+  plantillas: PlantillaAviso[];
+  programacion: ProgramacionAvisos;
+  /** Bitácora de envíos simulados, del más antiguo al más reciente. */
+  envios: EnvioAviso[];
+}
+
+/** Un aviso por enviar: a qué factura, con qué plantilla y por qué canal. */
+export interface EntregaAviso {
+  facturaId: string;
+  plantillaId: string;
+  canal: CanalAviso;
 }
 
 export interface IntegracionesState {
@@ -80,6 +122,8 @@ export interface ProspectosState {
 export interface ContratosState {
   /** Contratos nacidos en la demo (de una cotización); los del seed no cambian. */
   nuevos: Contrato[];
+  /** Contratos terminados en la demo (también los del seed), por id de contrato. */
+  terminaciones: Record<string, { fecha: FechaISO; motivo: string }>;
 }
 
 /** Contratos de obra y cronograma de los proyectos (parten del seed). */
@@ -88,6 +132,7 @@ export interface ObraState {
   cronograma: ActividadCronograma[];
   cortes: CorteSemanal[];
   pagos: PagoObra[];
+  estimaciones: EstimacionObra[];
   licitaciones: Licitacion[];
 }
 
@@ -97,6 +142,8 @@ export interface TerrenosState {
 
 export interface MantenimientosState {
   mantenimientos: Mantenimiento[];
+  presupuestos: PresupuestoMantenimiento[];
+  facturasSat: FacturaSat[];
 }
 
 export interface ReglasDefaultState {
@@ -118,18 +165,38 @@ export interface LocalesState {
 export function agregarCotizacion(
   estado: CotizacionesState,
   cotizacion: Cotizacion,
+  fecha: FechaISO,
+  hora: string,
 ): CotizacionesState {
   if (estado.cotizaciones.some((c) => c.id === cotizacion.id)) return estado;
-  return { cotizaciones: [...estado.cotizaciones, cotizacion] };
+  // Crear la cotización registra la oferta 1, a nombre de su vendedor.
+  const ofertas =
+    cotizacion.ofertas.length > 0
+      ? cotizacion.ofertas
+      : [
+          crearOferta(
+            `${cotizacion.id}-of1`,
+            cotizacion,
+            cotizacion.vendedorId,
+            fecha,
+            hora,
+          ),
+        ];
+  return { cotizaciones: [...estado.cotizaciones, { ...cotizacion, ofertas }] };
 }
 
 export function actualizarCotizacion(
   estado: CotizacionesState,
   id: string,
   parche: Partial<Omit<Cotizacion, "id">>,
+  vendedorId: string,
+  fecha: FechaISO,
+  hora: string,
 ): CotizacionesState {
   return {
-    cotizaciones: estado.cotizaciones.map((c) => (c.id === id ? { ...c, ...parche } : c)),
+    cotizaciones: estado.cotizaciones.map((c) =>
+      c.id === id ? aplicarParcheConOferta(c, parche, vendedorId, fecha, hora) : c,
+    ),
   };
 }
 
@@ -293,15 +360,65 @@ export function registrarSeguimiento(
   };
 }
 
+/**
+ * Registra avisos simulados: los suma a la bitácora, marca las facturas como
+ * avisadas y deja la constancia en su seguimiento.
+ */
 export function registrarAvisos(
   estado: CobranzaState,
-  facturaIds: readonly string[],
+  entregas: readonly EntregaAviso[],
   texto: string,
+  fecha: FechaISO,
+  hora: string,
+  origen: EnvioAviso["origen"],
 ): CobranzaState {
-  const avisados = Array.from(new Set([...estado.avisados, ...facturaIds]));
+  const avisados = Array.from(
+    new Set([...estado.avisados, ...entregas.map((e) => e.facturaId)]),
+  );
   const seguimientos = { ...estado.seguimientos };
-  for (const id of facturaIds) seguimientos[id] = [...(seguimientos[id] ?? []), texto];
-  return { seguimientos, avisados };
+  for (const e of entregas) {
+    seguimientos[e.facturaId] = [...(seguimientos[e.facturaId] ?? []), texto];
+  }
+  const envios = [
+    ...estado.envios,
+    ...entregas.map((e, i) => ({
+      id: `env-${estado.envios.length + i + 1}`,
+      facturaId: e.facturaId,
+      plantillaId: e.plantillaId,
+      canal: e.canal,
+      enviadoEl: fecha,
+      hora,
+      origen,
+    })),
+  ];
+  return { ...estado, seguimientos, avisados, envios };
+}
+
+/** Edita el texto de una plantilla; el asunto solo aplica a las de correo. */
+export function editarPlantilla(
+  estado: CobranzaState,
+  id: string,
+  parche: { asunto?: string; cuerpo: string },
+): CobranzaState {
+  return {
+    ...estado,
+    plantillas: estado.plantillas.map((p) =>
+      p.id === id
+        ? {
+            ...p,
+            cuerpo: parche.cuerpo,
+            ...(p.canal === "CORREO" ? { asunto: parche.asunto } : {}),
+          }
+        : p,
+    ),
+  };
+}
+
+export function guardarProgramacion(
+  estado: CobranzaState,
+  programacion: ProgramacionAvisos,
+): CobranzaState {
+  return { ...estado, programacion };
 }
 
 // --- integraciones --------------------------------------------------------
@@ -366,10 +483,11 @@ export function avanzarProspecto(
   );
 }
 
-/** Marca como perdido a un prospecto vivo. */
-export function descartarProspecto(
+/** Marca como perdido a un prospecto vivo y deja el motivo en su actividad. */
+export function marcarProspectoPerdido(
   estado: ProspectosState,
   id: string,
+  motivo: string,
   hoy: FechaISO,
 ): ProspectosState {
   return moverProspecto(
@@ -377,8 +495,30 @@ export function descartarProspecto(
     id,
     hoy,
     (actual) => (siguienteEtapaProspecto(actual) ? "PERDIDO" : null),
-    () => "Prospecto descartado",
+    () => `Descartado: ${motivo.trim()}`,
   );
+}
+
+/** Anota un contacto con un prospecto vivo: reinicia sus días sin contacto. */
+export function registrarContactoProspecto(
+  estado: ProspectosState,
+  id: string,
+  contacto: { tipo: TipoContactoProspecto; nota: string },
+  hoy: FechaISO,
+): ProspectosState {
+  const nota = contacto.nota.trim();
+  return {
+    prospectos: estado.prospectos.map((p) => {
+      if (p.id !== id || !prospectoActivo(p)) return p;
+      const etiqueta = ETIQUETA_TIPO_CONTACTO[contacto.tipo];
+      const hecho = {
+        id: `act-${p.actividad.length + 1}`,
+        titulo: nota ? `${etiqueta}: ${nota}` : etiqueta,
+        fecha: hoy,
+      };
+      return { ...p, actividad: [...p.actividad, hecho] };
+    }),
+  };
 }
 
 // --- contratos ------------------------------------------------------------
@@ -388,7 +528,7 @@ export function agregarContrato(
   contrato: Contrato,
 ): ContratosState {
   if (estado.nuevos.some((c) => c.id === contrato.id)) return estado;
-  return { nuevos: [...estado.nuevos, contrato] };
+  return { ...estado, nuevos: [...estado.nuevos, contrato] };
 }
 
 function transitarContrato(
@@ -398,6 +538,7 @@ function transitarContrato(
   hacia: Contrato["estado"],
 ): ContratosState {
   return {
+    ...estado,
     nuevos: estado.nuevos.map((c) =>
       c.id === id && c.estado === desde ? { ...c, estado: hacia } : c,
     ),
@@ -412,6 +553,64 @@ export function enviarAFirma(estado: ContratosState, id: string): ContratosState
 /** Un contrato en firma queda vigente. */
 export function registrarFirma(estado: ContratosState, id: string): ContratosState {
   return transitarContrato(estado, id, "EN_FIRMA", "VIGENTE");
+}
+
+/** Aplica las terminaciones hechas en la demo: el contrato pasa a TERMINADO y su fin es la fecha de salida. */
+export function aplicarTerminaciones(
+  contratos: readonly Contrato[],
+  terminaciones: ContratosState["terminaciones"],
+): Contrato[] {
+  return contratos.map((c) => {
+    const t = terminaciones[c.id];
+    return t ? { ...c, estado: "TERMINADO", fin: t.fecha } : c;
+  });
+}
+
+/**
+ * Libera un local: termina el contrato, deja el local disponible, aplica el
+ * repricing (lista, mínimo e historial) y anota la bitácora. Si el contrato ya
+ * estaba terminado no hace nada.
+ */
+export function aplicarLiberacion(
+  contratos: ContratosState,
+  locales: LocalesState,
+  local: Pick<Local, "historial">,
+  liberacion: Liberacion,
+  autor: string,
+  formatearMoneda: (monto: number) => string,
+): { contratos: ContratosState; locales: LocalesState } {
+  if (contratos.terminaciones[liberacion.contratoId]) return { contratos, locales };
+  const cambia = liberacion.registros.length > 0;
+  const resumen = cambia
+    ? `Lista ${formatearMoneda(liberacion.precioAnterior)} → ${formatearMoneda(liberacion.precioNuevo)} · mínimo ${formatearMoneda(liberacion.minimoAnterior)} → ${formatearMoneda(liberacion.minimoNuevo)} (regla ${liberacion.textoRegla}, ${liberacion.años.length} ${liberacion.años.length === 1 ? "año" : "años"})`
+    : "Sin años por actualizar: los precios se conservan";
+  const ajustado = ajustarLocal(locales, liberacion.localId, {
+    estatus: "DISPONIBLE",
+    libreDesde: liberacion.fecha,
+    sinLocatario: true,
+    ...(cambia
+      ? {
+          precioVigente: liberacion.precioNuevo,
+          precioMinimo: liberacion.minimoNuevo,
+          historial: [...local.historial, ...liberacion.registros],
+        }
+      : {}),
+  });
+  return {
+    contratos: {
+      ...contratos,
+      terminaciones: {
+        ...contratos.terminaciones,
+        [liberacion.contratoId]: { fecha: liberacion.fecha, motivo: liberacion.motivo },
+      },
+    },
+    locales: registrarBitacoraLocal(ajustado, liberacion.localId, {
+      fecha: liberacion.fecha,
+      autor,
+      titulo: "Local liberado",
+      detalle: `Contrato terminado: ${liberacion.motivo}. ${resumen}`,
+    }),
+  };
 }
 
 // --- terrenos -------------------------------------------------------------
@@ -485,6 +684,71 @@ export function resolverCorteObra(
   };
 }
 
+// --- estimaciones de pago -------------------------------------------------
+
+/**
+ * Registra y firma una estimación del contratista. Una captura inválida (volumen
+ * mayor al validado en cortes) no cambia nada: el diálogo ya la bloquea.
+ */
+export function registrarEstimacion(
+  estado: ObraState,
+  entrada: EntradaEstimacion,
+  autor: string,
+  hoy: FechaISO,
+  evidencia: Foto[],
+): ObraState {
+  const contrato = estado.contratos.find((c) => c.id === entrada.contratoObraId);
+  if (
+    !contrato ||
+    !estimacionSinErrores(
+      erroresEstimacion(contrato, estado.cortes, estado.estimaciones, entrada),
+    )
+  ) {
+    return estado;
+  }
+  const id = `est-${String(estado.estimaciones.length + 1).padStart(4, "0")}`;
+  return {
+    ...estado,
+    estimaciones: [
+      ...estado.estimaciones,
+      firmarEstimacion(id, contrato, entrada, estado.estimaciones, autor, hoy, evidencia),
+    ],
+  };
+}
+
+/**
+ * La PMO autoriza o rechaza (con motivo) una estimación firmada. Al autorizar nace
+ * el `PagoObra` por el importe bruto, que alimenta el costo real del valor ganado.
+ */
+export function resolverEstimacionObra(
+  estado: ObraState,
+  id: string,
+  resolucion: "AUTORIZADA_PMO" | "RECHAZADA",
+  autor: string,
+  hoy: FechaISO,
+  comentario?: string,
+): ObraState {
+  const actual = estado.estimaciones.find((e) => e.id === id);
+  const contrato = actual && estado.contratos.find((c) => c.id === actual.contratoObraId);
+  if (!actual || !contrato) return estado;
+  const resuelta = resolverEstimacion(actual, resolucion, autor, hoy, comentario);
+  if (resuelta === actual) return estado;
+  if (resolucion === "RECHAZADA") {
+    return {
+      ...estado,
+      estimaciones: estado.estimaciones.map((e) => (e.id === id ? resuelta : e)),
+    };
+  }
+  const pago = pagoDeEstimacion(resuelta, contrato, hoy);
+  return {
+    ...estado,
+    estimaciones: estado.estimaciones.map((e) =>
+      e.id === id ? { ...resuelta, pagoId: pago.id } : e,
+    ),
+    pagos: [...estado.pagos, pago],
+  };
+}
+
 /** Aplica una transición de dominio a una licitación; las demás quedan igual. */
 function actualizarLicitacion(
   estado: ObraState,
@@ -541,11 +805,40 @@ export type NuevoMantenimiento = Omit<
   "id" | "folio" | "estatus" | "evidencia" | "fechaInicio" | "fechaFin" | "costoReal"
 >;
 
-/** Da de alta un mantenimiento programado con el siguiente folio libre. */
+const añoDe = (fecha: FechaISO) => Number(fecha.slice(0, 4));
+
+/**
+ * Si el trabajo pasa del presupuesto anual de su plaza, lo deja pendiente de
+ * autorización (con el excedente); si cabe, o no hay presupuesto, lo devuelve igual.
+ */
+function conSobregiroSolicitado(
+  estado: MantenimientosState,
+  m: Mantenimiento,
+  solicitadoPor: string,
+  hoy: FechaISO,
+): Mantenimiento {
+  const año = añoDe(m.fechaProgramada);
+  const presupuesto = estado.presupuestos.find(
+    (p) => p.plazaId === m.plazaId && p.año === año,
+  );
+  const consumo = consumoPresupuesto(m.plazaId, año, estado.mantenimientos, m.id);
+  if (!presupuesto || !requiereAutorizacion(m, presupuesto, consumo)) return m;
+  return solicitarSobregiro(m, {
+    solicitadoPor,
+    hoy,
+    excedente: excedenteSobregiro(m, presupuesto, consumo),
+  });
+}
+
+/**
+ * Da de alta un mantenimiento programado con el siguiente folio libre. Si excede
+ * el presupuesto de su plaza nace pendiente de autorización de Dirección.
+ */
 export function agregarMantenimiento(
   estado: MantenimientosState,
   nuevo: NuevoMantenimiento,
   hoy: FechaISO,
+  solicitadoPor: string,
 ): MantenimientosState {
   const folio = siguienteFolio(
     estado.mantenimientos.map((m) => m.folio),
@@ -559,7 +852,13 @@ export function agregarMantenimiento(
     estatus: "PROGRAMADO",
     evidencia: [],
   };
-  return { mantenimientos: [...estado.mantenimientos, mantenimiento] };
+  return {
+    ...estado,
+    mantenimientos: [
+      ...estado.mantenimientos,
+      conSobregiroSolicitado(estado, mantenimiento, solicitadoPor, hoy),
+    ],
+  };
 }
 
 /**
@@ -576,7 +875,86 @@ export function transicionarMantenimiento(
   const siguiente = actual && transicionar(actual, destino, datos);
   if (!siguiente) return estado;
   return {
+    ...estado,
     mantenimientos: estado.mantenimientos.map((m) => (m.id === id ? siguiente : m)),
+  };
+}
+
+/** Dirección autoriza o rechaza un sobregiro pendiente; rechazar exige comentario. */
+export function resolverSobregiroMantenimiento(
+  estado: MantenimientosState,
+  id: string,
+  decision: "AUTORIZADA" | "RECHAZADA",
+  resueltoPor: string,
+  hoy: FechaISO,
+  comentario?: string,
+): MantenimientosState {
+  const actual = estado.mantenimientos.find((m) => m.id === id);
+  const siguiente =
+    actual && resolverSobregiro(actual, decision, { resueltoPor, hoy, comentario });
+  if (!siguiente) return estado;
+  return {
+    ...estado,
+    mantenimientos: estado.mantenimientos.map((m) => (m.id === id ? siguiente : m)),
+  };
+}
+
+/** La PMO fija el presupuesto anual de una plaza (monto en MXN, 0 o más). */
+export function fijarPresupuestoMantenimiento(
+  estado: MantenimientosState,
+  plazaId: string,
+  año: number,
+  monto: number,
+): MantenimientosState {
+  if (!Number.isFinite(monto) || monto < 0) return estado;
+  const redondeado = Math.round(monto);
+  const existe = estado.presupuestos.some((p) => p.plazaId === plazaId && p.año === año);
+  return {
+    ...estado,
+    presupuestos: existe
+      ? estado.presupuestos.map((p) =>
+          p.plazaId === plazaId && p.año === año ? { ...p, monto: redondeado } : p,
+        )
+      : [...estado.presupuestos, { plazaId, año, monto: redondeado }],
+  };
+}
+
+/** Liga una factura libre de la misma plaza al mantenimiento; si no procede, deja el estado igual. */
+export function ligarFacturaSat(
+  estado: MantenimientosState,
+  facturaId: string,
+  mantenimientoId: string,
+): MantenimientosState {
+  const factura = estado.facturasSat.find((f) => f.id === facturaId);
+  const mantenimiento = estado.mantenimientos.find((m) => m.id === mantenimientoId);
+  if (
+    !factura ||
+    !mantenimiento ||
+    factura.mantenimientoId !== undefined ||
+    factura.plazaId !== mantenimiento.plazaId
+  ) {
+    return estado;
+  }
+  return {
+    ...estado,
+    facturasSat: estado.facturasSat.map((f) =>
+      f.id === facturaId ? { ...f, mantenimientoId } : f,
+    ),
+  };
+}
+
+/** Regresa una factura ligada a la bandeja de su plaza. */
+export function desligarFacturaSat(
+  estado: MantenimientosState,
+  facturaId: string,
+): MantenimientosState {
+  const factura = estado.facturasSat.find((f) => f.id === facturaId);
+  if (factura?.mantenimientoId === undefined) return estado;
+  return {
+    ...estado,
+    facturasSat: estado.facturasSat.map((f) =>
+      f.id === facturaId ? { ...f, mantenimientoId: undefined } : f,
+    ),
   };
 }
 
@@ -664,6 +1042,18 @@ export function aplicarAjuste(local: Local, ajuste: AjusteLocal | undefined): Lo
     precioVigente = local.precioVigente,
     regla = local.regla,
     historial = local.historial,
+    estatus = local.estatus,
+    libreDesde = local.libreDesde,
   } = ajuste;
-  return { ...local, precioMinimo, precioVigente, regla, historial };
+  const ajustado = {
+    ...local,
+    precioMinimo,
+    precioVigente,
+    regla,
+    historial,
+    estatus,
+    libreDesde,
+  };
+  if (ajuste.sinLocatario) delete ajustado.locatarioId;
+  return ajustado;
 }

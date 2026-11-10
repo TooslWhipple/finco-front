@@ -12,6 +12,7 @@ export const ACCIONES_MATRIZ: readonly {
       { accion: "prospectos.gestionar", etiqueta: "Gestionar prospectos" },
       { accion: "cotizaciones.crear", etiqueta: "Crear cotizaciones" },
       { accion: "excepcion.solicitar", etiqueta: "Solicitar excepciones" },
+      { accion: "comercial.verEquipo", etiqueta: "Ver el trabajo de todo el equipo" },
     ],
   },
   {
@@ -30,12 +31,14 @@ export const ACCIONES_MATRIZ: readonly {
       { accion: "precioMinimo.editar", etiqueta: "Editar precio mínimo" },
       { accion: "regla.editar", etiqueta: "Editar regla del local" },
       { accion: "actualizacionAnual.resolver", etiqueta: "Resolver actualización anual" },
+      { accion: "local.liberar", etiqueta: "Liberar un local (terminar el contrato)" },
     ],
   },
   {
     modulo: "Cobranza e integraciones",
     acciones: [
       { accion: "cobranza.gestionar", etiqueta: "Gestionar cobranza" },
+      { accion: "cobranza.avisosProgramar", etiqueta: "Programar avisos automáticos" },
       { accion: "integraciones.sincronizar", etiqueta: "Sincronizar integraciones" },
     ],
   },
@@ -46,6 +49,14 @@ export const ACCIONES_MATRIZ: readonly {
         accion: "mantenimientos.gestionar",
         etiqueta: "Crear mantenimientos y cambiar su estatus",
       },
+      {
+        accion: "mantenimiento.presupuestoEditar",
+        etiqueta: "Editar el presupuesto de mantenimiento",
+      },
+      {
+        accion: "mantenimiento.sobregiroAutorizar",
+        etiqueta: "Autorizar sobregiros de mantenimiento",
+      },
     ],
   },
   {
@@ -53,6 +64,8 @@ export const ACCIONES_MATRIZ: readonly {
     acciones: [
       { accion: "obra.corteCapturar", etiqueta: "Capturar corte de obra" },
       { accion: "obra.corteValidar", etiqueta: "Validar corte de obra" },
+      { accion: "obra.estimacionRegistrar", etiqueta: "Registrar estimación de pago" },
+      { accion: "obra.estimacionAutorizar", etiqueta: "Autorizar estimación de pago" },
       { accion: "licitacion.gestionar", etiqueta: "Gestionar licitación" },
     ],
   },

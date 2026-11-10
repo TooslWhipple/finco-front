@@ -2,12 +2,15 @@
 
 import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useState } from "react";
+import { Hand, Lock } from "lucide-react";
 import { divIcon, latLngBounds } from "leaflet";
 import { Marker, TileLayer, ZoomControl, useMap, useMapEvents } from "react-leaflet";
 import { MapaLeaflet } from "@/components/mapa/mapa-leaflet";
+import { Button } from "@/components/ui/button";
 import { agruparPuntos } from "@/domain";
 import type { GrupoMapa } from "@/domain";
 import { FONDO_PREVENTA, FONDO_RANGO } from "@/features/panorama/estilo-rango";
+import { useEsTactil } from "@/hooks/pantalla";
 import type { PlazaMapa } from "./agregados";
 
 interface MapaPinesProps {
@@ -114,32 +117,62 @@ function EnfocarSeleccion({ destino }: { destino: PlazaMapa | undefined }) {
   return null;
 }
 
+/**
+ * Enciende o apaga el arrastre con un dedo. Con el arrastre apagado el mapa no atrapa el
+ * scroll de la página; el pellizco con dos dedos (zoom y desplazamiento) sigue activo.
+ */
+function ArrastreMapa({ activo }: { activo: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    if (activo) map.dragging.enable();
+    else map.dragging.disable();
+  }, [map, activo]);
+  return null;
+}
+
 export default function MapaPines({
   plazas,
   seleccionadaId,
   onSeleccionar,
 }: MapaPinesProps) {
+  const tactil = useEsTactil();
+  const [moverConUnDedo, setMoverConUnDedo] = useState(false);
   return (
-    <MapaLeaflet
-      center={CENTRO}
-      zoom={ZOOM_INICIAL}
-      zoomSnap={0.25}
-      scrollWheelZoom={false}
-      zoomControl={false}
-      className="absolute inset-0 size-full rounded-xl"
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      <ZoomControl position="bottomright" />
-      <CapaPines
-        plazas={plazas}
-        seleccionadaId={seleccionadaId}
-        onSeleccionar={onSeleccionar}
-      />
-      <Encuadrar plazas={plazas} />
-      <EnfocarSeleccion destino={plazas.find((p) => p.id === seleccionadaId)} />
-    </MapaLeaflet>
+    <>
+      <MapaLeaflet
+        center={CENTRO}
+        zoom={ZOOM_INICIAL}
+        zoomSnap={0.25}
+        scrollWheelZoom={false}
+        zoomControl={false}
+        className="absolute inset-0 size-full rounded-xl"
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <ZoomControl position="bottomright" />
+        <CapaPines
+          plazas={plazas}
+          seleccionadaId={seleccionadaId}
+          onSeleccionar={onSeleccionar}
+        />
+        <Encuadrar plazas={plazas} />
+        <EnfocarSeleccion destino={plazas.find((p) => p.id === seleccionadaId)} />
+        <ArrastreMapa activo={!tactil || moverConUnDedo} />
+      </MapaLeaflet>
+      {tactil ? (
+        <Button
+          type="button"
+          variant="outline"
+          aria-pressed={moverConUnDedo}
+          onClick={() => setMoverConUnDedo((v) => !v)}
+          className="absolute top-4 left-4 z-[1000] shadow-md"
+        >
+          {moverConUnDedo ? <Hand aria-hidden /> : <Lock aria-hidden />}
+          {moverConUnDedo ? "Mover mapa: activo" : "Mover mapa con un dedo"}
+        </Button>
+      ) : null}
+    </>
   );
 }

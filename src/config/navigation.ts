@@ -2,6 +2,7 @@ import type { Rol } from "@/domain";
 import {
   BarChart3,
   Building,
+  CalendarCheck,
   Cog,
   FileText,
   FileSignature,
@@ -53,22 +54,30 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
     titulo: "Operación",
     items: [
       {
+        id: "disponibilidad",
+        roles: ["VENTAS", "GERENTE_COMERCIAL"],
+        etiqueta: "Disponibilidad",
+        ruta: "/disponibilidad",
+        icono: CalendarCheck,
+        prefijo: "/disponibilidad",
+      },
+      {
         id: "inicio",
         etiqueta: "Inicio",
         ruta: "/",
         icono: Home,
-        roles: ["VENTAS", "COBRANZA", "PMO"],
+        roles: ["VENTAS", "GERENTE_COMERCIAL", "COBRANZA", "PMO"],
       },
       {
         id: "mapa",
-        roles: ["VENTAS", "PMO"],
+        roles: ["VENTAS", "GERENTE_COMERCIAL", "PMO"],
         etiqueta: "Mapa de plazas",
         ruta: "/mapa-de-plazas",
         icono: Map,
       },
       {
         id: "plazas",
-        roles: ["VENTAS", "COBRANZA", "PMO"],
+        roles: ["VENTAS", "GERENTE_COMERCIAL", "COBRANZA", "PMO"],
         etiqueta: "Plazas y locales",
         ruta: "/plazas/plz-alborada",
         icono: Building,
@@ -77,7 +86,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
       },
       {
         id: "prospectos",
-        roles: ["VENTAS"],
+        roles: ["VENTAS", "GERENTE_COMERCIAL"],
         etiqueta: "Prospectos",
         ruta: "/prospectos",
         prefijo: "/prospectos",
@@ -85,7 +94,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
       },
       {
         id: "cotizaciones",
-        roles: ["VENTAS"],
+        roles: ["VENTAS", "GERENTE_COMERCIAL"],
         etiqueta: "Cotizaciones",
         ruta: "/cotizaciones",
         icono: FileText,
@@ -93,7 +102,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
       },
       {
         id: "contratos",
-        roles: ["VENTAS", "COBRANZA", "PMO"],
+        roles: ["VENTAS", "GERENTE_COMERCIAL", "COBRANZA", "PMO"],
         etiqueta: "Contratos",
         ruta: "/contratos",
         icono: FileSignature,
@@ -110,7 +119,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
       },
       {
         id: "mantenimientos",
-        roles: ["SUPERVISOR_OBRA"],
+        roles: ["SUPERVISOR_OBRA", "PMO"],
         etiqueta: "Mantenimientos",
         ruta: "/mantenimientos",
         icono: Wrench,
@@ -142,7 +151,7 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
       },
       {
         id: "reportes",
-        roles: ["VENTAS", "COBRANZA", "PMO"],
+        roles: ["VENTAS", "GERENTE_COMERCIAL", "COBRANZA", "PMO"],
         etiqueta: "Reportes",
         ruta: "/reportes",
         icono: BarChart3,

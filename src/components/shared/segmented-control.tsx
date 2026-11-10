@@ -46,7 +46,7 @@ export function SegmentedControl<T extends string>({
             aria-checked={activa}
             onClick={() => onChange(o.valor)}
             className={cn(
-              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 max-lg:min-h-11 pointer-coarse:min-h-11",
               activa
                 ? variante === "suave"
                   ? "bg-card text-brand-text shadow-xs ring-1 ring-brand-line"

@@ -9,16 +9,20 @@ import {
   diasDeAtraso,
   estaAtrasado,
   ETIQUETA_CATEGORIA_MANTENIMIENTO,
+  inicioBloqueado,
   puedeTransicionar,
   type EstatusMantenimiento,
   type Mantenimiento,
 } from "@/domain";
 import { formatFecha, formatMoneda } from "@/lib/format";
+import { ChipSobregiro } from "./chip-sobregiro";
 import type { ContextoMantenimiento } from "./contexto";
 import {
   DialogoCancelarMantenimiento,
   DialogoFinalizarMantenimiento,
 } from "./dialogos-mantenimiento";
+import { SeccionAutorizacion } from "./seccion-autorizacion";
+import { SeccionFacturas } from "./seccion-facturas";
 
 export type OnTransicionar = (
   id: string,
@@ -90,6 +94,10 @@ export function DetalleMantenimiento({
               />
             ) : null}
             <StatusChip estatus={m.tipo} />
+            <ChipSobregiro mantenimiento={m} />
+            {m.autorizacionSobregiro?.estado === "AUTORIZADA" ? (
+              <StatusChip estatus="SOBREGIRO_AUTORIZADO" />
+            ) : null}
           </span>
         }
         onCerrar={onCerrar}
@@ -130,6 +138,18 @@ export function DetalleMantenimiento({
               </dl>
             ),
           },
+          ...(m.autorizacionSobregiro
+            ? [
+                {
+                  titulo: "Autorización",
+                  contenido: <SeccionAutorizacion mantenimiento={m} />,
+                },
+              ]
+            : []),
+          {
+            titulo: "Facturas",
+            contenido: <SeccionFacturas mantenimiento={m} puedeLigar={puedeGestionar} />,
+          },
           {
             titulo: "Evidencia",
             contenido: (
@@ -143,7 +163,8 @@ export function DetalleMantenimiento({
               {puedeTransicionar(m.estatus, "EN_PROCESO") ? (
                 <Button
                   onClick={iniciar}
-                  className="bg-brand-cta text-white hover:bg-brand-cta-light"
+                  disabled={inicioBloqueado(m)}
+                  className="h-11 bg-brand-cta text-white hover:bg-brand-cta-light"
                 >
                   Iniciar
                 </Button>
@@ -151,13 +172,17 @@ export function DetalleMantenimiento({
               {puedeTransicionar(m.estatus, "FINALIZADO") ? (
                 <Button
                   onClick={() => setFinalizando(true)}
-                  className="bg-brand-cta text-white hover:bg-brand-cta-light"
+                  className="h-11 bg-brand-cta text-white hover:bg-brand-cta-light"
                 >
                   Finalizar
                 </Button>
               ) : null}
               {puedeTransicionar(m.estatus, "CANCELADO") ? (
-                <Button variant="outline" onClick={() => setCancelando(true)}>
+                <Button
+                  variant="outline"
+                  className="h-11"
+                  onClick={() => setCancelando(true)}
+                >
                   Cancelar mantenimiento
                 </Button>
               ) : null}

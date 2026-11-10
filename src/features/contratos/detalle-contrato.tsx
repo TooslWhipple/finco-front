@@ -11,10 +11,12 @@ import {
   type Local,
   type Plaza,
 } from "@/domain";
+import { BotonLiberarLocal } from "@/features/local/boton-liberar-local";
 import { describirRegla } from "@/features/plaza/resumen";
 import { formatFecha, formatMoneda } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { diasParaVencer } from "./agregados";
+import { rutaContratoImprimible } from "./contrato-imprimible";
 
 interface DetalleContratoProps {
   contrato: Contrato;
@@ -129,40 +131,51 @@ export function DetalleContrato({
         },
       ]}
       acciones={
-        puedeGestionar ? (
-          <>
-            {c.estado === "BORRADOR" ? (
-              <Button
-                onClick={() => {
-                  onEnviarAFirma(c.id);
-                  toast.success(`${folio} enviado a firma`);
-                }}
-                className="bg-brand-cta text-white hover:bg-brand-cta-light"
-              >
-                Enviar a firma
-              </Button>
-            ) : null}
-            {c.estado === "EN_FIRMA" ? (
-              <Button
-                onClick={() => {
-                  onRegistrarFirma(c.id);
-                  toast.success(`${folio} firmado: alta registrada en EnKontrol`);
-                }}
-                className="bg-brand-cta text-white hover:bg-brand-cta-light"
-              >
-                Registrar firma
-              </Button>
-            ) : null}
-            {renovable ? (
-              <Link
-                href={`/cotizaciones/nueva?local=${c.localId}`}
-                className={cn(buttonVariants({ variant: "outline" }))}
-              >
-                Renovar
-              </Link>
-            ) : null}
-          </>
-        ) : null
+        <>
+          {local ? (
+            <Link
+              href={rutaContratoImprimible(folio)}
+              className={cn(buttonVariants({ variant: "outline" }), "min-h-11")}
+            >
+              Ver contrato
+            </Link>
+          ) : null}
+          {renovable ? <BotonLiberarLocal local={local} contrato={c} /> : null}
+          {puedeGestionar ? (
+            <>
+              {c.estado === "BORRADOR" ? (
+                <Button
+                  onClick={() => {
+                    onEnviarAFirma(c.id);
+                    toast.success(`${folio} enviado a firma`);
+                  }}
+                  className="bg-brand-cta text-white hover:bg-brand-cta-light"
+                >
+                  Enviar a firma
+                </Button>
+              ) : null}
+              {c.estado === "EN_FIRMA" ? (
+                <Button
+                  onClick={() => {
+                    onRegistrarFirma(c.id);
+                    toast.success(`${folio} firmado: alta registrada en EnKontrol`);
+                  }}
+                  className="bg-brand-cta text-white hover:bg-brand-cta-light"
+                >
+                  Registrar firma
+                </Button>
+              ) : null}
+              {renovable ? (
+                <Link
+                  href={`/cotizaciones/nueva?local=${c.localId}`}
+                  className={cn(buttonVariants({ variant: "outline" }))}
+                >
+                  Renovar
+                </Link>
+              ) : null}
+            </>
+          ) : null}
+        </>
       }
     />
   );

@@ -3,7 +3,13 @@
 import { useCallback, useMemo, useState } from "react";
 import { CalendarDays, CalendarX, Download, Send } from "lucide-react";
 import { toast } from "sonner";
-import { antiguedadSaldos, DEMO_TODAY, type Factura } from "@/domain";
+import {
+  antiguedadSaldos,
+  DEMO_TODAY,
+  disparadorManual,
+  idPlantilla,
+  type Factura,
+} from "@/domain";
 import {
   EmptyState,
   BarraFiltros,
@@ -14,6 +20,7 @@ import {
   type OpcionSelector,
   PageHeader,
   SectionCard,
+  SegmentedControl,
 } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { can } from "@/config/permissions";
@@ -36,6 +43,7 @@ import {
 import { MES_DEMO } from "@/lib/tiempo";
 import { useAppStore } from "@/store";
 import { AntiguedadSaldos } from "./antiguedad-saldos";
+import { AvisosAutomaticos } from "./avisos-automaticos";
 import {
   avisosAutomaticosHoy,
   cierreMesAnterior,
@@ -63,11 +71,19 @@ const MESES: readonly OpcionSelector[] = [
 
 const TODAS_LAS_PLAZAS = "todas";
 
+type Vista = "cuentas" | "avisos";
+
+const VISTAS = [
+  { valor: "cuentas", etiqueta: "Cuentas por cobrar" },
+  { valor: "avisos", etiqueta: "Avisos automáticos" },
+] as const;
+
 export function Cobranza() {
   const { rol } = useSesion();
   const [mes, setMes] = useState(MES_DEMO);
   const [filtro, setFiltro] = useState<FiltroEstatus>("TODAS");
   const [plazaId, setPlazaId] = useState(TODAS_LAS_PLAZAS);
+  const [vista, setVista] = useState<Vista>("cuentas");
 
   const { datos: facturas } = useFacturas(mes);
   const { datos: locales } = useLocales();
@@ -75,6 +91,7 @@ export function Cobranza() {
   const { datos: locatarios } = useLocatarios();
   const { datos: contratos } = useContratos();
   const avisados = useAppStore((s) => s.cobranza.avisados);
+  const enviosAviso = useAppStore((s) => s.cobranza.envios);
   const registrarSeguimiento = useAppStore((s) => s.registrarSeguimiento);
   const registrarAvisos = useAppStore((s) => s.registrarAvisos);
 
@@ -138,6 +155,10 @@ export function Cobranza() {
     () => diasAniversarioPorLocal(contratos ?? [], DEMO_TODAY),
     [contratos],
   );
+  const enviadosHoy = useMemo(
+    () => enviosAviso.filter((e) => e.enviadoEl === DEMO_TODAY).length,
+    [enviosAviso],
+  );
   const alCorriente = useMemo(() => montoAlCorriente(todas, DEMO_TODAY), [todas]);
   const avisosHoy = useMemo(() => avisosAutomaticosHoy(todas, DEMO_TODAY), [todas]);
 
@@ -165,8 +186,13 @@ export function Cobranza() {
 
   const enviarAvisos = () => {
     registrarAvisos(
-      porAvisar.map((f) => f.id),
-      `Aviso de cobranza enviado el ${formatDiaMes(DEMO_TODAY)}`,
+      porAvisar.map((f) => ({
+        facturaId: f.id,
+        plantillaId: idPlantilla(disparadorManual(f, DEMO_TODAY), "WHATSAPP"),
+        canal: "WHATSAPP" as const,
+      })),
+      `Aviso de cobranza enviado el ${formatDiaMes(DEMO_TODAY)} (simulado)`,
+      "MANUAL",
     );
     toast.success(`${formatNumero(porAvisar.length)} avisos de cobranza registrados`);
   };
@@ -220,7 +246,17 @@ export function Cobranza() {
         }
       />
 
-      {mesVacio ? (
+      <SegmentedControl
+        etiqueta="Vista de cobranza"
+        opciones={VISTAS}
+        valor={vista}
+        onChange={setVista}
+        className="[&_button]:min-h-11 [&_button]:px-4"
+      />
+
+      {vista === "avisos" ? (
+        <AvisosAutomaticos />
+      ) : mesVacio ? (
         <SectionCard>
           <EmptyState
             icono={CalendarX}
@@ -274,11 +310,11 @@ export function Cobranza() {
             <KpiCard
               etiqueta="Avisos automáticos hoy"
               valor={formatNumero(avisosHoy.total)}
-              subtexto={`WhatsApp ${formatNumero(avisosHoy.whatsapp)} · correo ${formatNumero(avisosHoy.correo)}`}
+              subtexto={`WhatsApp ${formatNumero(avisosHoy.whatsapp)} · correo ${formatNumero(avisosHoy.correo)} · ${formatNumero(enviadosHoy)} en bitácora`}
             />
           </KpiRow>
 
-          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
             <SectionCard
               titulo="Cuentas por cobrar"
               className="flex flex-col [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col"

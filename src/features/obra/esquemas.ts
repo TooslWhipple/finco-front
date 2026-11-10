@@ -1,9 +1,13 @@
 import {
   erroresCorte,
+  erroresEstimacion,
   type ContratoObra,
   type CorteSemanal,
   type EntradaCorte,
+  type EntradaEstimacion,
   type ErroresCorte,
+  type ErroresEstimacion,
+  type EstimacionObra,
   type FechaISO,
 } from "@/domain";
 
@@ -44,4 +48,33 @@ export function validarCaptura(
 /** Un corte rechazado exige explicar por qué. */
 export function errorComentarioRechazo(comentario: string): string | undefined {
   return comentario.trim() === "" ? "Escribe el motivo del rechazo." : undefined;
+}
+
+/** Convierte lo tecleado en la estimación que entiende el dominio. */
+export function entradaDeEstimacion(
+  contrato: ContratoObra,
+  textos: VolumenesTexto,
+): EntradaEstimacion {
+  return {
+    contratoObraId: contrato.id,
+    volumenes: contrato.conceptos.map((c) => ({
+      conceptoId: c.id,
+      volumen: volumenDeTexto(textos[c.id]),
+    })),
+  };
+}
+
+/** Errores de la estimación: la regla (no pasar de lo validado en cortes) vive en `domain/estimaciones.ts`. */
+export function validarEstimacion(
+  contrato: ContratoObra,
+  cortes: readonly CorteSemanal[],
+  estimaciones: readonly EstimacionObra[],
+  textos: VolumenesTexto,
+): ErroresEstimacion {
+  return erroresEstimacion(
+    contrato,
+    cortes,
+    estimaciones,
+    entradaDeEstimacion(contrato, textos),
+  );
 }

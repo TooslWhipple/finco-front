@@ -60,6 +60,43 @@ describe("catálogo", () => {
   });
 });
 
+describe("Ofertas por vendedor", () => {
+  const definicion = REPORTES.find((r) => r.id === "OFERTAS_VENDEDOR")!;
+
+  it("solo lo ve quien puede ver al equipo", () => {
+    expect(definicion.requiere).toBe("comercial.verEquipo");
+  });
+
+  it("trae una fila por oferta de cada cotización", () => {
+    const total = seed.cotizaciones.reduce((s, c) => s + c.ofertas.length, 0);
+    const r = definicion.calcular(datos);
+    expect(r.tabla.filas).toHaveLength(total);
+    expect(r.tabla.filas[0]).toMatchObject({
+      vendedor: expect.any(String),
+      cliente: expect.any(String),
+    });
+  });
+
+  it("el filtro por vendedor deja solo sus ofertas", () => {
+    const acotados = acotarDatos(datos, {
+      ciudadId: "TODOS",
+      plazaId: "TODOS",
+      vendedorId: "usr-luis",
+    });
+    expect(acotados.cotizaciones.every((c) => c.vendedorId === "usr-luis")).toBe(true);
+    const r = definicion.calcular(acotados);
+    expect(r.tabla.filas.every((f) => f.vendedor === "Luis Cárdenas")).toBe(true);
+  });
+
+  it("el filtro por plaza deja solo las cotizaciones de sus locales", () => {
+    const acotados = acotarDatos(datos, { ciudadId: "TODOS", plazaId: "plz-alborada" });
+    expect(acotados.cotizaciones.length).toBeGreaterThan(0);
+    expect(
+      acotados.cotizaciones.every((c) => c.localId.startsWith("plz-alborada-")),
+    ).toBe(true);
+  });
+});
+
 describe("acotarDatos", () => {
   it("sin filtro devuelve los mismos datos", () => {
     expect(acotarDatos(datos, FILTRO_INICIAL)).toBe(datos);
@@ -159,6 +196,25 @@ describe("reportes", () => {
     const porAutorizar = r.tabla.filas.find((f) => f.estado === "Por autorizar")!;
     expect(porAutorizar.autorizo).toBe("—");
     expect(porAutorizar.cliente).not.toBe("—");
+  });
+
+  it("descuentos: el folio es el de la cotización, no el id interno de la excepción", () => {
+    const cotizacion = seed.cotizaciones.find((c) => c.id === "COT-2026-0415")!;
+    const solicitada = {
+      ...seed.excepciones[0],
+      id: "exc-COT-2026-0415-53",
+      cotizacionId: cotizacion.id,
+      localId: cotizacion.localId,
+    };
+    const r = reporteDescuentos({
+      ...datos,
+      excepciones: [...seed.excepciones, solicitada],
+    });
+    const folios = r.tabla.filas.map((f) => String(f.folio));
+    expect(folios).toContain("COT-2026-0415");
+    expect(folios.some((f) => f.startsWith("exc-"))).toBe(false);
+    expect(tablaACsv(r.tabla)).toContain("\nCOT-2026-0415,");
+    expect(tablaACsv(r.tabla)).not.toContain("exc-COT-2026-0415-53");
   });
 
   it("cumplimiento del plan: una fila por plaza en operación con su meta", () => {

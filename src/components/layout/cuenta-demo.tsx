@@ -36,7 +36,7 @@ export function SelectorRol() {
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="outline" className="h-10 px-3">
+          <Button variant="outline" className="h-11 px-3">
             Rol: {rol ? ETIQUETA_ROL[rol] : "—"} <span aria-hidden>▾</span>
           </Button>
         }
@@ -84,7 +84,7 @@ export function MenuUsuario() {
         aria-label="Menú de usuario"
         className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       >
-        <AvatarUsuario nombre={usuario.nombre} className="size-10" />
+        <AvatarUsuario nombre={usuario.nombre} className="size-11" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuGroup>

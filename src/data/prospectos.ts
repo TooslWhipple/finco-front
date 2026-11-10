@@ -3,6 +3,9 @@ import {
   ETAPAS_PROSPECTO,
   sumarDias,
   type ActividadProspecto,
+  diasSinContacto,
+  prospectoActivo,
+  temperaturaProspecto,
   type Contrato,
   type Cotizacion,
   type EtapaProspecto,
@@ -14,6 +17,7 @@ import {
 import { GIROS, MARCAS } from "./catalogo";
 import { LOCAL_HEROE, PLAZA_HEROE_ID } from "./heroe";
 import { crearPrng, type Prng } from "./prng";
+import { vendedorDeProspecto } from "./vendedores";
 
 const SEMILLA_PROSPECTOS = 4_117;
 
@@ -156,6 +160,53 @@ function actividadDe(datos: DatosActividad): ActividadProspecto[] {
   return actividad;
 }
 
+/** Mínimo de prospectos fríos y de tibios que la demo muestra por vendedor. */
+const MINIMO_POR_TEMPERATURA = 3;
+
+/**
+ * Enfría (sin tocar el orden del seguimiento) a prospectos al día de cada
+ * vendedor hasta que tenga al menos 3 fríos y 3 tibios. Solo mueve a los
+ * activos sin cotización: los cotizados conservan la fecha de su oferta.
+ */
+function enfriarProspectos(prospectos: Prospecto[]): Prospecto[] {
+  const resultado = [...prospectos];
+  const vendedores = [...new Set(prospectos.map((p) => p.vendedorId))];
+  for (const vendedorId of vendedores) {
+    const propios = resultado.filter((p) => p.vendedorId === vendedorId);
+    const temperatura = (p: Prospecto) =>
+      temperaturaProspecto(diasSinContacto(p, DEMO_TODAY));
+    const contar = (t: string) => propios.filter((p) => temperatura(p) === t).length;
+    const candidatos = propios.filter(
+      (p) => prospectoActivo(p) && p.etapa !== "COTIZADO" && temperatura(p) === "AL_DIA",
+    );
+    const pendientes = [
+      ...Array.from(
+        { length: Math.max(0, MINIMO_POR_TEMPERATURA - contar("FRIO")) },
+        (_, i) => 33 + i * 4,
+      ),
+      ...Array.from(
+        { length: Math.max(0, MINIMO_POR_TEMPERATURA - contar("TIBIO")) },
+        (_, i) => 17 + i * 3,
+      ),
+    ];
+    pendientes.forEach((dias, i) => {
+      const candidato = candidatos[i];
+      if (!candidato) return;
+      const desplazo = dias - (diasSinContacto(candidato, DEMO_TODAY) ?? 0);
+      const idx = resultado.indexOf(candidato);
+      resultado[idx] = {
+        ...candidato,
+        creadoEl: sumarDias(candidato.creadoEl, -desplazo),
+        actividad: candidato.actividad.map((a) => ({
+          ...a,
+          fecha: sumarDias(a.fecha, -desplazo),
+        })),
+      };
+    });
+  }
+  return resultado;
+}
+
 export interface Prospeccion {
   prospectos: Prospecto[];
   /** Cotizaciones del seed con su `prospectoId` asignado. */
@@ -202,6 +253,7 @@ export function crearProspectos(
       contacto: contactoDe(base.nombre, rng),
       origen,
       creadoEl,
+      vendedorId: vendedorDeProspecto(cotizacion, prospectos.length),
       actividad: actividadDe({
         etapa: base.etapa,
         origen,
@@ -284,5 +336,8 @@ export function crearProspectos(
       });
     }
   }
-  return { prospectos, cotizaciones: cotizacionesEnlazadas };
+  return {
+    prospectos: enfriarProspectos(prospectos),
+    cotizaciones: cotizacionesEnlazadas,
+  };
 }

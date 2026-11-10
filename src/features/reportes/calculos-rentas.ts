@@ -135,7 +135,8 @@ function filaExcepcion(
   const descuento = e.precioMinimo - e.rentaSolicitada;
   return {
     plazaId: plaza?.id ?? "",
-    folio: e.id,
+    // El id de la excepción es interno; el usuario reconoce el folio de la cotización.
+    folio: e.cotizacionId,
     plaza: plaza?.nombre ?? "—",
     local: local?.codigo ?? e.localId,
     cliente: locatario ?? cotizacion?.prospecto.nombre ?? "—",

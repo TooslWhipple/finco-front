@@ -120,3 +120,18 @@ export function proponerActualizacionAnual(
     estado: "PENDIENTE",
   };
 }
+
+/**
+ * Años a repreciar: desde el siguiente al del último precio de lista del
+ * historial hasta el de `hasta`. Vacío si no hay historial o ya está al día.
+ */
+export function añosHastaFecha(
+  historial: readonly RegistroPrecio[],
+  hasta: string,
+): number[] {
+  const ultima = ultimoRegistroPrecio(historial, "LISTA");
+  if (!ultima) return [];
+  const desde = Number(ultima.fecha.slice(0, 4)) + 1;
+  const fin = Number(hasta.slice(0, 4));
+  return Array.from({ length: Math.max(0, fin - desde + 1) }, (_, i) => desde + i);
+}

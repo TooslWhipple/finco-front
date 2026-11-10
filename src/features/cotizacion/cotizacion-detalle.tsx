@@ -16,12 +16,12 @@ import {
 } from "@/components/shared";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { can } from "@/config/permissions";
+import { nombreDeUsuario } from "@/config/usuarios";
 import {
   contratoDesbloqueado,
   DEMO_TODAY,
   evaluarCandados,
   folioContrato,
-  idContratoDeCotizacion,
   sumarMeses,
   type Ciudad,
   type Cotizacion,
@@ -44,6 +44,7 @@ import {
   aplicarTerminos,
   construirActividad,
   derivarPasos,
+  estadoVisible,
   excepcionAbierta,
   excepcionVigente,
   resumenEconomico,
@@ -53,9 +54,11 @@ import {
 import { ActividadCotizacion } from "./actividad-cotizacion";
 import { DialogoExcepcion } from "./dialogo-excepcion";
 import { esquemaTerminos, type TerminosFormulario } from "./esquemas";
+import { HistorialOfertas } from "./historial-ofertas";
 import { FormularioTerminos } from "./formulario-terminos";
 import { ListaCandados } from "./lista-candados";
 import { PasosCotizacion } from "./pasos";
+import { rutaContratoImprimible } from "@/features/contratos/contrato-imprimible";
 import { VistaPreviaContrato } from "./vista-previa-contrato";
 
 export function CotizacionDetalle({ folio }: { folio: string }) {
@@ -180,19 +183,12 @@ function EditorCotizacion({ cotizacion, local, plaza, ciudad }: EditorProps) {
     toast.success(`Borrador ${folioCtr} generado`, {
       action: {
         label: "Ver contrato",
-        onClick: () =>
-          router.push(`/contratos?contrato=${idContratoDeCotizacion(cotizacion.id)}`),
+        onClick: () => router.push(rutaContratoImprimible(folioCtr)),
       },
     });
   });
 
-  const estadoChip = abierta ? (
-    <StatusChip estatus="PENDIENTE" etiqueta="En espera de excepción" />
-  ) : generado ? (
-    <StatusChip estatus="CONTRATO_GENERADO" />
-  ) : (
-    <StatusChip estatus="VIGENTE" etiqueta="Vigente" />
-  );
+  const estadoChip = <StatusChip {...estadoVisible(borrador, local, excepciones)} />;
   const mensajeMinimo =
     falloPrecio && !abierta
       ? `Está ${formatMoneda(-economico.diferenciaMinimo)} por debajo del mínimo autorizado (${formatMoneda(local.precioMinimo)}). El contrato no se puede generar.`
@@ -229,7 +225,7 @@ function EditorCotizacion({ cotizacion, local, plaza, ciudad }: EditorProps) {
 
       <PasosCotizacion pasos={pasos} />
 
-      <div className="grid items-stretch gap-5 xl:grid-cols-[minmax(0,1.9fr)_minmax(0,1.05fr)_minmax(0,1.1fr)]">
+      <div className="grid items-stretch gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.9fr)_minmax(0,1.05fr)_minmax(0,1.1fr)]">
         <section
           aria-labelledby="titulo-cotizacion"
           className="flex flex-col rounded-2xl border border-brand-line bg-card p-5 shadow-xs"
@@ -243,7 +239,7 @@ function EditorCotizacion({ cotizacion, local, plaza, ciudad }: EditorProps) {
             </h2>
             {estadoChip}
             <span className="ml-auto text-xs text-brand-text-muted">
-              Elaboró: {cotizacion.elaboro ?? "Ventas"}
+              Vendedor: {nombreDeUsuario(cotizacion.vendedorId) || "Sin asignar"}
             </span>
           </div>
           <FormularioTerminos
@@ -331,44 +327,57 @@ function EditorCotizacion({ cotizacion, local, plaza, ciudad }: EditorProps) {
           </div>
         </section>
 
-        <div className="flex flex-col gap-5">
-          <SectionCard
-            className="rounded-2xl"
-            titulo={<span className="whitespace-nowrap">Candados del contrato</span>}
-            extra={
-              <span className="whitespace-nowrap">{`${cumplen} de ${candados.length}`}</span>
-            }
-          >
-            <ListaCandados
-              candados={candados}
-              detalles={{
-                COTIZACION_OFICIAL: `${cotizacion.id} · vigente hasta ${formatFecha(cotizacion.vigenteHasta)}`,
-                PRECIO_MINIMO: falloPrecio
-                  ? `${formatMoneda(terminos.rentaMensual)} < ${formatMoneda(local.precioMinimo)} · requiere ajuste o una excepción autorizada por Dirección y aplicada por la PMO`
-                  : undefined,
-              }}
-            />
-            {abierta ? (
-              <p className="mt-3 rounded-lg bg-brand-cta/10 px-3 py-2 text-sm text-brand-text">
-                Excepción de {formatMoneda(abierta.rentaSolicitada)}:{" "}
-                {abierta.estado === "PENDIENTE"
-                  ? "en espera de que Dirección la autorice."
-                  : "autorizada por Dirección, en espera de que la PMO la aplique."}
-              </p>
-            ) : null}
-          </SectionCard>
-          <SectionCard className="flex-1 rounded-2xl" titulo="Actividad">
-            <ActividadCotizacion eventos={eventos} />
-          </SectionCard>
-        </div>
+        {/* iPad horizontal: la lateral apila todo en 2 columnas; desde xl se "disuelve" (3 columnas). */}
+        <div className="flex min-w-0 flex-col gap-5 xl:contents">
+          <div className="flex flex-col gap-5">
+            <SectionCard
+              className="rounded-2xl"
+              titulo={<span className="whitespace-nowrap">Candados del contrato</span>}
+              extra={
+                <span className="whitespace-nowrap">{`${cumplen} de ${candados.length}`}</span>
+              }
+            >
+              <ListaCandados
+                candados={candados}
+                detalles={{
+                  COTIZACION_OFICIAL: `${cotizacion.id} · vigente hasta ${formatFecha(cotizacion.vigenteHasta)}`,
+                  PRECIO_MINIMO: falloPrecio
+                    ? `${formatMoneda(terminos.rentaMensual)} < ${formatMoneda(local.precioMinimo)} · requiere ajuste o una excepción autorizada por Dirección y aplicada por la PMO`
+                    : undefined,
+                }}
+              />
+              {abierta ? (
+                <p className="mt-3 rounded-lg bg-brand-cta/10 px-3 py-2 text-sm text-brand-text">
+                  Excepción de {formatMoneda(abierta.rentaSolicitada)}:{" "}
+                  {abierta.estado === "PENDIENTE"
+                    ? "en espera de que Dirección la autorice."
+                    : "autorizada por Dirección, en espera de que la PMO la aplique."}
+                </p>
+              ) : null}
+            </SectionCard>
+            <SectionCard
+              className="rounded-2xl"
+              titulo="Historial de ofertas"
+              extra={
+                <span className="whitespace-nowrap">{cotizacion.ofertas.length}</span>
+              }
+            >
+              <HistorialOfertas ofertas={cotizacion.ofertas} />
+            </SectionCard>
+            <SectionCard className="flex-1 rounded-2xl" titulo="Actividad">
+              <ActividadCotizacion eventos={eventos} />
+            </SectionCard>
+          </div>
 
-        <VistaPreviaContrato
-          cotizacion={cotizacion}
-          local={local}
-          plaza={plaza}
-          ciudad={ciudad}
-          folioContrato={folioCtr}
-        />
+          <VistaPreviaContrato
+            cotizacion={cotizacion}
+            local={local}
+            plaza={plaza}
+            ciudad={ciudad}
+            folioContrato={folioCtr}
+            contratoGenerado={generado}
+          />
+        </div>
       </div>
 
       <DialogoExcepcion

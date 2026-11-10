@@ -11,6 +11,7 @@ import { fotosDeLocal } from "@/data/fotos";
 import { prospectosPorLocal } from "@/domain";
 import {
   useCiudades,
+  useContratosVivos,
   useLocal,
   usePlantas,
   usePlaza,
@@ -22,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store";
 import type { EntradaBitacora } from "@/store/reducers";
 import { SeccionMantenimientos } from "@/features/mantenimientos/seccion-mantenimientos";
+import { BotonLiberarLocal } from "./boton-liberar-local";
 import { BandejaActualizacionAnual } from "./bandeja-actualizacion-anual";
 import { construirHistorial, frenteLocalM } from "./calculos";
 import { HistorialCambios } from "./historial-cambios";
@@ -35,6 +37,7 @@ export function LocalDetalle({ plazaId, localId }: { plazaId: string; localId: s
   const local = useLocal(localId).datos;
   const plantas = usePlantas(plazaId).datos;
   const prospectosTodos = useProspectos().datos;
+  const contratos = useContratosVivos().datos;
   const bitacora =
     useAppStore((s) => s.locales.ajustes[localId]?.bitacora) ?? SIN_BITACORA;
 
@@ -65,6 +68,9 @@ export function LocalDetalle({ plazaId, localId }: { plazaId: string; localId: s
   ]
     .filter(Boolean)
     .join(" · ");
+  const contratoVigente = contratos?.find(
+    (c) => c.localId === local.id && c.estado === "VIGENTE",
+  );
   const prospectos = prospectosPorLocal(prospectosTodos ?? []).get(local.id)?.length ?? 0;
 
   return (
@@ -97,6 +103,9 @@ export function LocalDetalle({ plazaId, localId }: { plazaId: string; localId: s
             <Settings2 aria-hidden />
             Editar ficha
           </Button>
+          {contratoVigente ? (
+            <BotonLiberarLocal local={local} contrato={contratoVigente} />
+          ) : null}
           {cotizable ? (
             <Link
               href={`/cotizaciones/nueva?local=${local.id}`}
@@ -117,7 +126,7 @@ export function LocalDetalle({ plazaId, localId }: { plazaId: string; localId: s
         </p>
       ) : null}
 
-      <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+      <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
           <SectionCard titulo="Fotos">
             <GaleriaFotos fotos={fotosDeLocal(local)} titulo={`Local ${local.codigo}`} />

@@ -118,3 +118,38 @@
     @apply font-sans;
   }
 }
+
+/* Impresión de documentos (p. ej. el contrato): oculta el shell y deja fluir el contenido. */
+@media print {
+  @page {
+    size: letter;
+    margin: 18mm;
+  }
+  [data-no-imprimir],
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+  [data-shell] {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  [data-shell-main] {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+}
+
+/*
+ * Táctil (iPad) y anchos menores a lg: campos de formulario de 16 px (Safari hace zoom al
+ * enfocar uno menor) y 44 px de alto como target mínimo. Va fuera de las capas para ganar
+ * a las utilidades `h-8 text-sm` de cada campo; el escritorio con ratón queda intacto.
+ */
+@media (pointer: coarse), (max-width: 1023.98px) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"]),
+  select,
+  textarea {
+    font-size: 16px;
+    min-height: 44px;
+  }
+}
