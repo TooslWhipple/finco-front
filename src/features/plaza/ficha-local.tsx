@@ -65,7 +65,7 @@ export function FichaLocal({
   const repreciado = ultimoPrecio !== undefined && ultimoPrecio !== local.precioVigente;
   const resumenProspectos = [
     `${prospectos} activo${prospectos === 1 ? "" : "s"}`,
-    `${cotizacionesAbiertas} cotización${cotizacionesAbiertas === 1 ? "" : "es"}`,
+    `${cotizacionesAbiertas} ${cotizacionesAbiertas === 1 ? "cotización" : "cotizaciones"}`,
   ].join(" · ");
 
   return (

@@ -20,7 +20,7 @@ export function Campana() {
             variant="outline"
             size="icon-lg"
             aria-label="Notificaciones"
-            className="relative size-10"
+            className="relative size-11"
           >
             <Bell />
             {notificaciones.length > 0 ? (

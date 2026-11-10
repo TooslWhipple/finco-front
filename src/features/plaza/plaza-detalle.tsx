@@ -324,7 +324,7 @@ export function PlazaDetalle({ plazaId }: { plazaId: string }) {
             />
           </KpiRow>
 
-          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_21.5rem]">
+          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_21.5rem]">
             <SectionCard sinPadding className="min-w-0 overflow-hidden">
               <BarraFiltros
                 envolver

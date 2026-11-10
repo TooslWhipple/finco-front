@@ -5,6 +5,7 @@ import {
   contratosSinCaptura,
   DEMO_TODAY,
   estatusCobro,
+  estimacionesPorAutorizar,
   semaforoTerreno,
   type ExcepcionPrecio,
   type Rol,
@@ -19,7 +20,7 @@ import {
   contarPorAutorizar,
   type ObraState,
 } from "@/store/reducers";
-import { useFacturas, useTerrenos } from "./datos";
+import { useCotizaciones, useFacturas, useTerrenos } from "./datos";
 
 /** Contadores de los badges del sidebar, calculados de los datos vivos. */
 export function useBadges(): Record<IdBadge, number> {
@@ -72,6 +73,21 @@ function avisosDeObra(
     case "PMO": {
       const porValidar = obra.cortes.filter((c) => c.estado === "FIRMADO_SUPERVISOR");
       const terrenoId = porValidar[0] && terrenoDe(porValidar[0].contratoObraId);
+      const porAutorizar = estimacionesPorAutorizar(obra.estimaciones);
+      const terrenoEstimacion =
+        porAutorizar[0] && terrenoDe(porAutorizar[0].contratoObraId);
+      const avisoEstimaciones: Notificacion[] =
+        porAutorizar.length > 0 && terrenoEstimacion
+          ? [
+              {
+                id: "estimaciones-por-autorizar",
+                titulo: `${porAutorizar.length} ${porAutorizar.length === 1 ? "estimación de pago por autorizar" : "estimaciones de pago por autorizar"}`,
+                detalle:
+                  "El Supervisor validó en obra y firmó: autoriza el pago en la pestaña Estimaciones.",
+                ruta: rutaExpediente(terrenoEstimacion),
+              },
+            ]
+          : [];
       return [
         ...(porValidar.length > 0 && terrenoId
           ? [
@@ -84,6 +100,7 @@ function avisosDeObra(
               },
             ]
           : []),
+        ...avisoEstimaciones,
         ...avisoRojo(),
       ];
     }
@@ -126,9 +143,24 @@ function avisosDeObra(
       return avisoRojo();
     case "SUPERADMIN":
     case "VENTAS":
+    case "GERENTE_COMERCIAL":
     case "COBRANZA":
       return [];
   }
+}
+
+/** Aviso de mantenimientos que pasan del presupuesto y esperan a Dirección. */
+function avisoSobregiros(cantidad: number): Notificacion[] {
+  return cantidad === 0
+    ? []
+    : [
+        {
+          id: "sobregiros-por-autorizar",
+          titulo: `${cantidad} ${cantidad === 1 ? "mantenimiento pasa del presupuesto" : "mantenimientos pasan del presupuesto"}`,
+          detalle: "Quedan sin iniciar hasta que autorices o rechaces el sobregiro.",
+          ruta: "/mantenimientos",
+        },
+      ];
 }
 
 const RUTA_EXCEPCIONES = "/precios-y-reglas";
@@ -173,8 +205,9 @@ const RESULTADO_PARA_VENTAS: Record<
 /** Avisos de la campana: lo que le toca atender a cada rol. */
 export function useNotificaciones(rol: Rol | null): Notificacion[] {
   const aprobaciones = useAppStore((s) => s.aprobaciones);
-  const cotizaciones = useAppStore((s) => s.cotizaciones.cotizaciones);
+  const cotizaciones = useCotizaciones();
   const obra = useAppStore((s) => s.obra);
+  const mantenimientos = useAppStore((s) => s.mantenimientos.mantenimientos);
   const terrenos = useTerrenos().datos;
   const badges = useBadges();
   return useMemo(() => {
@@ -186,6 +219,9 @@ export function useNotificaciones(rol: Rol | null): Notificacion[] {
     const porAutorizar = contarPorAutorizar(aprobaciones);
     const porAplicar = contarPorAplicar(aprobaciones);
     const cambiosPend = contarCambiosPendientes(aprobaciones);
+    const sobregiros = mantenimientos.filter(
+      (m) => m.autorizacionSobregiro?.estado === "PENDIENTE",
+    ).length;
     switch (rol) {
       case "SUPERADMIN":
         return [
@@ -202,7 +238,8 @@ export function useNotificaciones(rol: Rol | null): Notificacion[] {
               ]
             : []),
         ];
-      case "VENTAS": {
+      case "VENTAS":
+      case "GERENTE_COMERCIAL": {
         // Solo sus solicitudes vivas: las históricas no tienen cotización en el estado.
         const abiertas = new Set(
           cotizaciones.filter((c) => c.estado !== "CONTRATO_GENERADO").map((c) => c.id),
@@ -238,6 +275,7 @@ export function useNotificaciones(rol: Rol | null): Notificacion[] {
       case "DIRECCION":
         return [
           ...avisoPorAutorizar(porAutorizar),
+          ...avisoSobregiros(sobregiros),
           ...deObra,
           ...(badges.cobranza > 0
             ? [
@@ -251,5 +289,5 @@ export function useNotificaciones(rol: Rol | null): Notificacion[] {
             : []),
         ];
     }
-  }, [rol, aprobaciones, cotizaciones, obra, terrenos, badges.cobranza]);
+  }, [rol, aprobaciones, cotizaciones, obra, mantenimientos, terrenos, badges.cobranza]);
 }

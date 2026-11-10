@@ -94,6 +94,9 @@ export function PlanoLocales({
         role="group"
         aria-label="Plano de locales"
         className="h-auto w-full"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setActivoId(undefined);
+        }}
       >
         {contexto && parking ? (
           <g aria-hidden>
@@ -158,15 +161,23 @@ export function PlanoLocales({
               tabIndex={0}
               aria-label={`Local ${l.codigo}, ${ETIQUETA_CATEGORIA[cat]}`}
               aria-pressed={seleccionado}
-              onClick={() => onSeleccionar(l.id)}
+              onClick={() => {
+                // Con toque no hay hover: el tooltip se queda en el local tocado.
+                setActivoId(l.id);
+                onSeleccionar(l.id);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   onSeleccionar(l.id);
                 }
               }}
-              onMouseEnter={() => setActivoId(l.id)}
-              onMouseLeave={() => setActivoId(undefined)}
+              onPointerEnter={(e) => {
+                if (e.pointerType === "mouse") setActivoId(l.id);
+              }}
+              onPointerLeave={(e) => {
+                if (e.pointerType === "mouse") setActivoId(undefined);
+              }}
               onFocus={() => setActivoId(l.id)}
               onBlur={() => setActivoId(undefined)}
               className={cn(

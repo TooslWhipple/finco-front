@@ -80,7 +80,7 @@ export function PillsFiltro<T extends string>({
             aria-checked={activa}
             onClick={() => onChange(o.valor)}
             className={cn(
-              "h-9 shrink-0 rounded-full border px-4 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+              "h-9 shrink-0 rounded-full border px-4 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 max-lg:h-11 pointer-coarse:h-11",
               activa
                 ? "border-brand-primary bg-brand-primary text-white"
                 : "border-brand-line bg-card text-brand-text hover:bg-brand-cream",

@@ -70,4 +70,6 @@ export interface ResultadoReporte {
 export interface FiltroReporte {
   ciudadId: string;
   plazaId: string;
+  /** Solo lo usa "Ofertas por vendedor"; sin valor equivale a todos. */
+  vendedorId?: string;
 }

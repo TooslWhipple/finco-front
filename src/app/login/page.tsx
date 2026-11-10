@@ -24,8 +24,8 @@ export default function Login() {
   }, [hidratado, rol, router]);
 
   return (
-    <main className="grid min-h-screen flex-1 grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-      <section className="flex flex-col justify-between bg-brand-primary p-12 text-white">
+    <main className="grid min-h-dvh flex-1 grid-cols-1 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+      <section className="flex flex-col justify-between gap-8 bg-brand-primary p-8 text-white lg:p-12">
         <Image
           src="/brand/logo.png"
           alt="Plazas Finco"
@@ -46,7 +46,7 @@ export default function Login() {
         <p className="text-sm text-white/60">Prototipo demostrativo · by Whipple</p>
       </section>
 
-      <section className="flex items-center justify-center p-12">
+      <section className="flex items-center justify-center p-8 lg:p-12">
         <div className="w-full max-w-md">
           <h2 className="font-heading text-2xl font-bold text-brand-primary">
             Entrar como…

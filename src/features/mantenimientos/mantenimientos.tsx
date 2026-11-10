@@ -9,13 +9,13 @@ import {
   SectionCard,
   SegmentedControl,
   SelectorPill,
+  TablaConDetalle,
 } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { can } from "@/config/permissions";
 import { useMantenimientos, useSesion } from "@/hooks";
 import { formatNumero } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store";
 import {
   FILTRO_INICIAL,
@@ -27,6 +27,7 @@ import { useContextoMantenimiento } from "./contexto";
 import { DetalleMantenimiento } from "./detalle-mantenimiento";
 import { DialogoNuevoMantenimiento } from "./dialogos-mantenimiento";
 import { KpisMantenimiento } from "./kpis-mantenimiento";
+import { PanelPresupuestos } from "./panel-presupuestos";
 import { TablaMantenimientos } from "./tabla-mantenimientos";
 import { TableroMantenimientos } from "./tablero-mantenimientos";
 
@@ -95,6 +96,11 @@ export function Mantenimientos() {
 
       <KpisMantenimiento mantenimientos={visibles} />
 
+      <PanelPresupuestos
+        contexto={contexto}
+        plazaId={filtro.plazaId === TODOS ? undefined : filtro.plazaId}
+      />
+
       <BarraFiltros
         envolver
         derecha={
@@ -157,47 +163,49 @@ export function Mantenimientos() {
         />
       </BarraFiltros>
 
-      <div
-        className={cn(
-          "grid items-start gap-6",
-          seleccionado && "xl:grid-cols-[minmax(0,1fr)_26rem]",
-        )}
-      >
-        <SectionCard
-          titulo={`Mantenimientos (${formatNumero(visibles.length)})`}
-          className="min-w-0"
-        >
-          {visibles.length === 0 ? (
-            <EmptyState
-              icono={Wrench}
-              titulo="Sin mantenimientos con estos filtros"
-              descripcion="Quita un filtro para ver más trabajos."
-            />
-          ) : vista === "TABLERO" ? (
-            <TableroMantenimientos
-              mantenimientos={visibles}
+      <TablaConDetalle
+        anchoPanel="26rem"
+        etiqueta="Detalle del mantenimiento"
+        onCerrar={() => setSeleccionadoId(null)}
+        lista={
+          <SectionCard
+            titulo={`Mantenimientos (${formatNumero(visibles.length)})`}
+            className="min-w-0"
+          >
+            {visibles.length === 0 ? (
+              <EmptyState
+                icono={Wrench}
+                titulo="Sin mantenimientos con estos filtros"
+                descripcion="Quita un filtro para ver más trabajos."
+              />
+            ) : vista === "TABLERO" ? (
+              <TableroMantenimientos
+                mantenimientos={visibles}
+                contexto={contexto}
+                seleccionadoId={seleccionadoId ?? undefined}
+                onSeleccionar={(m) => setSeleccionadoId(m.id)}
+              />
+            ) : (
+              <TablaMantenimientos
+                mantenimientos={tablaOrdenada}
+                contexto={contexto}
+                onSeleccionar={(m) => setSeleccionadoId(m.id)}
+              />
+            )}
+          </SectionCard>
+        }
+        detalle={
+          seleccionado ? (
+            <DetalleMantenimiento
+              mantenimiento={seleccionado}
               contexto={contexto}
-              seleccionadoId={seleccionadoId ?? undefined}
-              onSeleccionar={(m) => setSeleccionadoId(m.id)}
+              puedeGestionar={puedeGestionar}
+              onTransicionar={transicionarMantenimiento}
+              onCerrar={() => setSeleccionadoId(null)}
             />
-          ) : (
-            <TablaMantenimientos
-              mantenimientos={tablaOrdenada}
-              contexto={contexto}
-              onSeleccionar={(m) => setSeleccionadoId(m.id)}
-            />
-          )}
-        </SectionCard>
-        {seleccionado ? (
-          <DetalleMantenimiento
-            mantenimiento={seleccionado}
-            contexto={contexto}
-            puedeGestionar={puedeGestionar}
-            onTransicionar={transicionarMantenimiento}
-            onCerrar={() => setSeleccionadoId(null)}
-          />
-        ) : null}
-      </div>
+          ) : null
+        }
+      />
 
       {creando ? (
         <DialogoNuevoMantenimiento

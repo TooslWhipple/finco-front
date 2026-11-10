@@ -4,8 +4,10 @@ import type {
   EstatusMantenimiento,
   FechaISO,
   Foto,
+  FacturaSat,
   Local,
   Mantenimiento,
+  PresupuestoMantenimiento,
   Proveedor,
   TipoMantenimiento,
 } from "./tipos";
@@ -173,6 +175,7 @@ export function transicionar(
   datos: DatosTransicion,
 ): Mantenimiento | undefined {
   if (!puedeTransicionar(m.estatus, destino)) return undefined;
+  if (destino === "EN_PROCESO" && inicioBloqueado(m)) return undefined;
   if (destino === "CANCELADO") return { ...m, estatus: destino };
   const evidencia = [...m.evidencia, ...(datos.evidencia ?? [])];
   if (destino === "EN_PROCESO") {
@@ -279,4 +282,163 @@ export function filtrarPorUbicacion(
       (filtro.plazaId === undefined || m.plazaId === filtro.plazaId) &&
       (filtro.localId === undefined || m.localId === filtro.localId),
   );
+}
+
+// --- presupuesto y sobregiro ----------------------------------------------
+
+/** Lo que cuesta el trabajo: el costo real si ya se cerró, si no el estimado. */
+export function montoMantenimiento(
+  m: Pick<Mantenimiento, "costoReal" | "costoEstimado">,
+): number {
+  return m.costoReal ?? m.costoEstimado;
+}
+
+/**
+ * ¿Pesa en el presupuesto? No cuenta lo cancelado ni lo que espera (o perdió)
+ * la autorización de un sobregiro: aún no es gasto comprometido.
+ */
+export function cuentaEnPresupuesto(
+  m: Pick<Mantenimiento, "estatus" | "autorizacionSobregiro">,
+): boolean {
+  if (m.estatus === "CANCELADO") return false;
+  const estado = m.autorizacionSobregiro?.estado;
+  return estado !== "PENDIENTE" && estado !== "RECHAZADA";
+}
+
+/**
+ * Consumo del presupuesto de una plaza en un año (por fecha programada).
+ * `excluirId` deja fuera un trabajo, para medir contra el resto.
+ */
+export function consumoPresupuesto(
+  plazaId: string,
+  año: number,
+  mantenimientos: readonly Mantenimiento[],
+  excluirId?: string,
+): number {
+  return mantenimientos
+    .filter(
+      (m) =>
+        m.plazaId === plazaId &&
+        m.id !== excluirId &&
+        Number(m.fechaProgramada.slice(0, 4)) === año &&
+        cuentaEnPresupuesto(m),
+    )
+    .reduce((suma, m) => suma + montoMantenimiento(m), 0);
+}
+
+/** Lo que queda del presupuesto; negativo si ya se pasó. */
+export function disponiblePresupuesto(
+  presupuesto: Pick<PresupuestoMantenimiento, "monto">,
+  consumo: number,
+): number {
+  return presupuesto.monto - consumo;
+}
+
+export type NivelPresupuesto = "NORMAL" | "ALERTA" | "SOBREGIRO";
+
+/** Umbral (fracción) desde el que el consumo se marca como alerta. */
+export const UMBRAL_ALERTA_PRESUPUESTO = 0.8;
+
+/** Alerta desde el 80 % del presupuesto; sobregiro solo si se pasa. */
+export function nivelPresupuesto(
+  presupuesto: Pick<PresupuestoMantenimiento, "monto">,
+  consumo: number,
+): NivelPresupuesto {
+  if (consumo > presupuesto.monto) return "SOBREGIRO";
+  return presupuesto.monto > 0 && consumo / presupuesto.monto >= UMBRAL_ALERTA_PRESUPUESTO
+    ? "ALERTA"
+    : "NORMAL";
+}
+
+/**
+ * ¿Hace pasar el consumo del presupuesto? `consumo` es el del resto de los
+ * trabajos de la plaza (sin este). Sin presupuesto definido no hay tope.
+ */
+export function requiereAutorizacion(
+  m: Pick<Mantenimiento, "costoReal" | "costoEstimado">,
+  presupuesto: Pick<PresupuestoMantenimiento, "monto"> | undefined,
+  consumo: number,
+): boolean {
+  return presupuesto !== undefined && consumo + montoMantenimiento(m) > presupuesto.monto;
+}
+
+/** Cuánto se pasa el trabajo del presupuesto (0 si cabe). */
+export function excedenteSobregiro(
+  m: Pick<Mantenimiento, "costoReal" | "costoEstimado">,
+  presupuesto: Pick<PresupuestoMantenimiento, "monto">,
+  consumo: number,
+): number {
+  return Math.max(0, consumo + montoMantenimiento(m) - presupuesto.monto);
+}
+
+/** Un sobregiro que no está autorizado impide iniciar el trabajo. */
+export function inicioBloqueado(
+  m: Pick<Mantenimiento, "autorizacionSobregiro">,
+): boolean {
+  const autorizacion = m.autorizacionSobregiro;
+  return autorizacion !== undefined && autorizacion.estado !== "AUTORIZADA";
+}
+
+/** Deja el trabajo esperando la autorización de Dirección. */
+export function solicitarSobregiro(
+  m: Mantenimiento,
+  datos: { solicitadoPor: string; hoy: FechaISO; excedente: number },
+): Mantenimiento {
+  return {
+    ...m,
+    autorizacionSobregiro: {
+      estado: "PENDIENTE",
+      solicitadoPor: datos.solicitadoPor,
+      solicitadoEl: datos.hoy,
+      excedente: datos.excedente,
+    },
+  };
+}
+
+/**
+ * Dirección resuelve un sobregiro pendiente. Rechazar exige comentario; autorizar
+ * lo admite opcional. Devuelve `undefined` si no está pendiente o falta el comentario.
+ */
+export function resolverSobregiro(
+  m: Mantenimiento,
+  decision: "AUTORIZADA" | "RECHAZADA",
+  datos: { resueltoPor: string; hoy: FechaISO; comentario?: string },
+): Mantenimiento | undefined {
+  const actual = m.autorizacionSobregiro;
+  if (actual?.estado !== "PENDIENTE") return undefined;
+  const comentario = datos.comentario?.trim() || undefined;
+  if (decision === "RECHAZADA" && comentario === undefined) return undefined;
+  return {
+    ...m,
+    autorizacionSobregiro: {
+      ...actual,
+      estado: decision,
+      resueltoPor: datos.resueltoPor,
+      resueltoEl: datos.hoy,
+      comentario,
+    },
+  };
+}
+
+// --- facturas SAT ---------------------------------------------------------
+
+/** Facturas de la plaza que aún no están ligadas a ningún trabajo. */
+export function facturasSinLigar(
+  facturas: readonly FacturaSat[],
+  plazaId: string,
+): FacturaSat[] {
+  return facturas.filter((f) => f.plazaId === plazaId && f.mantenimientoId === undefined);
+}
+
+/** Facturas ligadas a un mantenimiento. */
+export function facturasDeMantenimiento(
+  facturas: readonly FacturaSat[],
+  mantenimientoId: string,
+): FacturaSat[] {
+  return facturas.filter((f) => f.mantenimientoId === mantenimientoId);
+}
+
+/** UUID abreviado para tablas: los primeros 8 caracteres. */
+export function uuidCorto(uuid: string): string {
+  return uuid.slice(0, 8).toUpperCase();
 }

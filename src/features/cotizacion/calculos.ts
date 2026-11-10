@@ -1,5 +1,7 @@
+import type { Estatus } from "@/components/shared";
 import {
   DEMO_TODAY,
+  evaluarCandados,
   folioContrato,
   type Candado,
   type Cotizacion,
@@ -96,6 +98,41 @@ export function excepcionAbierta(
       e.cotizacionId === cotizacionId &&
       (e.estado === "PENDIENTE" || e.estado === "AUTORIZADA_DIRECCION"),
   );
+}
+
+/** Estatus de `StatusChip` y etiqueta con que se muestra el estado de una cotización. */
+export interface EstadoVisible {
+  estatus: Estatus;
+  etiqueta?: string;
+}
+
+/**
+ * Estado de la cotización que comparten el detalle y el listado: la excepción
+ * abierta manda; luego el contrato generado y la excepción aplicada que cubre
+ * una renta bajo el mínimo. Sin `local` no se evalúa el candado de precio.
+ */
+export function estadoVisible(
+  cotizacion: Cotizacion,
+  local: Local | undefined,
+  excepciones: readonly ExcepcionPrecio[],
+  hoy: FechaISO = DEMO_TODAY,
+): EstadoVisible {
+  if (excepcionAbierta(excepciones, cotizacion.id)) {
+    return { estatus: "PENDIENTE", etiqueta: "En espera de excepción" };
+  }
+  if (cotizacion.estado === "CONTRATO_GENERADO") return { estatus: "CONTRATO_GENERADO" };
+  const precio = local
+    ? evaluarCandados(
+        cotizacion,
+        local,
+        hoy,
+        excepcionVigente(excepciones, cotizacion.id, cotizacion.rentaMensual),
+      ).find((c) => c.id === "PRECIO_MINIMO")
+    : undefined;
+  if (precio?.estado === "EXCEPCION") {
+    return { estatus: "EXCEPCION", etiqueta: "Excepción aplicada" };
+  }
+  return { estatus: "VIGENTE", etiqueta: "Vigente" };
 }
 
 export type EstadoPaso = "HECHO" | "ACTUAL" | "PENDIENTE";

@@ -7,7 +7,7 @@ import type { PasoCotizacion } from "./calculos";
 /** Stepper horizontal de 5 pasos con conectores; el estado viene derivado, no se navega. */
 export function PasosCotizacion({ pasos }: { pasos: readonly PasoCotizacion[] }) {
   return (
-    <ol className="flex items-center gap-3 rounded-2xl border border-brand-line bg-card px-6 py-4 shadow-xs">
+    <ol className="flex items-center gap-3 overflow-x-auto rounded-2xl border border-brand-line bg-card px-6 py-4 shadow-xs">
       {pasos.map((p, i) => (
         <Fragment key={p.numero}>
           {i > 0 ? (

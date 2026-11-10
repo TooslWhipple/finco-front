@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { DEMO_TODAY, siguienteIdProspecto } from "@/domain";
-import { useLocales, usePlazas, useProspectos } from "@/hooks";
+import { useLocales, usePlazas, useSesion } from "@/hooks";
 import { useAppStore } from "@/store";
 import { Campo, CLASE_SELECT } from "@/features/cotizacion/campo";
 import {
@@ -74,7 +74,7 @@ function FormularioProspecto({
   onRegistrado: (id: string) => void;
 }) {
   const registrarProspecto = useAppStore((s) => s.registrarProspecto);
-  const prospectos = useProspectos().datos;
+  const { usuario } = useSesion();
   const plazas = usePlazas().datos ?? [];
 
   const form = useForm<NuevoProspectoFormulario, unknown, NuevoProspectoValidado>({
@@ -97,8 +97,10 @@ function FormularioProspecto({
   );
 
   const registrar = form.handleSubmit((v) => {
-    const id = siguienteIdProspecto(prospectos);
-    registrarProspecto(prospectoDesdeFormulario(v, id, DEMO_TODAY));
+    if (!usuario) return;
+    // El id sale de todos los prospectos del store, no solo de los visibles para este vendedor.
+    const id = siguienteIdProspecto(useAppStore.getState().prospectos.prospectos);
+    registrarProspecto(prospectoDesdeFormulario(v, id, DEMO_TODAY, usuario.id));
     toast.success(`Prospecto ${v.nombre} registrado`, {
       description: "Entró al embudo en la etapa Nuevo.",
     });

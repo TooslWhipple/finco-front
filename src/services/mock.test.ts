@@ -69,7 +69,7 @@ describe("repositorios mock", () => {
   });
 
   it("configuración: usuarios, reglas por plaza y parámetros del dominio", async () => {
-    expect(await repos.configuracion.listarUsuarios()).toHaveLength(6);
+    expect(await repos.configuracion.listarUsuarios()).toHaveLength(8);
     const reglas = await repos.configuracion.reglasDefault();
     expect(reglas["plz-alborada"]).toBeDefined();
     const parametros = await repos.configuracion.obtenerParametros();

@@ -10,6 +10,7 @@ import { COTIZACION_HEROE } from "@/data/heroe";
 import {
   construirActividad,
   derivarPasos,
+  estadoVisible,
   excepcionAbierta,
   excepcionVigente,
   resumenEconomico,
@@ -99,6 +100,33 @@ describe("excepciones", () => {
     ).toBeDefined();
     expect(excepcionAbierta([excepcion("APLICADA")], cotizacion.id)).toBeUndefined();
     expect(excepcionAbierta([excepcion("RECHAZADA")], cotizacion.id)).toBeUndefined();
+  });
+});
+
+describe("estado visible (detalle y listado)", () => {
+  it("la excepción aplicada que cubre la renta bajo el mínimo deja de mostrar «Enviada»", () => {
+    const enviada = { ...cotizacion, estado: "ENVIADA" as const, rentaMensual: 22_900 };
+    expect(estadoVisible(enviada, local, [excepcion("APLICADA")])).toEqual({
+      estatus: "EXCEPCION",
+      etiqueta: "Excepción aplicada",
+    });
+    // Sin excepción, o si la renta baja de lo autorizado, el candado vuelve a fallar.
+    expect(estadoVisible(enviada, local, []).etiqueta).toBe("Vigente");
+    expect(
+      estadoVisible({ ...enviada, rentaMensual: 22_000 }, local, [excepcion("APLICADA")])
+        .etiqueta,
+    ).toBe("Vigente");
+  });
+
+  it("la excepción abierta manda sobre el contrato generado", () => {
+    expect(estadoVisible(cotizacion, local, [excepcion("PENDIENTE")])).toEqual({
+      estatus: "PENDIENTE",
+      etiqueta: "En espera de excepción",
+    });
+    const generada = { ...cotizacion, estado: "CONTRATO_GENERADO" as const };
+    expect(estadoVisible(generada, local, [excepcion("APLICADA")]).estatus).toBe(
+      "CONTRATO_GENERADO",
+    );
   });
 });
 

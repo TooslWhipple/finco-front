@@ -37,6 +37,11 @@ interface DataTableProps<TData> {
    * px por columna, `null` para la que absorbe el resto. Sin él, la tabla es automática.
    */
   anchos?: readonly (number | null)[];
+  /**
+   * Ids de columnas secundarias que se ocultan en vertical (debajo de `lg`, iPad a
+   * 820 px) para que la tabla respire; la fila completa sigue en el panel de detalle.
+   */
+  ocultarEnVertical?: readonly string[];
 }
 
 export function DataTable<TData>({
@@ -47,6 +52,7 @@ export function DataTable<TData>({
   vacio,
   className,
   anchos,
+  ocultarEnVertical,
 }: DataTableProps<TData>) {
   // TanStack Table devuelve funciones no memoizables: se excluye del React Compiler.
   "use no memo";
@@ -69,18 +75,29 @@ export function DataTable<TData>({
   const filas = table.getRowModel().rows;
   const { pageIndex, pageSize } = table.getState().pagination;
   const total = data.length;
+  const oculta = (id: string) => ocultarEnVertical?.includes(id) === true;
 
   return (
     <div className={cn("w-full", className)}>
       <Table
-        className={
-          anchos ? "table-fixed text-[13px] [&_td]:px-1.5 [&_th]:px-1.5" : undefined
-        }
+        className={cn(
+          anchos && "table-fixed text-[13px] [&_td]:px-1.5 [&_th]:px-1.5",
+          // Táctil/vertical: texto de 14 px y filas de 44 px o más (target del lineamiento iPad).
+          "max-lg:text-sm pointer-coarse:text-sm max-lg:[&_td]:py-3 pointer-coarse:[&_td]:py-3",
+        )}
       >
         {anchos ? (
           <colgroup>
             {anchos.map((ancho, i) => (
-              <col key={i} style={ancho === null ? undefined : { width: ancho }} />
+              <col
+                key={i}
+                style={ancho === null ? undefined : { width: ancho }}
+                className={
+                  oculta(table.getAllLeafColumns()[i]?.id ?? "")
+                    ? "max-lg:hidden"
+                    : undefined
+                }
+              />
             ))}
           </colgroup>
         ) : null}
@@ -93,13 +110,16 @@ export function DataTable<TData>({
                 return (
                   <TableHead
                     key={h.id}
-                    className="text-xs font-medium tracking-wide text-brand-text-muted uppercase"
+                    className={cn(
+                      "text-xs font-medium tracking-wide text-brand-text-muted uppercase max-lg:h-11",
+                      oculta(h.column.id) && "max-lg:hidden",
+                    )}
                   >
                     {h.isPlaceholder ? null : ordenable ? (
                       <button
                         type="button"
                         onClick={h.column.getToggleSortingHandler()}
-                        className="inline-flex items-center gap-1 uppercase hover:text-brand-primary"
+                        className="inline-flex min-h-11 items-center gap-1 uppercase hover:text-brand-primary lg:min-h-0"
                       >
                         {flexRender(h.column.columnDef.header, h.getContext())}
                         {orden === "asc" ? (
@@ -132,7 +152,10 @@ export function DataTable<TData>({
                 className={onFilaClick ? "cursor-pointer" : undefined}
               >
                 {fila.getVisibleCells().map((celda) => (
-                  <TableCell key={celda.id}>
+                  <TableCell
+                    key={celda.id}
+                    className={oculta(celda.column.id) ? "max-lg:hidden" : undefined}
+                  >
                     {flexRender(celda.column.columnDef.cell, celda.getContext())}
                   </TableCell>
                 ))}
@@ -152,6 +175,7 @@ export function DataTable<TData>({
             <Button
               variant="outline"
               size="icon-sm"
+              className="max-lg:size-11"
               aria-label="Página anterior"
               disabled={!table.getCanPreviousPage()}
               onClick={() => table.previousPage()}
@@ -164,6 +188,7 @@ export function DataTable<TData>({
             <Button
               variant="outline"
               size="icon-sm"
+              className="max-lg:size-11"
               aria-label="Página siguiente"
               disabled={!table.getCanNextPage()}
               onClick={() => table.nextPage()}

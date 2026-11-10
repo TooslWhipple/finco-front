@@ -1,4 +1,5 @@
 import {
+  añosHastaFecha,
   DEMO_TODAY,
   mismoIncremento,
   ultimoRegistroPrecio,
@@ -78,11 +79,7 @@ export function añosRepricing(
   historial: readonly RegistroPrecio[],
   hoy: FechaISO = DEMO_TODAY,
 ): number[] {
-  const base = añoBaseRepricing(historial);
-  if (base === null) return [];
-  const desde = base + 1;
-  const hasta = Number(hoy.slice(0, 4));
-  return Array.from({ length: Math.max(0, hasta - desde + 1) }, (_, i) => desde + i);
+  return añosHastaFecha(historial, hoy);
 }
 
 export function reglasIguales(a: ReglaActualizacion, b: ReglaActualizacion): boolean {

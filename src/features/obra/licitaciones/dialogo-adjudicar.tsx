@@ -15,7 +15,7 @@ import { CLASE_SELECT, Campo } from "@/features/cotizacion/campo";
 
 import { type Licitacion, type ProveedorObra } from "@/domain";
 import { formatMoneda } from "@/lib/format";
-import { candidatosAGanar } from "./agregados";
+import { candidatoMasBajo, candidatosAGanar } from "./agregados";
 import { validarAdjudicacion } from "./esquemas";
 
 interface DialogoAdjudicarProps {
@@ -35,7 +35,7 @@ function FormularioAdjudicar({
   onCerrar: () => void;
 }) {
   const candidatos = candidatosAGanar(licitacion, proveedores);
-  const [ganadorId, setGanadorId] = useState(candidatos[0]?.id ?? "");
+  const [ganadorId, setGanadorId] = useState(candidatoMasBajo(candidatos));
   const [motivo, setMotivo] = useState("");
   const [intentado, setIntentado] = useState(false);
   const error = validarAdjudicacion(licitacion, ganadorId, motivo);

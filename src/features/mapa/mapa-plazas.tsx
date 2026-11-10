@@ -70,7 +70,7 @@ const LEYENDA = [
 ] as const;
 
 /** Alto común del mapa y de su panel lateral. */
-const ALTO = "h-[40rem]";
+const ALTO = "h-[min(40rem,60dvh)]";
 
 function FichaPlaza({ p }: { p: PlazaMapa }) {
   const preventa = p.plaza.estatus === "PREVENTA";
@@ -141,7 +141,7 @@ function ListaOrdenable({
               <button
                 type="button"
                 onClick={() => onSeleccionar(p.id)}
-                className="flex w-full items-center justify-between gap-3 px-5 py-3 text-left transition-colors outline-none hover:bg-brand-cream focus-visible:bg-brand-cream"
+                className="flex min-h-11 w-full items-center justify-between gap-3 px-5 py-3 text-left transition-colors outline-none hover:bg-brand-cream focus-visible:bg-brand-cream"
               >
                 <span className="flex min-w-0 items-center gap-3">
                   <span
@@ -272,7 +272,7 @@ export function MapaPlazas({ plazaInicialId }: MapaPlazasProps) {
         />
       </BarraFiltros>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <section
           aria-label="Mapa"
           className={cn(

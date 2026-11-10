@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Montserrat, Roboto } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
@@ -18,7 +18,14 @@ const roboto = Roboto({
 export const metadata: Metadata = {
   title: "Portal de Plazas | Finco",
   description: "Prototipo navegable del Portal de Plazas de Finco",
-  icons: { icon: "/brand/favicon.png" },
+  appleWebApp: { capable: true, title: "Finco", statusBarStyle: "black-translucent" },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#022f34",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

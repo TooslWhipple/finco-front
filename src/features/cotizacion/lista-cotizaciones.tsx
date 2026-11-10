@@ -25,13 +25,14 @@ import {
 } from "@/hooks";
 import { formatFecha } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { excepcionAbierta } from "./calculos";
+import { estadoVisible, type EstadoVisible } from "./calculos";
 
 interface Fila {
   cotizacion: Cotizacion;
   localCodigo: string;
   plaza: string;
-  enEspera: boolean;
+  /** El mismo estado que muestra el detalle (excepción abierta o aplicada, contrato). */
+  estado: EstadoVisible;
 }
 
 export function ListaCotizaciones() {
@@ -53,7 +54,7 @@ export function ListaCotizaciones() {
           cotizacion,
           localCodigo: local?.codigo ?? cotizacion.localId,
           plaza: (local && nombrePlaza.get(local.plazaId)) ?? "—",
-          enEspera: excepcionAbierta(excepciones, cotizacion.id) !== undefined,
+          estado: estadoVisible(cotizacion, local, excepciones),
         };
       });
   }, [cotizaciones, excepciones, locales, plazas]);
@@ -95,13 +96,8 @@ export function ListaCotizaciones() {
       {
         id: "estado",
         header: "Estado",
-        accessorFn: (f) => f.cotizacion.estado,
-        cell: ({ row }) =>
-          row.original.enEspera ? (
-            <StatusChip estatus="PENDIENTE" etiqueta="En espera de excepción" />
-          ) : (
-            <StatusChip estatus={row.original.cotizacion.estado} />
-          ),
+        accessorFn: (f) => f.estado.etiqueta ?? f.estado.estatus,
+        cell: ({ row }) => <StatusChip {...row.original.estado} />,
       },
     ],
     [],
@@ -131,6 +127,7 @@ export function ListaCotizaciones() {
           columns={columnas}
           data={filas}
           tamanoPagina={12}
+          ocultarEnVertical={["plaza", "vigencia"]}
           onFilaClick={(f) => router.push(`/cotizaciones/${f.cotizacion.id}`)}
           vacio={
             <EmptyState

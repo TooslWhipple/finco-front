@@ -2,7 +2,13 @@
 export type FechaISO = string;
 
 export type Rol =
-  "DIRECCION" | "VENTAS" | "SUPERADMIN" | "COBRANZA" | "PMO" | "SUPERVISOR_OBRA";
+  | "DIRECCION"
+  | "VENTAS"
+  | "SUPERADMIN"
+  | "COBRANZA"
+  | "PMO"
+  | "SUPERVISOR_OBRA"
+  | "GERENTE_COMERCIAL";
 
 export interface Usuario {
   id: string;
@@ -207,6 +213,8 @@ export interface Prospecto extends ProspectoCotizacion {
   /** Locales por los que muestra interés. */
   localIds: string[];
   creadoEl: FechaISO;
+  /** Vendedor (`Usuario.id`) que lleva al prospecto. */
+  vendedorId: string;
   /** Seguimiento, de más antiguo a más reciente. */
   actividad: ActividadProspecto[];
 }
@@ -220,6 +228,20 @@ export interface EventoCotizacion {
   fecha: FechaISO;
   /** Hora "HH:MM" del evento, si se conoce. */
   hora?: string;
+}
+
+/** Oferta de renta hecha a un prospecto: la inicial y cada renegociación. */
+export interface OfertaCotizacion {
+  id: string;
+  /** Día de la oferta. */
+  fecha: FechaISO;
+  /** Hora "HH:mm". */
+  hora: string;
+  /** `Usuario.id` de quien la hizo. */
+  vendedorId: string;
+  rentaMensual: number;
+  plazoMeses: number;
+  mesesGracia?: number;
 }
 
 export interface Cotizacion {
@@ -247,8 +269,10 @@ export interface Cotizacion {
   contratoGeneradoEl?: FechaISO;
   /** Giro del prospecto; por omisión, el del local. */
   giro?: string;
-  /** Quién elaboró la cotización ("Nombre · Área"). */
-  elaboro?: string;
+  /** Vendedor (`Usuario.id`) que elaboró la cotización; el nombre se deriva del usuario. */
+  vendedorId: string;
+  /** Ofertas en orden cronológico; la primera es la de creación. */
+  ofertas: OfertaCotizacion[];
   /** Hechos previos, de más antiguo a más reciente. */
   actividad?: EventoCotizacion[];
 }
@@ -393,6 +417,10 @@ export interface ContratoObra {
   conceptos: ConceptoObra[];
   inicioPlan: FechaISO;
   finPlan: FechaISO;
+  /** Fracción (0-1) del monto que se pagó como anticipo; se amortiza en las estimaciones. */
+  anticipoPct: number;
+  /** Fracción (0-1) del importe bruto de cada estimación que se retiene como fondo de garantía. */
+  fondoGarantiaPct: number;
 }
 
 export type FaseCronograma =
@@ -437,6 +465,41 @@ export interface CorteSemanal {
   validadoEn?: FechaISO;
   comentario?: string;
   evidencia: Foto[];
+}
+
+export type EstadoEstimacion =
+  "REGISTRADA" | "VALIDADA_SUPERVISOR" | "AUTORIZADA_PMO" | "RECHAZADA";
+
+/**
+ * Estimación de pago del contratista: lo que ya ejecutó y quiere cobrar. El
+ * Supervisor la valida en obra y la firma; la PMO autoriza el pago o la rechaza.
+ */
+export interface EstimacionObra {
+  id: string;
+  contratoObraId: string;
+  /** Consecutivo dentro del contrato. */
+  numero: number;
+  periodo: { desde: FechaISO; hasta: FechaISO };
+  /** Volumen estimado en el periodo (no el acumulado). */
+  volumenes: VolumenCorte[];
+  estado: EstadoEstimacion;
+  /** Volumen × precio unitario. */
+  importeBruto: number;
+  amortizacionAnticipo: number;
+  fondoGarantia: number;
+  /** Bruto menos amortización y fondo de garantía: lo que se transfiere. */
+  importeNeto: number;
+  registradaPor: string;
+  registradaEn: FechaISO;
+  /** Supervisor que validó en obra y firmó. */
+  validadaPor?: string;
+  /** Quien autorizó o rechazó (PMO). */
+  autorizadaPor?: string;
+  resueltaEn?: FechaISO;
+  comentario?: string;
+  evidencia: Foto[];
+  /** Pago generado al autorizar. */
+  pagoId?: string;
 }
 
 /** Pago a un contratista (costo real, AC), importado de EnKontrol de forma simulada. */
@@ -579,4 +642,86 @@ export interface Mantenimiento {
   cargoA: CargoMantenimiento;
   /** Fotos del antes y el después. */
   evidencia: Foto[];
+  /** Presente cuando el trabajo excede el presupuesto anual de la plaza. */
+  autorizacionSobregiro?: AutorizacionSobregiro;
+}
+
+/** Presupuesto anual de mantenimiento de una plaza. Monto en MXN. */
+export interface PresupuestoMantenimiento {
+  plazaId: string;
+  año: number;
+  monto: number;
+}
+
+export type EstadoSobregiro = "PENDIENTE" | "AUTORIZADA" | "RECHAZADA";
+
+/** Permiso de Dirección para un trabajo que pasa del presupuesto. */
+export interface AutorizacionSobregiro {
+  estado: EstadoSobregiro;
+  solicitadoPor: string;
+  solicitadoEl: FechaISO;
+  /** Cuánto se pasa del presupuesto, en MXN, al momento de solicitar. */
+  excedente: number;
+  resueltoPor?: string;
+  resueltoEl?: FechaISO;
+  comentario?: string;
+}
+
+/** CFDI recibido (simulado, bajado del SAT) que se puede ligar a un mantenimiento. */
+export interface FacturaSat {
+  id: string;
+  /** Folio fiscal: 8-4-4-4-12 hexadecimal. */
+  uuid: string;
+  rfcEmisor: string;
+  emisor: string;
+  fecha: FechaISO;
+  subtotal: number;
+  iva: number;
+  total: number;
+  concepto: string;
+  plazaId: string;
+  /** Mantenimiento al que está ligada; vacío si sigue en la bandeja. */
+  mantenimientoId?: string;
+}
+
+// --- Avisos de cobranza programados -----------------------------------------
+
+/** Momento del ciclo de una factura en que sale un aviso automático. */
+export type DisparadorAviso =
+  "ANTES_3" | "DIA_PAGO" | "ATRASO_5" | "ATRASO_15" | "ATRASO_30";
+
+export type CanalAviso = "WHATSAPP" | "CORREO";
+
+export type DiaSemana = "LUN" | "MAR" | "MIE" | "JUE" | "VIE" | "SAB" | "DOM";
+
+/**
+ * Texto de un aviso. El cuerpo admite las variables `{locatario}`, `{local}`,
+ * `{plaza}`, `{monto}`, `{vencimiento}`, `{diasAtraso}` y `{folio}`.
+ */
+export interface PlantillaAviso {
+  id: string;
+  canal: CanalAviso;
+  disparador: DisparadorAviso;
+  /** Solo en correo. */
+  asunto?: string;
+  cuerpo: string;
+}
+
+export interface ProgramacionAvisos {
+  activa: boolean;
+  dias: DiaSemana[];
+  /** "HH:mm". */
+  hora: string;
+}
+
+/** Bitácora de envíos. En la demo ninguno sale de verdad: todos son simulados. */
+export interface EnvioAviso {
+  id: string;
+  facturaId: string;
+  plantillaId: string;
+  canal: CanalAviso;
+  enviadoEl: FechaISO;
+  /** "HH:mm". */
+  hora: string;
+  origen: "PROGRAMADO" | "MANUAL";
 }

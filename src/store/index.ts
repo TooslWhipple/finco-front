@@ -5,16 +5,24 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import {
   contratoDesdeCotizacion,
+  liberarLocal,
   DEMO_TODAY,
+  HORA_DEMO,
+  type Contrato,
   type Cotizacion,
   type EntradaCorte,
+  type EntradaEstimacion,
   type EntradaRonda,
+  type EnvioAviso,
   type EstadoCambio,
   type EstatusMantenimiento,
   type EtapaTerreno,
   type EventoSync,
+  type FechaISO,
   type Local,
+  type ProgramacionAvisos,
   type Prospecto,
+  type TipoContactoProspecto,
   type ReglaActualizacion,
   type Rol,
 } from "@/domain";
@@ -26,7 +34,7 @@ import * as r from "./reducers";
 
 export const CLAVE_STORAGE = "finco-demo";
 /** Subir al cambiar la forma del estado persistido: descarta lo viejo. */
-export const VERSION_STORAGE = 9;
+export const VERSION_STORAGE = 16;
 
 export interface Acciones {
   iniciarSesion(usuarioId: string): void;
@@ -49,12 +57,24 @@ export interface Acciones {
     resolucion: Exclude<EstadoCambio, "PENDIENTE">,
   ): void;
   registrarSeguimiento(facturaId: string, texto: string): void;
-  registrarAvisos(facturaIds: readonly string[], texto: string): void;
+  /** Registra avisos simulados (bitácora, avisadas y seguimiento de cada factura). */
+  registrarAvisos(
+    entregas: readonly r.EntregaAviso[],
+    texto: string,
+    origen: EnvioAviso["origen"],
+    hora?: string,
+  ): void;
+  editarPlantillaAviso(id: string, parche: { asunto?: string; cuerpo: string }): void;
+  guardarProgramacionAvisos(programacion: ProgramacionAvisos): void;
   /** Anota una sincronización en el log y fija el último sync de la integración. */
   registrarSync(evento: Omit<EventoSync, "id">): void;
   registrarProspecto(prospecto: Prospecto): void;
   avanzarProspecto(id: string): void;
-  descartarProspecto(id: string): void;
+  registrarContactoProspecto(
+    id: string,
+    contacto: { tipo: TipoContactoProspecto; nota: string },
+  ): void;
+  marcarProspectoPerdido(id: string, motivo: string): void;
   /**
    * Genera el contrato de una cotización: aplica los términos capturados,
    * marca la cotización y crea el contrato en borrador.
@@ -63,6 +83,11 @@ export interface Acciones {
   enviarContratoAFirma(id: string): void;
   /** Deja vigente un contrato en firma y registra su alta en EnKontrol. */
   registrarFirmaContrato(id: string, ahora: string): void;
+  /**
+   * Termina el contrato vigente de un local y lo libera: lo deja disponible y
+   * aplica el repricing por los años transcurridos (lista, mínimo e historial).
+   */
+  liberarLocal(local: Local, contrato: Contrato, fecha: FechaISO, motivo: string): void;
   moverEtapaTerreno(id: string, etapa: EtapaTerreno): void;
   actualizarAvanceTerreno(id: string, avancePct: number): void;
   /** Alta de un mantenimiento programado, con el siguiente folio. */
@@ -76,12 +101,28 @@ export interface Acciones {
     destino: EstatusMantenimiento,
     costoReal?: number,
   ): void;
+  /** Dirección autoriza un trabajo que pasa del presupuesto; el comentario es opcional. */
+  autorizarSobregiro(id: string, comentario?: string): void;
+  /** Dirección rechaza un sobregiro; el comentario es obligatorio. */
+  rechazarSobregiro(id: string, comentario: string): void;
+  /** La PMO fija el presupuesto anual de mantenimiento de una plaza. */
+  fijarPresupuestoMantenimiento(plazaId: string, año: number, monto: number): void;
+  /** Liga una factura SAT libre al mantenimiento. */
+  ligarFacturaSat(facturaId: string, mantenimientoId: string): void;
+  /** Regresa la factura SAT a la bandeja de su plaza. */
+  desligarFacturaSat(facturaId: string): void;
   /** El Supervisor captura y firma el corte de la semana, con fotos simuladas de evidencia. */
   registrarCorte(entrada: EntradaCorte): void;
   /** La PMO valida un corte firmado: desde ahí cuenta para el avance. */
   validarCorte(id: string): void;
   /** La PMO rechaza un corte firmado; el comentario es obligatorio. */
   rechazarCorte(id: string, comentario: string): void;
+  /** El Supervisor registra y firma la estimación del contratista, con fotos simuladas. */
+  registrarEstimacion(entrada: EntradaEstimacion): void;
+  /** La PMO autoriza el pago de una estimación firmada: nace el pago por el importe bruto. */
+  autorizarEstimacion(id: string): void;
+  /** La PMO rechaza una estimación firmada; el motivo es obligatorio. */
+  rechazarEstimacion(id: string, comentario: string): void;
   /** La PMO captura la siguiente ronda de propuestas de una licitación en curso. */
   registrarRonda(licitacionId: string, entrada: EntradaRonda): void;
   /** La PMO saca a un proveedor de la competencia; el motivo es obligatorio. */
@@ -109,10 +150,24 @@ export const useAppStore = create<AppState>()(
         cambiarRol: (rol) => set({ session: { usuarioId: usuarioDeRol(rol).id } }),
         cerrarSesion: () => set({ session: { usuarioId: null } }),
         crearCotizacion: (cotizacion) =>
-          set((s) => ({ cotizaciones: r.agregarCotizacion(s.cotizaciones, cotizacion) })),
+          set((s) => ({
+            cotizaciones: r.agregarCotizacion(
+              s.cotizaciones,
+              cotizacion,
+              DEMO_TODAY,
+              HORA_DEMO,
+            ),
+          })),
         actualizarCotizacion: (id, parche) =>
           set((s) => ({
-            cotizaciones: r.actualizarCotizacion(s.cotizaciones, id, parche),
+            cotizaciones: r.actualizarCotizacion(
+              s.cotizaciones,
+              id,
+              parche,
+              s.session.usuarioId ?? "",
+              DEMO_TODAY,
+              HORA_DEMO,
+            ),
           })),
         solicitarExcepcion: (cotizacion, local, motivo) =>
           set((s) => ({
@@ -196,17 +251,39 @@ export const useAppStore = create<AppState>()(
           set((s) => ({
             cobranza: r.registrarSeguimiento(s.cobranza, facturaId, texto),
           })),
-        registrarAvisos: (facturaIds, texto) =>
-          set((s) => ({ cobranza: r.registrarAvisos(s.cobranza, facturaIds, texto) })),
+        registrarAvisos: (entregas, texto, origen, hora = HORA_DEMO) =>
+          set((s) => ({
+            cobranza: r.registrarAvisos(
+              s.cobranza,
+              entregas,
+              texto,
+              DEMO_TODAY,
+              hora,
+              origen,
+            ),
+          })),
+        editarPlantillaAviso: (id, parche) =>
+          set((s) => ({ cobranza: r.editarPlantilla(s.cobranza, id, parche) })),
+        guardarProgramacionAvisos: (programacion) =>
+          set((s) => ({ cobranza: r.guardarProgramacion(s.cobranza, programacion) })),
         registrarSync: (evento) =>
           set((s) => ({ integraciones: r.registrarSync(s.integraciones, evento) })),
         registrarProspecto: (prospecto) =>
           set((s) => ({ prospectos: r.registrarProspecto(s.prospectos, prospecto) })),
         avanzarProspecto: (id) =>
           set((s) => ({ prospectos: r.avanzarProspecto(s.prospectos, id, DEMO_TODAY) })),
-        descartarProspecto: (id) =>
+        registrarContactoProspecto: (id, contacto) =>
           set((s) => ({
-            prospectos: r.descartarProspecto(s.prospectos, id, DEMO_TODAY),
+            prospectos: r.registrarContactoProspecto(
+              s.prospectos,
+              id,
+              contacto,
+              DEMO_TODAY,
+            ),
+          })),
+        marcarProspectoPerdido: (id, motivo) =>
+          set((s) => ({
+            prospectos: r.marcarProspectoPerdido(s.prospectos, id, motivo, DEMO_TODAY),
           })),
         generarContrato: (cotizacionId, terminos) =>
           set((s) => {
@@ -223,6 +300,9 @@ export const useAppStore = create<AppState>()(
                 s.cotizaciones,
                 cotizacionId,
                 generada,
+                s.session.usuarioId ?? "",
+                DEMO_TODAY,
+                HORA_DEMO,
               ),
               contratos: r.agregarContrato(
                 s.contratos,
@@ -247,6 +327,19 @@ export const useAppStore = create<AppState>()(
               }),
             };
           }),
+        liberarLocal: (local, contrato, fecha, motivo) =>
+          set((s) => {
+            const calculo = liberarLocal(local, contrato, fecha, motivo);
+            if (!calculo.ok) return s;
+            return r.aplicarLiberacion(
+              s.contratos,
+              s.locales,
+              local,
+              calculo.liberacion,
+              actor(),
+              formatMoneda,
+            );
+          }),
         moverEtapaTerreno: (id, etapa) =>
           set((s) => ({ terrenos: r.moverEtapaTerreno(s.terrenos, id, etapa) })),
         actualizarAvanceTerreno: (id, avancePct) =>
@@ -255,7 +348,55 @@ export const useAppStore = create<AppState>()(
           })),
         crearMantenimiento: (nuevo) =>
           set((s) => ({
-            mantenimientos: r.agregarMantenimiento(s.mantenimientos, nuevo, DEMO_TODAY),
+            mantenimientos: r.agregarMantenimiento(
+              s.mantenimientos,
+              nuevo,
+              DEMO_TODAY,
+              actor(),
+            ),
+          })),
+        autorizarSobregiro: (id, comentario) =>
+          set((s) => ({
+            mantenimientos: r.resolverSobregiroMantenimiento(
+              s.mantenimientos,
+              id,
+              "AUTORIZADA",
+              actor(),
+              DEMO_TODAY,
+              comentario,
+            ),
+          })),
+        rechazarSobregiro: (id, comentario) =>
+          set((s) => ({
+            mantenimientos: r.resolverSobregiroMantenimiento(
+              s.mantenimientos,
+              id,
+              "RECHAZADA",
+              actor(),
+              DEMO_TODAY,
+              comentario,
+            ),
+          })),
+        fijarPresupuestoMantenimiento: (plazaId, año, monto) =>
+          set((s) => ({
+            mantenimientos: r.fijarPresupuestoMantenimiento(
+              s.mantenimientos,
+              plazaId,
+              año,
+              monto,
+            ),
+          })),
+        ligarFacturaSat: (facturaId, mantenimientoId) =>
+          set((s) => ({
+            mantenimientos: r.ligarFacturaSat(
+              s.mantenimientos,
+              facturaId,
+              mantenimientoId,
+            ),
+          })),
+        desligarFacturaSat: (facturaId) =>
+          set((s) => ({
+            mantenimientos: r.desligarFacturaSat(s.mantenimientos, facturaId),
           })),
         transicionarMantenimiento: (id, destino, costoReal) =>
           set((s) => {
@@ -295,6 +436,39 @@ export const useAppStore = create<AppState>()(
               s.obra,
               id,
               "RECHAZADO",
+              actor(),
+              DEMO_TODAY,
+              comentario,
+            ),
+          })),
+        registrarEstimacion: (entrada) =>
+          set((s) => ({
+            obra: r.registrarEstimacion(
+              s.obra,
+              entrada,
+              actor(),
+              DEMO_TODAY,
+              evidenciaCorte(
+                `est-${entrada.contratoObraId}-${s.obra.estimaciones.length + 1}`,
+              ),
+            ),
+          })),
+        autorizarEstimacion: (id) =>
+          set((s) => ({
+            obra: r.resolverEstimacionObra(
+              s.obra,
+              id,
+              "AUTORIZADA_PMO",
+              actor(),
+              DEMO_TODAY,
+            ),
+          })),
+        rechazarEstimacion: (id, comentario) =>
+          set((s) => ({
+            obra: r.resolverEstimacionObra(
+              s.obra,
+              id,
+              "RECHAZADA",
               actor(),
               DEMO_TODAY,
               comentario,

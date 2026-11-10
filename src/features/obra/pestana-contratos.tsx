@@ -26,7 +26,16 @@ const ANCHOS_CONCEPTOS = [58, null, 42, 68, 84, 92] as const;
 
 const COLUMNAS_CONCEPTOS: ColumnDef<ConceptoObra>[] = [
   { id: "clave", header: "Clave", accessorFn: (c) => c.clave },
-  { id: "descripcion", header: "Concepto", accessorFn: (c) => c.descripcion },
+  {
+    id: "descripcion",
+    header: "Concepto",
+    accessorFn: (c) => c.descripcion,
+    cell: ({ row }) => (
+      <span className="block truncate" title={row.original.descripcion}>
+        {row.original.descripcion}
+      </span>
+    ),
+  },
   { id: "unidad", header: "Un.", accessorFn: (c) => ETIQUETA_UNIDAD[c.unidad] },
   {
     id: "volumen",

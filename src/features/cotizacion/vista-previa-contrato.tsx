@@ -1,8 +1,13 @@
 import { FileText } from "lucide-react";
 import Image from "next/image";
-import type { ReactNode } from "react";
+import Link from "next/link";
+import { MACHOTE_ARRENDAMIENTO } from "@/data/machote";
+import { contratoDesdeCotizacion } from "@/domain";
 import type { Ciudad, Cotizacion, Local, Plaza } from "@/domain";
-import { describirIncremento } from "@/features/plaza/resumen";
+import { rutaContratoImprimible } from "@/features/contratos/contrato-imprimible";
+import { renderContrato } from "@/features/contratos/render-contrato";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface VistaPreviaContratoProps {
   cotizacion: Cotizacion;
@@ -10,42 +15,27 @@ interface VistaPreviaContratoProps {
   plaza: Plaza;
   ciudad?: Ciudad;
   folioContrato: string;
+  /** Con el contrato ya generado, se ofrece abrir el documento imprimible. */
+  contratoGenerado?: boolean;
 }
 
-/** Barras grises que representan texto aún no redactado. */
-function Lineas({ anchos }: { anchos: readonly string[] }) {
-  return (
-    <div aria-hidden className="space-y-2">
-      {anchos.map((ancho, i) => (
-        <div
-          key={i}
-          className="h-1.5 rounded-full bg-brand-line"
-          style={{ width: ancho }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function Seccion({ titulo, children }: { titulo: string; children: ReactNode }) {
-  return (
-    <section className="space-y-2.5">
-      <h3 className="text-xs font-bold tracking-wide text-brand-text uppercase">
-        {titulo}
-      </h3>
-      {children}
-    </section>
-  );
-}
-
-/** Hoja del contrato siempre visible; la cláusula de renta se redacta con los datos y el resto es maqueta. */
+/** Hoja del contrato siempre visible, redactada con el machote y los datos de la cotización. */
 export function VistaPreviaContrato({
   cotizacion,
   local,
   plaza,
   ciudad,
   folioContrato,
+  contratoGenerado = false,
 }: VistaPreviaContratoProps) {
+  const doc = renderContrato(
+    MACHOTE_ARRENDAMIENTO,
+    contratoDesdeCotizacion(cotizacion),
+    cotizacion,
+    local,
+    plaza,
+    cotizacion.prospecto.nombre,
+  );
   return (
     <aside
       aria-label="Vista previa del contrato"
@@ -79,24 +69,24 @@ export function VistaPreviaContrato({
             {ciudad ? ` · ${ciudad.nombre}, ${ciudad.estado}` : ""}
           </p>
         </div>
-        <Seccion titulo="Declaraciones">
-          <Lineas anchos={["100%", "96%", "86%", "92%", "70%"]} />
-        </Seccion>
-        <Seccion titulo="Primera. Objeto">
-          <Lineas anchos={["100%", "90%", "62%"]} />
-        </Seccion>
-        <Seccion titulo="Segunda. Renta y actualización">
-          <p className="text-xs leading-relaxed text-brand-text">
-            La renta mensual será la indicada en el <strong>Anexo A</strong>, actualizada
-            cada año conforme a la regla{" "}
-            <strong>{describirIncremento(cotizacion.reglaPactada)}</strong>, con
-            facturación el día 1 de cada mes...
-          </p>
-          <Lineas anchos={["88%", "60%"]} />
-        </Seccion>
-        <Seccion titulo="Tercera. Vigencia">
-          <Lineas anchos={["100%", "58%"]} />
-        </Seccion>
+        <p className="text-xs leading-relaxed text-brand-text">{doc.proemio}</p>
+        {doc.clausulas.map((c) => (
+          <section key={c.ordinal} className="space-y-1">
+            <h3 className="text-xs font-bold tracking-wide text-brand-text uppercase">
+              {c.ordinal}. {c.titulo}
+            </h3>
+            <p className="text-xs leading-relaxed text-brand-text">{c.texto}</p>
+          </section>
+        ))}
+        {contratoGenerado ? (
+          <Link
+            href={rutaContratoImprimible(folioContrato)}
+            className={cn(buttonVariants({ variant: "outline" }), "min-h-11 self-start")}
+          >
+            <FileText aria-hidden />
+            Ver contrato
+          </Link>
+        ) : null}
         <section
           aria-label="Anexo A"
           className="mt-auto flex items-start gap-3 rounded-lg border border-dashed border-brand-secondary bg-brand-secondary/10 p-3"

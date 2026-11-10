@@ -16,7 +16,9 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable, EmptyState, MoneyAmount, SectionCard } from "@/components/shared";
 import {
   INPC_ANUAL,
+  MOTIVO_REPRICING_LIBERAR,
   repricingAlLiberar,
+  ultimoRegistroPrecio,
   type Local,
   type ReglaActualizacion,
 } from "@/domain";
@@ -103,8 +105,9 @@ export function Repricing({ local, regla }: RepricingProps) {
   const años = useMemo(() => añosRepricing(local.historial), [local.historial]);
   const añoBase = añoBaseRepricing(local.historial);
   const resultado = useMemo(
-    () => repricingAlLiberar(local.historial, regla, años),
-    [local.historial, regla, años],
+    () =>
+      repricingAlLiberar(local.historial, regla, años, INPC_ANUAL, local.precioMinimo),
+    [local.historial, regla, años, local.precioMinimo],
   );
 
   const filas = useMemo<FilaRepricing[]>(() => {
@@ -128,6 +131,39 @@ export function Repricing({ local, regla }: RepricingProps) {
       })),
     ];
   }, [resultado, añoBase, regla]);
+
+  const ultimaLista = ultimoRegistroPrecio(local.historial, "LISTA");
+  const ultimoMinimo = ultimoRegistroPrecio(local.historial, "MINIMO");
+  if (ultimaLista?.motivo.startsWith(MOTIVO_REPRICING_LIBERAR)) {
+    return (
+      <SectionCard
+        titulo={
+          <span className="flex flex-wrap items-center gap-3">
+            Repricing al liberar el local
+            <span className="rounded-full bg-brand-primary/10 px-2.5 py-0.5 font-sans text-xs font-medium text-brand-primary">
+              Aplicado {formatFecha(ultimaLista.fecha)}
+            </span>
+          </span>
+        }
+        extra="no regresa al precio original"
+      >
+        <div className="flex items-start gap-3 rounded-lg bg-brand-secondary/15 px-4 py-3 text-sm">
+          <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-brand-primary" />
+          <p data-testid="repricing-aplicado">
+            Al liberarse el local el {formatFecha(ultimaLista.fecha)} se actualizaron los
+            precios: lista <strong>{formatMoneda(ultimaLista.precio)}</strong>
+            {ultimoMinimo ? (
+              <>
+                {" "}
+                y mínimo autorizado <strong>{formatMoneda(ultimoMinimo.precio)}</strong>
+              </>
+            ) : null}
+            . {ultimaLista.motivo}. La siguiente cotización parte de este precio.
+          </p>
+        </div>
+      </SectionCard>
+    );
+  }
 
   if (!resultado || resultado.pasos.length === 0) {
     return (

@@ -11,6 +11,7 @@ import { useContextoMantenimiento } from "./contexto";
 import { DetalleMantenimiento } from "./detalle-mantenimiento";
 import { DialogoNuevoMantenimiento } from "./dialogos-mantenimiento";
 import { KpisMantenimiento } from "./kpis-mantenimiento";
+import { PanelPresupuestos } from "./panel-presupuestos";
 import { TablaMantenimientos } from "./tabla-mantenimientos";
 
 interface SeccionMantenimientosProps {
@@ -56,6 +57,9 @@ export function SeccionMantenimientos({
   return (
     <div className="space-y-4">
       {conKpis ? <KpisMantenimiento mantenimientos={lista} /> : null}
+      {conKpis && plazaId ? (
+        <PanelPresupuestos contexto={contexto} plazaId={plazaId} />
+      ) : null}
       {puedeGestionar ? (
         <div className="flex justify-end">
           <Button

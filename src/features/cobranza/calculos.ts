@@ -1,4 +1,5 @@
 import {
+  avisosDelDia,
   carteraVencida,
   diasAtraso,
   diasEntre,
@@ -86,9 +87,6 @@ export function montoAlCorriente(facturas: Factura[], hoy: string): number {
     .reduce((s, f) => s + f.monto, 0);
 }
 
-/** Días de atraso en que salen avisos automáticos; además: 3 días antes y el día de pago. */
-export const DIAS_AVISO_ATRASO = [5, 15, 30] as const;
-
 export interface AvisosAutomaticos {
   total: number;
   whatsapp: number;
@@ -96,26 +94,17 @@ export interface AvisosAutomaticos {
 }
 
 /**
- * Avisos automáticos que salen hoy: a las facturas sin pagar que vencen en 3 días
- * o hoy, o que llevan 5, 15 o 30 días de atraso. Tres de cada cuatro van por
- * WhatsApp y el resto por correo.
+ * Avisos automáticos que salen hoy (las reglas viven en `avisosDelDia`): a las
+ * facturas sin pagar que vencen en 3 días o hoy, o que llevan 5, 15 o 30 días de
+ * atraso. Tres de cada cuatro van por WhatsApp y el resto por correo.
  */
 export function avisosAutomaticosHoy(
   facturas: Factura[],
   hoy: string,
 ): AvisosAutomaticos {
-  const total = facturas.filter((f) => {
-    if (f.pagadaEl) return false;
-    const faltan = diasEntre(hoy, f.vencimiento);
-    const atraso = diasAtraso(f, hoy);
-    return (
-      faltan === 3 ||
-      faltan === 0 ||
-      (DIAS_AVISO_ATRASO as readonly number[]).includes(atraso)
-    );
-  }).length;
-  const correo = Math.floor(total / 4);
-  return { total, whatsapp: total - correo, correo };
+  const avisos = avisosDelDia(facturas, hoy);
+  const correo = avisos.filter((a) => a.canal === "CORREO").length;
+  return { total: avisos.length, whatsapp: avisos.length - correo, correo };
 }
 
 const DIA_MAXIMO_FACTURACION = 28;

@@ -2,19 +2,30 @@ import { describe, expect, it } from "vitest";
 import {
   cargoValido,
   consecutivoDeFolio,
+  consumoPresupuesto,
   diasDeAtraso,
+  disponiblePresupuesto,
+  excedenteSobregiro,
+  facturasDeMantenimiento,
+  facturasSinLigar,
   erroresMantenimiento,
   estaAtrasado,
   estatusCompleto,
   filtrarPorUbicacion,
+  inicioBloqueado,
   kpisMantenimiento,
+  nivelPresupuesto,
   origenValido,
   proveedorAtiende,
   puedeTransicionar,
+  requiereAutorizacion,
+  resolverSobregiro,
   siguienteFolio,
+  solicitarSobregiro,
   transicionar,
+  uuidCorto,
 } from "./mantenimientos";
-import type { Foto, Mantenimiento } from "./tipos";
+import type { FacturaSat, Foto, Mantenimiento } from "./tipos";
 
 const HOY = "2026-11-03";
 
@@ -280,5 +291,183 @@ describe("filtrarPorUbicacion", () => {
       "b",
     ]);
     expect(filtrarPorUbicacion(lista, { localId: "l2" }).map((m) => m.id)).toEqual(["c"]);
+  });
+});
+
+describe("presupuesto", () => {
+  const lista = [
+    mnt({ id: "a", costoEstimado: 1000 }),
+    mnt({ id: "b", costoEstimado: 2000, costoReal: 1500, estatus: "FINALIZADO" }),
+    mnt({ id: "c", costoEstimado: 9000, estatus: "CANCELADO" }),
+    mnt({ id: "d", plazaId: "plz-otra", costoEstimado: 7000 }),
+    mnt({ id: "e", fechaProgramada: "2027-01-05", costoEstimado: 4000 }),
+    mnt({
+      id: "f",
+      costoEstimado: 5000,
+      autorizacionSobregiro: {
+        estado: "PENDIENTE",
+        solicitadoPor: "Ana",
+        solicitadoEl: HOY,
+        excedente: 100,
+      },
+    }),
+  ];
+
+  it("suma costo real o estimado de la plaza y el año, sin cancelados ni pendientes", () => {
+    expect(consumoPresupuesto("plz-alborada", 2026, lista)).toBe(2500);
+    expect(consumoPresupuesto("plz-alborada", 2027, lista)).toBe(4000);
+    expect(consumoPresupuesto("plz-alborada", 2026, lista, "a")).toBe(1500);
+  });
+
+  it("cuenta lo autorizado y deja fuera lo rechazado", () => {
+    const autorizada = mnt({
+      costoEstimado: 300,
+      autorizacionSobregiro: {
+        estado: "AUTORIZADA",
+        solicitadoPor: "Ana",
+        solicitadoEl: HOY,
+        excedente: 1,
+      },
+    });
+    const rechazada = {
+      ...autorizada,
+      autorizacionSobregiro: {
+        ...autorizada.autorizacionSobregiro!,
+        estado: "RECHAZADA" as const,
+      },
+    };
+    expect(consumoPresupuesto("plz-alborada", 2026, [autorizada])).toBe(300);
+    expect(consumoPresupuesto("plz-alborada", 2026, [rechazada])).toBe(0);
+  });
+
+  it("el disponible puede quedar negativo", () => {
+    expect(disponiblePresupuesto({ monto: 5000 }, 3000)).toBe(2000);
+    expect(disponiblePresupuesto({ monto: 5000 }, 6000)).toBe(-1000);
+  });
+
+  it("alerta desde 80 % y sobregiro solo si se pasa", () => {
+    const p = { monto: 1000 };
+    expect(nivelPresupuesto(p, 799)).toBe("NORMAL");
+    expect(nivelPresupuesto(p, 800)).toBe("ALERTA");
+    expect(nivelPresupuesto(p, 1000)).toBe("ALERTA");
+    expect(nivelPresupuesto(p, 1001)).toBe("SOBREGIRO");
+  });
+
+  it("requiere autorización solo si pasa del presupuesto", () => {
+    const m = mnt({ costoEstimado: 400 });
+    expect(requiereAutorizacion(m, { monto: 1000 }, 600)).toBe(false);
+    expect(requiereAutorizacion(m, { monto: 1000 }, 601)).toBe(true);
+    expect(requiereAutorizacion(m, undefined, 99999)).toBe(false);
+    expect(excedenteSobregiro(m, { monto: 1000 }, 601)).toBe(1);
+    expect(excedenteSobregiro(m, { monto: 1000 }, 100)).toBe(0);
+  });
+});
+
+describe("sobregiro", () => {
+  const pendiente = () =>
+    solicitarSobregiro(mnt(), { solicitadoPor: "Ana", hoy: HOY, excedente: 250 });
+
+  it("solicitar deja el trabajo pendiente con quién y cuándo", () => {
+    expect(pendiente().autorizacionSobregiro).toEqual({
+      estado: "PENDIENTE",
+      solicitadoPor: "Ana",
+      solicitadoEl: HOY,
+      excedente: 250,
+    });
+  });
+
+  it("no se puede iniciar mientras no esté autorizado", () => {
+    const m = pendiente();
+    expect(inicioBloqueado(m)).toBe(true);
+    expect(transicionar(m, "EN_PROCESO", { hoy: HOY })).toBeUndefined();
+    const rechazado = resolverSobregiro(m, "RECHAZADA", {
+      resueltoPor: "Dir",
+      hoy: HOY,
+      comentario: "Sin presupuesto",
+    })!;
+    expect(transicionar(rechazado, "EN_PROCESO", { hoy: HOY })).toBeUndefined();
+    expect(transicionar(rechazado, "CANCELADO", { hoy: HOY })?.estatus).toBe("CANCELADO");
+    const autorizado = resolverSobregiro(m, "AUTORIZADA", {
+      resueltoPor: "Dir",
+      hoy: HOY,
+    })!;
+    expect(inicioBloqueado(autorizado)).toBe(false);
+    expect(transicionar(autorizado, "EN_PROCESO", { hoy: HOY })?.estatus).toBe(
+      "EN_PROCESO",
+    );
+  });
+
+  it("rechazar exige comentario y autorizar lo acepta opcional", () => {
+    const m = pendiente();
+    expect(
+      resolverSobregiro(m, "RECHAZADA", { resueltoPor: "Dir", hoy: HOY }),
+    ).toBeUndefined();
+    expect(
+      resolverSobregiro(m, "RECHAZADA", {
+        resueltoPor: "Dir",
+        hoy: HOY,
+        comentario: "  ",
+      }),
+    ).toBeUndefined();
+    const ok = resolverSobregiro(m, "AUTORIZADA", {
+      resueltoPor: "Dir",
+      hoy: "2026-11-04",
+      comentario: "Urgente",
+    })!;
+    expect(ok.autorizacionSobregiro).toMatchObject({
+      estado: "AUTORIZADA",
+      resueltoPor: "Dir",
+      resueltoEl: "2026-11-04",
+      comentario: "Urgente",
+      solicitadoPor: "Ana",
+    });
+  });
+
+  it("solo se resuelve lo pendiente", () => {
+    const resuelto = resolverSobregiro(pendiente(), "AUTORIZADA", {
+      resueltoPor: "Dir",
+      hoy: HOY,
+    })!;
+    expect(
+      resolverSobregiro(resuelto, "RECHAZADA", {
+        resueltoPor: "Dir",
+        hoy: HOY,
+        comentario: "x",
+      }),
+    ).toBeUndefined();
+    expect(
+      resolverSobregiro(mnt(), "AUTORIZADA", { resueltoPor: "Dir", hoy: HOY }),
+    ).toBeUndefined();
+  });
+});
+
+describe("facturas SAT", () => {
+  const factura = (parche: Partial<FacturaSat>): FacturaSat => ({
+    id: "fsat-1",
+    uuid: "A1B2C3D4-0000-4000-8000-0123456789AB",
+    rfcEmisor: "AAA010101AAA",
+    emisor: "Proveedor",
+    fecha: HOY,
+    subtotal: 100,
+    iva: 16,
+    total: 116,
+    concepto: "x",
+    plazaId: "plz-alborada",
+    ...parche,
+  });
+  const facturas = [
+    factura({ id: "1" }),
+    factura({ id: "2", mantenimientoId: "mnt-0001" }),
+    factura({ id: "3", plazaId: "plz-otra" }),
+  ];
+
+  it("la bandeja solo trae las libres de la plaza", () => {
+    expect(facturasSinLigar(facturas, "plz-alborada").map((f) => f.id)).toEqual(["1"]);
+  });
+  it("lista las ligadas a un mantenimiento", () => {
+    expect(facturasDeMantenimiento(facturas, "mnt-0001").map((f) => f.id)).toEqual(["2"]);
+  });
+  it("abrevia el UUID", () => {
+    expect(uuidCorto("a1b2c3d4-0000-4000-8000-0123456789ab")).toBe("A1B2C3D4");
   });
 });

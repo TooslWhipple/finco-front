@@ -240,6 +240,15 @@ export function eventosDecision(
   return eventos;
 }
 
+/** Id del candidato con la menor oferta de la última ronda (el primero en caso de empate). */
+export function candidatoMasBajo(
+  candidatos: readonly { id: string; monto: number }[],
+): string {
+  let mejor: { id: string; monto: number } | undefined;
+  for (const c of candidatos) if (!mejor || c.monto < mejor.monto) mejor = c;
+  return mejor?.id ?? "";
+}
+
 /** Participantes de la siguiente ronda o candidatos a ganar, con su última propuesta. */
 export function candidatosAGanar(
   licitacion: Licitacion,

@@ -5,6 +5,7 @@ import {
   aplicarResumenObra,
   DEMO_TODAY,
   filtrarPorUbicacion,
+  filtrarPorVendedor,
   resumenObra,
   type Contrato,
   type EventoSync,
@@ -21,6 +22,7 @@ import {
   aplicarMeta,
   aplicarReglaDefault,
   aplicarReglaHeredada,
+  aplicarTerminaciones,
 } from "@/store/reducers";
 import type { EstadoIntegracion } from "@/services";
 import { useConsulta } from "./use-consulta";
@@ -123,17 +125,34 @@ export function useLocatarios() {
   return useConsulta((r) => r.locales.listarLocatarios());
 }
 
+/** Contratos del repositorio con las terminaciones hechas en la demo. */
 export function useContratos() {
-  return useConsulta((r) => r.locales.listarContratos());
+  const base = useConsulta((r) => r.locales.listarContratos());
+  const terminaciones = useAppStore((s) => s.contratos.terminaciones);
+  const datos = useMemo(
+    () => base.datos && aplicarTerminaciones(base.datos, terminaciones),
+    [base.datos, terminaciones],
+  );
+  return { datos, cargando: base.cargando };
 }
 
 export function useContratoVigente(localId: string) {
   return useConsulta((r) => r.locales.contratoVigenteDe(localId), [localId]);
 }
 
-/** Cotizaciones vivas: viven en el store (parten del seed). */
-export function useCotizaciones() {
+/** Cotizaciones de todo el equipo, sin filtrar: para vistas que no son del vendedor (contratos). */
+export function useTodasLasCotizaciones() {
   return useAppStore((s) => s.cotizaciones.cotizaciones);
+}
+
+/** Cotizaciones vivas visibles para la sesión: cada vendedor ve solo las suyas. */
+export function useCotizaciones() {
+  const todas = useTodasLasCotizaciones();
+  const { usuario } = useSesion();
+  return useMemo(
+    () => (usuario ? filtrarPorVendedor(todas, usuario) : todas),
+    [todas, usuario],
+  );
 }
 
 export function useCotizacion(id: string) {
@@ -143,7 +162,12 @@ export function useCotizacion(id: string) {
 
 /** Prospectos del embudo comercial: viven en el store (parten del seed). */
 export function useProspectos() {
-  const datos = useAppStore((s) => s.prospectos.prospectos);
+  const todos = useAppStore((s) => s.prospectos.prospectos);
+  const { usuario } = useSesion();
+  const datos = useMemo(
+    () => (usuario ? filtrarPorVendedor(todos, usuario) : todos),
+    [todos, usuario],
+  );
   return { datos, cargando: false };
 }
 
@@ -151,9 +175,10 @@ export function useProspectos() {
 export function useContratosVivos() {
   const base = useConsulta((r) => r.contratos.listar());
   const nuevos = useAppStore((s) => s.contratos.nuevos);
+  const terminaciones = useAppStore((s) => s.contratos.terminaciones);
   const datos = useMemo<Contrato[] | undefined>(
-    () => base.datos && [...base.datos, ...nuevos],
-    [base.datos, nuevos],
+    () => base.datos && aplicarTerminaciones([...base.datos, ...nuevos], terminaciones),
+    [base.datos, nuevos, terminaciones],
   );
   return { datos, cargando: base.cargando };
 }
@@ -211,6 +236,21 @@ export function usePagosObra(terrenoId: string) {
   }, [contratos, todos]);
 }
 
+/** Estimaciones de pago de un proyecto, de la más reciente a la más antigua. */
+export function useEstimacionesObra(terrenoId: string) {
+  const contratos = useContratosObra(terrenoId);
+  const todas = useAppStore((s) => s.obra.estimaciones);
+  return useMemo(() => {
+    const ids = new Set(contratos.map((c) => c.id));
+    return todas
+      .filter((e) => ids.has(e.contratoObraId))
+      .toSorted(
+        (a, b) =>
+          b.registradaEn.localeCompare(a.registradaEn) || b.id.localeCompare(a.id),
+      );
+  }, [contratos, todas]);
+}
+
 /** Licitaciones de obra de un proyecto (parten del seed). */
 export function useLicitaciones(terrenoId: string) {
   const todas = useAppStore((s) => s.obra.licitaciones);
@@ -247,6 +287,16 @@ export function useMantenimientos(filtro: FiltroMantenimientos = {}) {
     [todos, plazaId, localId],
   );
   return { datos, cargando: false };
+}
+
+/** Presupuestos anuales de mantenimiento por plaza (parten del seed, editables en la demo). */
+export function usePresupuestosMantenimiento() {
+  return useAppStore((s) => s.mantenimientos.presupuestos);
+}
+
+/** CFDI recibidos simulados, ligados y libres. */
+export function useFacturasSat() {
+  return useAppStore((s) => s.mantenimientos.facturasSat);
 }
 
 export function useProveedores() {

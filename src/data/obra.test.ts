@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  acumuladoEstimado,
+  acumuladoValidado,
+  volumenPorEstimar,
   ahorroNegociacion,
   mejorPropuestaPorRonda,
   montoEnRonda,
@@ -198,6 +201,72 @@ describe("cortes y pagos del seed", () => {
         alertasObra(propios, cs, ps, DEMO_TODAY).some((a) => a.nivel === "ROJO"),
       ).toBe(false);
     }
+  });
+});
+
+describe("estimaciones del seed", () => {
+  const { estimaciones, pagos, cortes } = seed.obra;
+  const deHeroe = contratos.filter((c) => c.terrenoId === ID_TERRENO_HEROE);
+  const idsHeroe = new Set(deHeroe.map((c) => c.id));
+
+  it("solo el héroe estima: anticipo del 30% y fondo del 5%", () => {
+    expect(estimaciones.every((e) => idsHeroe.has(e.contratoObraId))).toBe(true);
+    expect(
+      deHeroe.every((c) => c.anticipoPct === 0.3 && c.fondoGarantiaPct === 0.05),
+    ).toBe(true);
+    expect(
+      contratos.filter((c) => !idsHeroe.has(c.id)).every((c) => c.anticipoPct === 0),
+    ).toBe(true);
+  });
+
+  it("hay contratos con 2 o 3 autorizadas y exactamente una pendiente de la PMO", () => {
+    const autorizadas = (id: string) =>
+      estimaciones.filter(
+        (e) => e.contratoObraId === id && e.estado === "AUTORIZADA_PMO",
+      );
+    expect(deHeroe.some((c) => autorizadas(c.id).length >= 2)).toBe(true);
+    expect(deHeroe.every((c) => autorizadas(c.id).length <= 3)).toBe(true);
+    expect(estimaciones.filter((e) => e.estado === "VALIDADA_SUPERVISOR")).toHaveLength(
+      1,
+    );
+  });
+
+  it("cada autorizada tiene su pago por el importe bruto", () => {
+    for (const e of estimaciones.filter((x) => x.estado === "AUTORIZADA_PMO")) {
+      const pago = pagos.find((p) => p.id === e.pagoId);
+      expect(pago?.contratoObraId).toBe(e.contratoObraId);
+      expect(pago?.monto).toBe(e.importeBruto);
+      expect(e.importeNeto).toBeCloseTo(
+        e.importeBruto - e.amortizacionAnticipo - e.fondoGarantia,
+        2,
+      );
+    }
+    expect(
+      estimaciones.filter((e) => e.estado !== "AUTORIZADA_PMO").every((e) => !e.pagoId),
+    ).toBe(true);
+  });
+
+  it("no estiman más de lo validado en cortes y sus fechas no pasan de hoy", () => {
+    for (const contrato of deHeroe) {
+      const estimado = acumuladoEstimado(contrato.id, estimaciones);
+      const validado = acumuladoValidado(contrato.id, cortes);
+      for (const concepto of contrato.conceptos) {
+        expect(estimado[concepto.id] ?? 0).toBeLessThanOrEqual(
+          (validado[concepto.id] ?? 0) + 1e-6,
+        );
+      }
+    }
+    for (const e of estimaciones) {
+      expect(e.registradaEn <= DEMO_TODAY).toBe(true);
+      expect(e.periodo.desde <= e.periodo.hasta).toBe(true);
+    }
+    expect(new Set(estimaciones.map((e) => e.id)).size).toBe(estimaciones.length);
+  });
+
+  it("MUROS conserva volumen validado sin estimar para la demo del Supervisor", () => {
+    const muros = deHeroe.find((c) => c.partida === "MUROS")!;
+    const libre = volumenPorEstimar(muros, cortes, estimaciones);
+    expect(Object.values(libre).some((v) => v > 0)).toBe(true);
   });
 });
 

@@ -12,6 +12,7 @@ import {
   useContratosObra,
   useCortesObra,
   useCronograma,
+  useEstimacionesObra,
   useLicitaciones,
   usePagosObra,
   usePlazas,
@@ -32,6 +33,7 @@ export function Expediente({ terrenoId }: { terrenoId: string }) {
   const cronograma = useCronograma(terrenoId);
   const cortes = useCortesObra(terrenoId);
   const pagos = usePagosObra(terrenoId);
+  const estimaciones = useEstimacionesObra(terrenoId);
   const licitaciones = useLicitaciones(terrenoId);
   const [licitacionEnfocadaId, setLicitacionEnfocadaId] = useState<string | null>(null);
   const [pestanaId, setPestanaId] = useState(PESTANAS[0].id);
@@ -61,6 +63,7 @@ export function Expediente({ terrenoId }: { terrenoId: string }) {
     cronograma,
     cortes,
     pagos,
+    estimaciones,
     licitaciones,
     licitacionEnfocadaId,
     abrirLicitacion: (licitacionId) => {

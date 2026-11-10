@@ -11,6 +11,7 @@ import {
   type Mantenimiento,
 } from "@/domain";
 import { formatFecha, formatMoneda } from "@/lib/format";
+import { ChipSobregiro } from "./chip-sobregiro";
 import type { ContextoMantenimiento } from "./contexto";
 
 interface TablaMantenimientosProps {
@@ -59,6 +60,7 @@ export function TablaMantenimientos({
             {estaAtrasado(row.original, DEMO_TODAY) ? (
               <StatusChip estatus="ATRASADO" />
             ) : null}
+            <ChipSobregiro mantenimiento={row.original} />
           </span>
         ),
       },
@@ -150,6 +152,7 @@ export function TablaMantenimientos({
       columns={columnas}
       data={mantenimientos}
       tamanoPagina={tamanoPagina}
+      ocultarEnVertical={["tipo", "proveedor", "inicio"]}
       onFilaClick={onSeleccionar}
       vacio={
         <EmptyState

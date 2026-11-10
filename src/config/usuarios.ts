@@ -10,9 +10,11 @@ export const USUARIOS_DEMO: readonly Usuario[] = [
   {
     id: "usr-jorge",
     nombre: "Jorge Ramírez",
-    rol: "VENTAS",
+    rol: "GERENTE_COMERCIAL",
     cargo: "Gerente comercial",
   },
+  { id: "usr-sofia", nombre: "Sofía Medina", rol: "VENTAS", cargo: "Asesora comercial" },
+  { id: "usr-luis", nombre: "Luis Cárdenas", rol: "VENTAS", cargo: "Asesor comercial" },
   { id: "usr-laura", nombre: "Laura Fuentes", rol: "SUPERADMIN", cargo: "Superadmin" },
   { id: "usr-patricia", nombre: "Patricia Gaxiola", rol: "COBRANZA", cargo: "Cobranza" },
   {
@@ -32,6 +34,7 @@ export const USUARIOS_DEMO: readonly Usuario[] = [
 export const ETIQUETA_ROL: Record<Rol, string> = {
   DIRECCION: "Dirección",
   VENTAS: "Ventas",
+  GERENTE_COMERCIAL: "Gerente comercial",
   SUPERADMIN: "Superadmin",
   COBRANZA: "Cobranza",
   PMO: "PMO",
@@ -41,6 +44,14 @@ export const ETIQUETA_ROL: Record<Rol, string> = {
 export function usuarioPorId(id: string | null): Usuario | undefined {
   return USUARIOS_DEMO.find((u) => u.id === id);
 }
+
+/** Nombre del usuario por id; cadena vacía si no existe. */
+export function nombreDeUsuario(id: string): string {
+  return usuarioPorId(id)?.nombre ?? "";
+}
+
+/** Vendedores de la demo: quienes llevan prospectos y cotizaciones. */
+export const IDS_VENDEDORES: readonly string[] = ["usr-sofia", "usr-luis", "usr-jorge"];
 
 /** Usuario demo que representa a un rol (el selector de rol de la topbar). */
 export function usuarioDeRol(rol: Rol): Usuario {

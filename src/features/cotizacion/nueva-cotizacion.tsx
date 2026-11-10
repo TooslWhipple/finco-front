@@ -128,7 +128,7 @@ function FormularioNueva({ plazas, inicial }: FormularioNuevaProps) {
   }
 
   const crear = form.handleSubmit((v) => {
-    if (!local) return;
+    if (!local || !usuario) return;
     const plaza = plazas.find((p) => p.id === v.plazaId);
     const folio = siguienteFolio(useAppStore.getState().cotizaciones.cotizaciones);
     const nueva: Cotizacion = {
@@ -145,6 +145,9 @@ function FormularioNueva({ plazas, inicial }: FormularioNuevaProps) {
       emitidaEl: DEMO_TODAY,
       vigenteHasta: sumarDias(DEMO_TODAY, VIGENCIA_DIAS),
       estado: "BORRADOR",
+      vendedorId: usuario.id,
+      // El store registra la oferta 1 al crearla.
+      ofertas: [],
       // Instantánea: la regla vigente del local hoy, ya con el default editado de su plaza.
       ...pactarRegla(local.regla, plaza?.reglaDefault),
     };
@@ -252,18 +255,18 @@ function FormularioNueva({ plazas, inicial }: FormularioNuevaProps) {
               {...register("plazoMeses", { valueAsNumber: true })}
             />
           </Campo>
-          <label className="col-span-2 flex items-center gap-2 text-sm text-brand-text">
+          <label className="col-span-2 flex min-h-11 items-center gap-2 text-sm text-brand-text">
             <input
               type="checkbox"
-              className="size-4 accent-brand-secondary"
+              className="size-5 accent-brand-secondary lg:size-4"
               {...register("documentosCompletos")}
             />
             Expediente del prospecto completo
           </label>
-          <label className="col-span-2 flex items-center gap-2 text-sm text-brand-text">
+          <label className="col-span-2 flex min-h-11 items-center gap-2 text-sm text-brand-text">
             <input
               type="checkbox"
-              className="size-4 accent-brand-secondary"
+              className="size-5 accent-brand-secondary lg:size-4"
               {...register("avalRegistrado")}
             />
             Aval / fianza registrada

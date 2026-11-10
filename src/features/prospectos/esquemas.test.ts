@@ -37,12 +37,13 @@ describe("esquemaNuevoProspecto", () => {
 describe("prospectoDesdeFormulario", () => {
   it("entra al embudo como NUEVO con su alta en la actividad", () => {
     const datos = esquemaNuevoProspecto.parse(valido);
-    const p = prospectoDesdeFormulario(datos, "pro-099", "2026-11-03");
+    const p = prospectoDesdeFormulario(datos, "pro-099", "2026-11-03", "usr-luis");
     expect(p).toMatchObject({
       id: "pro-099",
       etapa: "NUEVO",
       localIds: ["plz-alborada-A-09"],
       creadoEl: "2026-11-03",
+      vendedorId: "usr-luis",
       aval: "Aval solidario registrado",
     });
     expect(p.actividad).toHaveLength(1);

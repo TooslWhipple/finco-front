@@ -3,6 +3,7 @@ import { PROVEEDORES_OBRA } from "@/data/licitaciones";
 import { crearLicitacion } from "@/domain/fixtures";
 import { conLicitacionAdjudicada } from "@/domain";
 import {
+  candidatoMasBajo,
   datosGraficaRondas,
   descripcionContraBase,
   eventosDecision,
@@ -70,5 +71,27 @@ describe("agregados de licitación", () => {
 
   it("los proveedores del catálogo son únicos", () => {
     expect(new Set(PROVEEDORES_OBRA.map((p) => p.id)).size).toBe(PROVEEDORES_OBRA.length);
+  });
+});
+
+describe("candidatoMasBajo", () => {
+  it("elige la menor oferta aunque no sea la primera", () => {
+    expect(
+      candidatoMasBajo([
+        { id: "a", monto: 300 },
+        { id: "b", monto: 100 },
+        { id: "c", monto: 200 },
+      ]),
+    ).toBe("b");
+  });
+
+  it("devuelve cadena vacía sin candidatos y el primero en empate", () => {
+    expect(candidatoMasBajo([])).toBe("");
+    expect(
+      candidatoMasBajo([
+        { id: "a", monto: 100 },
+        { id: "b", monto: 100 },
+      ]),
+    ).toBe("a");
   });
 });

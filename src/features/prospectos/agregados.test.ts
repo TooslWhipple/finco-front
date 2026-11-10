@@ -76,6 +76,29 @@ describe("filtrarProspectos", () => {
   });
 });
 
+describe("temperatura", () => {
+  const lista = [
+    crearProspecto({ id: "a", etapa: "CONTACTADO", creadoEl: "2026-11-01" }),
+    crearProspecto({ id: "b", etapa: "CONTACTADO", creadoEl: "2026-10-10" }),
+    crearProspecto({ id: "c", etapa: "VISITA", creadoEl: "2026-09-01" }),
+    crearProspecto({ id: "d", etapa: "PERDIDO", creadoEl: "2026-01-01" }),
+  ];
+  const hoy = "2026-11-03";
+
+  it("filtra fríos y tibios, y los cerrados nunca entran", () => {
+    const ids = (temperatura: string) =>
+      filtrarProspectos(lista, { ...FILTRO_INICIAL, temperatura }, plazaDeLocal, hoy).map(
+        (p) => p.id,
+      );
+    expect(ids("TIBIO")).toEqual(["b"]);
+    expect(ids("FRIO")).toEqual(["c"]);
+  });
+
+  it("el KPI cuenta solo los fríos activos", () => {
+    expect(kpisProspectos(lista, hoy).frios).toBe(1);
+  });
+});
+
 describe("kpisProspectos", () => {
   it("cuenta activos, sin contactar, cotizados, por cotizar y tasa de cierre", () => {
     expect(kpisProspectos(prospectos)).toEqual({
@@ -84,6 +107,7 @@ describe("kpisProspectos", () => {
       enCotizacion: 1,
       porCotizar: 0,
       tasaCierre: 0.5,
+      frios: 0,
     });
   });
 

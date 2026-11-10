@@ -1,4 +1,5 @@
-import type { EtapaProspecto, OrigenProspecto, Prospecto } from "./tipos";
+import { diasEntre } from "./fechas";
+import type { EtapaProspecto, FechaISO, OrigenProspecto, Prospecto } from "./tipos";
 
 /** Etapas del embudo en orden; `PERDIDO` queda fuera del avance. */
 export const ETAPAS_PROSPECTO: readonly EtapaProspecto[] = [
@@ -82,3 +83,51 @@ export function siguienteIdProspecto(prospectos: readonly Prospecto[]): string {
   }, 0);
   return `pro-${String(mayor + 1).padStart(3, "0")}`;
 }
+
+/** Días sin contacto a partir de los cuales un prospecto vivo se enfría. */
+export const DIAS_TIBIO = 15;
+export const DIAS_FRIO = 30;
+
+export type TemperaturaProspecto = "AL_DIA" | "TIBIO" | "FRIO";
+
+export const ETIQUETA_TEMPERATURA_PROSPECTO: Readonly<
+  Record<TemperaturaProspecto, string>
+> = {
+  AL_DIA: "Al día",
+  TIBIO: "Tibio",
+  FRIO: "Frío",
+};
+
+/**
+ * Días desde el último contacto: la fecha más reciente de la actividad o, sin
+ * actividad, el alta. `null` si el prospecto ya se ganó o se perdió.
+ */
+export function diasSinContacto(prospecto: Prospecto, hoy: FechaISO): number | null {
+  if (!prospectoActivo(prospecto)) return null;
+  const ultimo = prospecto.actividad.reduce(
+    (max, a) => (a.fecha > max ? a.fecha : max),
+    prospecto.creadoEl,
+  );
+  return Math.max(0, diasEntre(ultimo, hoy));
+}
+
+/** Tibio desde 15 días sin contacto y frío desde 30; `null` si no aplica. */
+export function temperaturaProspecto(dias: number | null): TemperaturaProspecto | null {
+  if (dias === null) return null;
+  if (dias >= DIAS_FRIO) return "FRIO";
+  if (dias >= DIAS_TIBIO) return "TIBIO";
+  return "AL_DIA";
+}
+
+export type TipoContactoProspecto = "LLAMADA" | "WHATSAPP" | "VISITA" | "CORREO";
+
+export const ETIQUETA_TIPO_CONTACTO: Readonly<Record<TipoContactoProspecto, string>> = {
+  LLAMADA: "Llamada",
+  WHATSAPP: "WhatsApp",
+  VISITA: "Visita",
+  CORREO: "Correo",
+};
+
+export const TIPOS_CONTACTO = Object.keys(
+  ETIQUETA_TIPO_CONTACTO,
+) as readonly TipoContactoProspecto[];
