@@ -3,6 +3,7 @@ import {
   DEMO_TODAY,
   antiguedadSaldos,
   embudoProspectos,
+  localesSinAbrir,
   ocupacion,
   type Terreno,
 } from "@/domain";
@@ -12,9 +13,11 @@ import {
   FILTRO_INICIAL,
   REPORTES,
   acotarDatos,
+  filasOcupacionPlan,
   reporteCobranza,
   reporteEmbudo,
   reporteOcupacion,
+  reporteOcupacionPlan,
   reportePrecios,
   reporteTerrenos,
   reporteVencimientos,
@@ -133,6 +136,24 @@ describe("reportes", () => {
     expect(r.tabla.filas).toHaveLength(operativas);
   });
 
+  it("ocupación: cuenta los sin abrir por plaza", () => {
+    const r = reporteOcupacion(datos);
+    expect(r.tabla.columnas.map((c) => c.clave)).toContain("sinAbrir");
+    const sinAbrir = localesSinAbrir(seed.locales, seed.contratos, DEMO_TODAY);
+    for (const plazaId of [
+      "plz-alborada",
+      seed.plazas.find((p) => p.id !== "plz-alborada" && p.estatus === "EN_OPERACION")!
+        .id,
+    ]) {
+      const nombre = seed.plazas.find((p) => p.id === plazaId)!.nombre;
+      const fila = r.tabla.filas.find((f) => f.plaza === nombre)!;
+      expect(fila.sinAbrir).toBe(sinAbrir.filter((l) => l.plazaId === plazaId).length);
+    }
+    const total = r.tabla.filas.reduce((s, f) => s + Number(f.sinAbrir), 0);
+    expect(total).toBe(sinAbrir.length);
+    expect(total).toBeGreaterThan(0);
+  });
+
   it("cobranza: suma lo que reporta antigüedad de saldos", () => {
     const r = reporteCobranza(datos);
     const total = antiguedadSaldos([...datos.facturas], DEMO_TODAY).reduce(
@@ -223,6 +244,81 @@ describe("reportes", () => {
     for (const f of r.tabla.filas) {
       expect(Number(f.meta)).toBeCloseTo(0.98);
       expect(Number(f.cumplimiento)).toBeGreaterThan(0.5);
+    }
+  });
+
+  it("ocupación y plan: rentados + por colocar + en cotización = locales, y cuenta los sin abrir", () => {
+    const filas = filasOcupacionPlan(datos);
+    const operativas = seed.plazas.filter((p) => p.estatus === "EN_OPERACION").length;
+    expect(filas).toHaveLength(operativas);
+    for (const f of filas) {
+      expect(f.rentados + f.porColocar + f.enCotizacion, f.plaza).toBe(f.locales);
+    }
+    const sinAbrir = localesSinAbrir(seed.locales, seed.contratos, DEMO_TODAY);
+    expect(filas.reduce((s, f) => s + f.sinAbrir, 0)).toBe(sinAbrir.length);
+    const alborada = filas.find((f) => f.plazaId === "plz-alborada")!;
+    expect(alborada.sinAbrir).toBe(
+      sinAbrir.filter((l) => l.plazaId === "plz-alborada").length,
+    );
+    expect(reporteOcupacionPlan(datos).tabla.filas).toEqual(filas);
+  });
+
+  it("ocupación y plan: el cumplimiento coincide con el del reporte de cumplimiento", () => {
+    const plan = new Map(
+      reporteCumplimientoPlan(datos).tabla.filas.map((f) => [f.plazaId, f]),
+    );
+    for (const f of filasOcupacionPlan(datos)) {
+      const esperado = plan.get(f.plazaId);
+      if (!esperado) continue;
+      expect(f.cumplimiento, f.plaza).toBeCloseTo(Number(esperado.cumplimiento));
+      expect(f.meta, f.plaza).toBeCloseTo(Number(esperado.meta));
+    }
+    expect(plan.size).toBeGreaterThan(0);
+  });
+
+  it("ocupación y plan: respeta el filtro de ciudad y plaza", () => {
+    const plaza = acotarDatos(datos, { ciudadId: "TODOS", plazaId: "plz-alborada" });
+    expect(filasOcupacionPlan(plaza).map((f) => f.plazaId)).toEqual(["plz-alborada"]);
+    const ciudadId = seed.plazas.find((p) => p.id === "plz-alborada")!.ciudadId;
+    const ciudad = acotarDatos(datos, { ciudadId, plazaId: "TODOS" });
+    const ids = new Set(
+      seed.plazas
+        .filter((p) => p.ciudadId === ciudadId && p.estatus === "EN_OPERACION")
+        .map((p) => p.id),
+    );
+    const filas = filasOcupacionPlan(ciudad);
+    expect(filas.length).toBe(ids.size);
+    expect(filas.every((f) => ids.has(f.plazaId))).toBe(true);
+  });
+
+  it("ocupación y plan: va justo después de Ocupación y abre el cumplimiento de la plaza", () => {
+    const i = REPORTES.findIndex((r) => r.id === "OCUPACION");
+    const definicion = REPORTES[i + 1]!;
+    expect(definicion.id).toBe("OCUPACION_PLAN");
+    expect(definicion.archivo).toBe("ocupacion-plan-ingresos");
+    expect(definicion.drilldown).toEqual({
+      destino: "CUMPLIMIENTO_PLAN",
+      clavePlaza: "plazaId",
+    });
+  });
+
+  it("ocupación y plan: una plaza sin ocupados queda con cumplimiento 0 y celdas definidas", () => {
+    const acotados = acotarDatos(datos, { ciudadId: "TODOS", plazaId: "plz-alborada" });
+    const sinOcupados: DatosReporte = {
+      ...acotados,
+      locales: acotados.locales.map((l) =>
+        l.estatus === "OCUPADO" ? { ...l, estatus: "DISPONIBLE" as const } : l,
+      ),
+    };
+    const r = reporteOcupacionPlan(sinOcupados);
+    expect(r.tabla.filas).toHaveLength(1);
+    const fila = r.tabla.filas[0]!;
+    expect(fila.cumplimiento).toBe(0);
+    expect(fila.rentados).toBe(0);
+    expect(fila.sinAbrir).toBe(0);
+    for (const c of r.tabla.columnas) {
+      expect(fila[c.clave], c.clave).toBeDefined();
+      if (c.formato) expect(Number.isFinite(Number(fila[c.clave])), c.clave).toBe(true);
     }
   });
 

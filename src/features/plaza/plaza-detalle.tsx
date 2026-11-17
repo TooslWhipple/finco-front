@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Download, Map as IconoMapa, MapPinOff, Plus } from "lucide-react";
 import {
@@ -61,6 +62,9 @@ const RUTA_COTIZACION = "/cotizaciones/nueva";
 
 type VistaPlaza = "PLANO" | "MANTENIMIENTO";
 
+/** Valor de `?vista=` que abre la vista de mantenimiento; sin él, el plano. */
+const PARAM_MANTENIMIENTO = "mantenimiento";
+
 const VISTAS_PLAZA = [
   { valor: "PLANO", etiqueta: "Plano" },
   { valor: "MANTENIMIENTO", etiqueta: "Mantenimiento" },
@@ -70,7 +74,14 @@ const AÑO_INPC = 2026;
 /** Filas de "Próximos vencimientos"; el KPI "Por vencer" cuenta todos. */
 const VENCIMIENTOS_VISIBLES = 4;
 
+/**
+ * Ficha de una plaza. La vista (`?vista=mantenimiento`) vive en la URL: un enlace
+ * manda aunque la ficha siga montada de una visita anterior.
+ */
 export function PlazaDetalle({ plazaId }: { plazaId: string }) {
+  const ruta = usePathname();
+  const router = useRouter();
+  const params = useSearchParams();
   const { rol } = useSesion();
   const plaza = usePlaza(plazaId);
   const ciudades = useCiudades().datos;
@@ -87,7 +98,13 @@ export function PlazaDetalle({ plazaId }: { plazaId: string }) {
   const [soloDisponibles, setSoloDisponibles] = useState(false);
   const [giro, setGiro] = useState<string>(TODOS);
   const [seleccion, setSeleccion] = useState<string>();
-  const [vistaPlaza, setVistaPlaza] = useState<VistaPlaza>("PLANO");
+  const vistaPlaza: VistaPlaza =
+    params.get("vista") === PARAM_MANTENIMIENTO ? "MANTENIMIENTO" : "PLANO";
+  const elegirVista = (vista: VistaPlaza) => {
+    const destino =
+      vista === "MANTENIMIENTO" ? `${ruta}?vista=${PARAM_MANTENIMIENTO}` : ruta;
+    router.push(destino, { scroll: false });
+  };
 
   const prospectosActivos = useMemo(
     () =>
@@ -240,7 +257,7 @@ export function PlazaDetalle({ plazaId }: { plazaId: string }) {
         etiqueta="Vista de la plaza"
         opciones={VISTAS_PLAZA}
         valor={vistaPlaza}
-        onChange={setVistaPlaza}
+        onChange={elegirVista}
       />
 
       {vistaPlaza === "MANTENIMIENTO" ? (

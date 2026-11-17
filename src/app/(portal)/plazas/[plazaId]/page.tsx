@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { crearSeed } from "@/data/seed";
 import { PlazaDetalle } from "@/features/plaza/plaza-detalle";
 
@@ -11,5 +12,10 @@ export function generateStaticParams() {
 export default async function PaginaPlaza({ params }: PageProps<"/plazas/[plazaId]">) {
   const { plazaId } = await params;
   if (!IDS_PLAZAS.includes(plazaId)) notFound();
-  return <PlazaDetalle plazaId={plazaId} />;
+  // `useSearchParams` (?vista=) exige una frontera de Suspense.
+  return (
+    <Suspense fallback={<p className="text-sm text-brand-text-muted">Cargando…</p>}>
+      <PlazaDetalle plazaId={plazaId} />
+    </Suspense>
+  );
 }

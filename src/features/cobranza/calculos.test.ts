@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Contrato, Factura } from "@/domain";
 import {
+  agruparRecargos,
+  carteraVencidaAl,
   conteoPorEstatus,
   filtrarFacturas,
   kpisCobranza,
@@ -20,6 +22,8 @@ const fac = (id: string, o: Partial<Factura> = {}): Factura => ({
   mes: "2026-11",
   monto: 1_000,
   vencimiento: "2026-11-10",
+  concepto: "RENTA",
+  origen: "SEMILLA",
   ...o,
 });
 
@@ -128,5 +132,64 @@ describe("indicadores adicionales", () => {
       HOY,
     );
     expect(avisos).toEqual({ total: 3, whatsapp: 3, correo: 0 });
+  });
+});
+
+describe("recargos en cuentas por cobrar", () => {
+  const recargo = (
+    k: number,
+    origen: string,
+    vencimiento: string,
+    o: Partial<Factura> = {},
+  ) =>
+    fac(`rec-${origen}-${k}`, {
+      concepto: "RECARGO",
+      origen: "EMISION",
+      facturaOrigenId: origen,
+      monto: 20,
+      mes: "2026-10",
+      vencimiento,
+      ...o,
+    });
+  // "c" venció el 28 oct: su primer recargo se carga el 3 nov (hoy) y aún no vence por sí mismo.
+  const conRecargos = [...facturas, recargo(1, "c", HOY)];
+
+  it("los contadores ignoran los recargos", () => {
+    expect(conteoPorEstatus(conRecargos, HOY)).toEqual(conteoPorEstatus(facturas, HOY));
+    const k = kpisCobranza(conRecargos, "2026-11", HOY);
+    const sin = kpisCobranza(facturas, "2026-11", HOY);
+    expect(k.facturasDelMes).toBe(sin.facturasDelMes);
+    expect(k.facturasVencidas).toBe(sin.facturasVencidas);
+    expect(k.porVencer).toBe(sin.porVencer);
+    expect(k.cobrado).toBe(sin.cobrado);
+    expect(k.locatariosConAtraso).toBe(sin.locatariosConAtraso);
+    expect(pendientesDeAviso(conRecargos, HOY, []).map((f) => f.id)).toEqual(["c", "d"]);
+    expect(k.carteraVencida).toBe(sin.carteraVencida + 20);
+  });
+
+  it("carteraVencidaAl y montoAlCorriente envejecen el recargo con su renta", () => {
+    const pagada = recargo(1, "a", "2026-10-20", { pagadaEl: "2026-11-02" });
+    expect(montoAlCorriente([...conRecargos, pagada], HOY)).toBe(2_020);
+    // A la fecha del 31 oct el recargo de "c" aún no se cargaba: no cuenta.
+    expect(carteraVencidaAl(conRecargos, "2026-10-31")).toBe(1_000);
+    const antes = recargo(1, "c", "2026-10-30");
+    expect(carteraVencidaAl([...facturas, antes], "2026-10-31")).toBe(1_020);
+  });
+
+  it("agruparRecargos conserva el recargo con su renta bajo el filtro Vencidas", () => {
+    const plazas = new Map([
+      ["L1", "P1"],
+      ["L2", "P2"],
+    ]);
+    const visibles = filtrarFacturas(conRecargos, HOY, "VENCIDA", plazas, null);
+    const filas = agruparRecargos(visibles);
+    expect(filas.map((f) => f.renta.id)).toEqual(["c", "d"]);
+    expect(filas[0].recargos.map((r) => r.id)).toEqual(["rec-c-1"]);
+    expect(filas[1].recargos).toEqual([]);
+    expect(
+      agruparRecargos(filtrarFacturas(conRecargos, HOY, "PAGADA", plazas, null)).flatMap(
+        (f) => f.recargos,
+      ),
+    ).toEqual([]);
   });
 });

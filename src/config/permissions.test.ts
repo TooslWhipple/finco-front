@@ -49,6 +49,14 @@ describe("can", () => {
     expect(can("SUPERVISOR_OBRA", "licitacion.gestionar")).toBe(false);
   });
 
+  it("responder una licitación es del Contratista, que no la gestiona", () => {
+    expect(PERMISOS.CONTRATISTA).toEqual(["licitacion.responder"]);
+    expect(can("CONTRATISTA", "licitacion.responder")).toBe(true);
+    expect(can("PMO", "licitacion.responder")).toBe(false);
+    expect(can("CONTRATISTA", "licitacion.gestionar")).toBe(false);
+    expect(can("SUPERADMIN", "licitacion.responder")).toBe(true);
+  });
+
   it("Ventas cotiza y solicita excepción, pero no aprueba", () => {
     expect(can("VENTAS", "cotizaciones.crear")).toBe(true);
     expect(can("VENTAS", "contrato.generar")).toBe(true);
@@ -123,6 +131,32 @@ describe("can", () => {
       expect(can(rol, "local.liberar")).toBe(false);
   });
 
+  it("registrar la apertura la hacen Ventas, Gerente comercial, PMO, Cobranza y Superadmin", () => {
+    for (const rol of [
+      "VENTAS",
+      "GERENTE_COMERCIAL",
+      "PMO",
+      "COBRANZA",
+      "SUPERADMIN",
+    ] as const)
+      expect(can(rol, "local.registrarApertura")).toBe(true);
+    for (const rol of ["DIRECCION", "SUPERVISOR_OBRA"] as const)
+      expect(can(rol, "local.registrarApertura")).toBe(false);
+  });
+
+  it("solo la PMO y Superadmin gestionan el padrón de proveedores", () => {
+    for (const rol of ["PMO", "SUPERADMIN"] as const)
+      expect(can(rol, "proveedores.gestionar")).toBe(true);
+    for (const rol of [
+      "DIRECCION",
+      "VENTAS",
+      "GERENTE_COMERCIAL",
+      "COBRANZA",
+      "SUPERVISOR_OBRA",
+    ] as const)
+      expect(can(rol, "proveedores.gestionar")).toBe(false);
+  });
+
   it("el Gerente comercial tiene las acciones de Ventas más ver al equipo", () => {
     for (const accion of PERMISOS.VENTAS)
       expect(can("GERENTE_COMERCIAL", accion)).toBe(true);
@@ -153,13 +187,20 @@ describe("veTodoElEquipo", () => {
 });
 
 describe("INICIO_POR_ROL", () => {
-  it("Ventas y Gerente comercial aterrizan en Disponibilidad", () => {
+  it("Ventas aterriza en Disponibilidad", () => {
     expect(INICIO_POR_ROL.VENTAS).toBe("/disponibilidad");
-    expect(INICIO_POR_ROL.GERENTE_COMERCIAL).toBe("/disponibilidad");
+  });
+
+  it("el Gerente comercial aterriza en su Resumen comercial", () => {
+    expect(INICIO_POR_ROL.GERENTE_COMERCIAL).toBe("/resumen-comercial");
   });
 
   it("el Superadmin aterriza en Precios y reglas", () => {
     expect(INICIO_POR_ROL.SUPERADMIN).toBe("/precios-y-reglas");
+  });
+
+  it("el Contratista aterriza en Mis licitaciones", () => {
+    expect(INICIO_POR_ROL.CONTRATISTA).toBe("/mis-licitaciones");
   });
 
   it("PMO y Supervisor de obra aterrizan en Terrenos y proyectos", () => {
@@ -172,7 +213,7 @@ describe("INICIO_POR_ROL", () => {
 
 describe("usuarios demo", () => {
   it("hay al menos uno por rol", () => {
-    expect(USUARIOS_DEMO).toHaveLength(8);
+    expect(USUARIOS_DEMO).toHaveLength(9);
     expect(USUARIOS_DEMO.filter((u) => u.rol === "VENTAS").map((u) => u.nombre)).toEqual([
       "Sofía Medina",
       "Luis Cárdenas",
@@ -181,5 +222,15 @@ describe("usuarios demo", () => {
     expect(usuarioDeRol("PMO").nombre).toBe("Ricardo Salas");
     expect(usuarioDeRol("SUPERVISOR_OBRA").nombre).toBe("Héctor Ramos");
     expect(usuarioDeRol("VENTAS").nombre).toBe("Sofía Medina");
+    expect(usuarioDeRol("CONTRATISTA")).toMatchObject({
+      id: "usr-contratista",
+      proveedorId: "prv-obra-07",
+    });
+  });
+
+  it("todo usuario Contratista representa a un proveedor del padrón", () => {
+    const contratistas = USUARIOS_DEMO.filter((u) => u.rol === "CONTRATISTA");
+    expect(contratistas.length).toBeGreaterThan(0);
+    for (const u of contratistas) expect(u.proveedorId, u.id).toBeTruthy();
   });
 });

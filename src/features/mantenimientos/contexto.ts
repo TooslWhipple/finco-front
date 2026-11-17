@@ -22,7 +22,7 @@ const SIN_DATOS: never[] = [];
 export function useContextoMantenimiento(plazaId?: string): ContextoMantenimiento {
   const plazas = usePlazas().datos ?? SIN_DATOS;
   const locales = useLocales(plazaId).datos ?? SIN_DATOS;
-  const proveedores = useProveedores().datos ?? SIN_DATOS;
+  const proveedores = useProveedores();
   return useMemo(() => {
     const plazaPorId = new Map(plazas.map((p) => [p.id, p]));
     const localPorId = new Map(locales.map((l) => [l.id, l]));

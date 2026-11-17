@@ -5,11 +5,24 @@ import {
   costoRealContrato,
   volumenPorEstimar,
   diasSinContacto,
+  alertasObra,
   evaluarCandados,
+  indicadoresObra,
+  montoContrato,
   proveedoresActivos,
+  sumarDias,
   DEMO_TODAY,
+  PROGRAMACION_EMISION_INICIAL,
+  REGLA_RECARGO_INICIAL,
 } from "@/domain";
 import type { Cotizacion, ExcepcionPrecio, ReglaActualizacion } from "@/domain";
+import type { PrecioConcepto } from "@/domain";
+import {
+  crearContrato,
+  crearFactura,
+  crearLicitacion,
+  crearProveedor,
+} from "@/domain/fixtures";
 import * as r from "./reducers";
 
 const seed = crearSeed();
@@ -216,6 +229,86 @@ describe("cobranza, integraciones y locales", () => {
     plantillas: seed.plantillasAviso,
     programacion: seed.programacionAvisos,
     envios: [],
+    emitidas: [],
+    recargos: [],
+    pagos: {},
+    programacionEmision: PROGRAMACION_EMISION_INICIAL,
+    reglaRecargo: REGLA_RECARGO_INICIAL,
+  });
+
+  const emitida = (localId: string) =>
+    crearFactura({ id: `fac-em-${localId}-2026-12`, localId, origen: "EMISION" });
+  const recargo = (k: number) =>
+    crearFactura({
+      id: `rec-fac-1-${k}`,
+      concepto: "RECARGO",
+      origen: "EMISION",
+      facturaOrigenId: "fac-1",
+      monto: 200,
+    });
+
+  it("emitir guarda facturas y recargos sin duplicar y anexa un envío sin tocar avisados", () => {
+    const emision = {
+      facturas: [emitida("A"), emitida("B")],
+      recargos: [recargo(1)],
+      entregas: [
+        {
+          facturaId: "fac-em-A-2026-12",
+          plantillaId: "pl-x",
+          canal: "WHATSAPP" as const,
+        },
+        {
+          facturaId: "fac-em-B-2026-12",
+          plantillaId: "pl-x",
+          canal: "WHATSAPP" as const,
+        },
+      ],
+    };
+    const base = { ...cobranzaBase(), avisados: ["f9"] };
+    const uno = r.emitirFacturacion(base, emision, "2026-11-03", "07:00", "MANUAL");
+    expect(uno.emitidas.map((f) => f.id)).toEqual([
+      "fac-em-A-2026-12",
+      "fac-em-B-2026-12",
+    ]);
+    expect(uno.recargos).toHaveLength(1);
+    expect(uno.envios).toEqual([
+      expect.objectContaining({
+        id: "env-1",
+        facturaId: "fac-em-A-2026-12",
+        hora: "07:00",
+      }),
+      expect.objectContaining({ id: "env-2", facturaId: "fac-em-B-2026-12" }),
+    ]);
+    expect(uno.avisados).toEqual(["f9"]);
+    expect(uno.seguimientos).toEqual({});
+    const dos = r.emitirFacturacion(uno, emision, "2026-11-03", "08:00", "MANUAL");
+    expect(dos.emitidas).toHaveLength(2);
+    expect(dos.recargos).toHaveLength(1);
+    expect(dos.envios).toHaveLength(2);
+  });
+
+  it("los recargos no se repiten", () => {
+    const uno = r.generarRecargos(cobranzaBase(), [recargo(1), recargo(1)]);
+    expect(uno.recargos).toHaveLength(1);
+    const dos = r.generarRecargos(uno, [recargo(1), recargo(2)]);
+    expect(dos.recargos.map((f) => f.id)).toEqual(["rec-fac-1-1", "rec-fac-1-2"]);
+  });
+
+  it("el pago guarda su complemento y no admite un segundo pago", () => {
+    const complemento = { id: "cp-fac-1", fecha: HOY, monto: 10_400, folio: "CP-A-3001" };
+    const uno = r.registrarPago(cobranzaBase(), "fac-1", complemento);
+    expect(uno.pagos).toEqual({ "fac-1": [complemento] });
+    const dos = r.registrarPago(uno, "fac-1", { ...complemento, monto: 1 });
+    expect(dos).toBe(uno);
+  });
+
+  it("guarda la programación de emisión y la regla de recargo", () => {
+    const prog = { activa: false, dia: 28, hora: "09:00", canal: "CORREO" as const };
+    expect(
+      r.guardarProgramacionEmision(cobranzaBase(), prog).programacionEmision,
+    ).toEqual(prog);
+    const regla = { porcentaje: 0.03, diasGracia: 10 };
+    expect(r.editarReglaRecargo(cobranzaBase(), regla).reglaRecargo).toEqual(regla);
   });
 
   it("registra seguimientos y avisos en la bitácora", () => {
@@ -377,13 +470,19 @@ describe("contratos", () => {
   const borrador = contratoDesdeCotizacion(cotA09);
 
   it("agregar no duplica", () => {
-    const est = r.agregarContrato({ nuevos: [], terminaciones: {} }, borrador);
+    const est = r.agregarContrato(
+      { nuevos: [], terminaciones: {}, aperturas: {} },
+      borrador,
+    );
     expect(est.nuevos).toEqual([borrador]);
     expect(r.agregarContrato(est, borrador)).toBe(est);
   });
 
   it("recorre borrador, en firma y vigente en orden", () => {
-    let est = r.agregarContrato({ nuevos: [], terminaciones: {} }, borrador);
+    let est = r.agregarContrato(
+      { nuevos: [], terminaciones: {}, aperturas: {} },
+      borrador,
+    );
     est = r.registrarFirma(est, borrador.id);
     expect(est.nuevos[0].estado).toBe("BORRADOR");
     est = r.enviarAFirma(est, borrador.id);
@@ -392,6 +491,44 @@ describe("contratos", () => {
     expect(est.nuevos[0].estado).toBe("EN_FIRMA");
     est = r.registrarFirma(est, borrador.id);
     expect(est.nuevos[0].estado).toBe("VIGENTE");
+  });
+});
+
+describe("aperturas", () => {
+  const vacio = (): r.ContratosState => ({
+    nuevos: [],
+    terminaciones: {},
+    aperturas: {},
+  });
+  const apertura = {
+    fecha: "2026-10-01",
+    registradaPor: "usr-pmo",
+    registradaEl: DEMO_TODAY,
+  };
+
+  it("registrarApertura no duplica ni sobrescribe", () => {
+    const est = r.registrarApertura(vacio(), "ctr-1", apertura);
+    expect(est.aperturas).toEqual({ "ctr-1": apertura });
+    const otra = { ...apertura, fecha: "2026-10-15" };
+    expect(r.registrarApertura(est, "ctr-1", otra)).toBe(est);
+  });
+
+  it("aplicarAperturas agrega la de la demo y respeta la de la semilla", () => {
+    const deSemilla = {
+      fecha: "2024-02-01",
+      registradaPor: "usr-pmo",
+      registradaEl: "2024-02-01",
+    };
+    const contratos = [
+      crearContrato({ id: "a" }),
+      crearContrato({ id: "b", apertura: deSemilla }),
+      crearContrato({ id: "c" }),
+    ];
+    const res = r.aplicarAperturas(contratos, { a: apertura, b: apertura });
+    expect(res[0].apertura).toEqual(apertura);
+    expect(res[1].apertura).toEqual(deSemilla);
+    expect(res[2].apertura).toBeUndefined();
+    expect(res[2]).toBe(contratos[2]);
   });
 });
 
@@ -420,6 +557,40 @@ describe("terrenos", () => {
     expect(alto.terrenos.find((t) => t.id === terreno.id)?.avancePct).toBe(100);
     const bajo = r.actualizarAvanceTerreno(base(), terreno.id, -5);
     expect(bajo.terrenos.find((t) => t.id === terreno.id)?.avancePct).toBe(0);
+  });
+});
+
+describe("padrón de proveedores", () => {
+  const base = (): r.ProveedoresState => ({ padron: seed.proveedores });
+
+  it("agregarProveedor persiste el alta y rechaza un id existente o un RFC repetido", () => {
+    const alta = crearProveedor({ id: "prv-9", rfc: "IMP200101AB1" });
+    const est = r.agregarProveedor(base(), alta);
+    expect(est.padron).toHaveLength(seed.proveedores.length + 1);
+    expect(est.padron.at(-1)).toEqual(alta);
+    expect(r.agregarProveedor(est, { ...alta, rfc: "OTR200101AB1" })).toBe(est);
+    const mismoRfc = {
+      ...alta,
+      id: "prv-10",
+      rfc: seed.proveedores[0].rfc.toLowerCase(),
+    };
+    expect(r.agregarProveedor(est, mismoRfc)).toBe(est);
+  });
+
+  it("editarProveedor persiste el cambio y rechaza un id inexistente o el RFC de otro", () => {
+    const [primero, segundo] = seed.proveedores;
+    const est = r.editarProveedor(base(), { ...primero, nombre: "Nuevo", activo: false });
+    expect(est.padron[0]).toMatchObject({
+      id: primero.id,
+      nombre: "Nuevo",
+      activo: false,
+    });
+    expect(est.padron).toHaveLength(seed.proveedores.length);
+    expect(r.editarProveedor(base(), { ...primero, rfc: primero.rfc }).padron[0]).toEqual(
+      primero,
+    );
+    expect(r.editarProveedor(est, { ...primero, id: "prv-999" })).toBe(est);
+    expect(r.editarProveedor(est, { ...primero, rfc: segundo.rfc })).toBe(est);
   });
 });
 
@@ -743,13 +914,22 @@ describe("licitaciones de obra", () => {
   const enCurso = obra.licitaciones.find((l) => l.estado === "EN_CURSO")!;
   const activos = proveedoresActivos(enCurso);
 
+  // Sin catálogo la ronda se captura por total y adjudicar no crea contrato.
+  const sinCatalogo = crearLicitacion();
+  const obraSinCatalogo: r.ObraState = {
+    ...obra,
+    licitaciones: [...obra.licitaciones, sinCatalogo],
+  };
+
   it("registrarRonda agrega la ronda y respeta licitaciones ajenas", () => {
-    const entrada = Object.fromEntries(activos.map((id, i) => [id, 6_000_000 + i]));
-    const e = r.registrarRonda(obra, enCurso.id, entrada, DEMO_TODAY);
-    const actual = e.licitaciones.find((l) => l.id === enCurso.id)!;
-    expect(actual.rondas).toHaveLength(enCurso.rondas.length + 1);
-    expect(e.licitaciones.filter((l) => l.id !== enCurso.id)).toEqual(
-      obra.licitaciones.filter((l) => l.id !== enCurso.id),
+    const entrada = Object.fromEntries(
+      proveedoresActivos(sinCatalogo).map((id, i) => [id, 900_000 + i]),
+    );
+    const e = r.registrarRonda(obraSinCatalogo, sinCatalogo.id, entrada, DEMO_TODAY);
+    const actual = e.licitaciones.find((l) => l.id === sinCatalogo.id)!;
+    expect(actual.rondas).toHaveLength(sinCatalogo.rondas.length + 1);
+    expect(e.licitaciones.filter((l) => l.id !== sinCatalogo.id)).toEqual(
+      obraSinCatalogo.licitaciones.filter((l) => l.id !== sinCatalogo.id),
     );
   });
 
@@ -762,20 +942,188 @@ describe("licitaciones de obra", () => {
   });
 
   it("adjudicar exige motivo y fija ganador, monto y autor", () => {
+    const ganador = proveedoresActivos(sinCatalogo)[0];
     expect(
-      r.adjudicarLicitacion(obra, enCurso.id, activos[0], "", "Ana", DEMO_TODAY),
-    ).toEqual(obra);
+      r.adjudicarLicitacion(
+        obraSinCatalogo,
+        sinCatalogo.id,
+        ganador,
+        "",
+        "Ana",
+        DEMO_TODAY,
+      ),
+    ).toEqual(obraSinCatalogo);
     const e = r.adjudicarLicitacion(
-      obra,
-      enCurso.id,
-      activos[0],
+      obraSinCatalogo,
+      sinCatalogo.id,
+      ganador,
       "Mejor precio",
       "Ana",
       DEMO_TODAY,
     );
-    const actual = e.licitaciones.find((l) => l.id === enCurso.id)!;
+    const actual = e.licitaciones.find((l) => l.id === sinCatalogo.id)!;
     expect(actual.estado).toBe("ADJUDICADA");
     expect(actual.adjudicadaPor).toBe("Ana");
+    expect(actual.contratoObraId).toBeUndefined();
+    expect(e.contratos).toBe(obraSinCatalogo.contratos);
+  });
+
+  describe("en línea, con catálogo (ACABADOS)", () => {
+    const ganadorId = "prv-obra-07";
+    const ganador = seed.proveedores.find((p) => p.id === ganadorId)!;
+    const fechas = {
+      inicioPlan: sumarDias(DEMO_TODAY, 14),
+      finPlan: sumarDias(DEMO_TODAY, 134),
+    };
+    const preciosDe = (factor: number): PrecioConcepto[] =>
+      enCurso.conceptos.map((c, i) => ({
+        conceptoId: c.id,
+        precioUnitario: (100 + i * 10) * factor,
+      }));
+
+    /** Invita por WhatsApp, responde 07 (contratista) y 16 (PMO) y cierra la ronda 3. */
+    function conRondaTresCerrada(): r.ObraState {
+      const invitada = r.enviarInvitaciones(
+        obra,
+        enCurso.id,
+        activos,
+        "WHATSAPP",
+        DEMO_TODAY,
+        "09:00",
+      );
+      const con07 = r.responderLicitacion(
+        invitada,
+        enCurso.id,
+        ganadorId,
+        preciosDe(10),
+        "CONTRATISTA",
+        DEMO_TODAY,
+      );
+      const con16 = r.responderLicitacion(
+        con07,
+        enCurso.id,
+        "prv-obra-16",
+        preciosDe(11),
+        "PMO",
+        DEMO_TODAY,
+      );
+      return r.cerrarRonda(con16, enCurso.id);
+    }
+
+    it("enviar invitaciones abre la ronda 3 y deja la bitácora simulada", () => {
+      const e = r.enviarInvitaciones(
+        obra,
+        enCurso.id,
+        activos,
+        "WHATSAPP",
+        DEMO_TODAY,
+        "09:00",
+      );
+      const actual = e.licitaciones.find((l) => l.id === enCurso.id)!;
+      expect(actual.rondas.at(-1)).toMatchObject({ numero: 3, estado: "ABIERTA" });
+      expect(actual.invitaciones.map((i) => i.proveedorId)).toEqual(activos);
+      expect(r.cerrarRonda(e, enCurso.id)).toEqual(e);
+    });
+
+    it("definirCatalogo reemplaza el catálogo solo mientras no haya precios", () => {
+      const uno = [enCurso.conceptos[0]];
+      const e = r.definirCatalogo(obra, enCurso.id, uno);
+      expect(e.licitaciones.find((l) => l.id === enCurso.id)!.conceptos).toEqual(uno);
+      const conPrecios = conRondaTresCerrada();
+      expect(r.definirCatalogo(conPrecios, enCurso.id, uno)).toEqual(conPrecios);
+    });
+
+    it("adjudicar una licitación con catálogo crea CO-VR-07 con los PU del ganador y proveedorId", () => {
+      const cerrada = conRondaTresCerrada();
+      const e = r.adjudicarLicitacion(
+        cerrada,
+        enCurso.id,
+        ganadorId,
+        "Mejor precio por concepto",
+        "Ricardo Salas",
+        DEMO_TODAY,
+        ganador,
+        fechas,
+      );
+      const nuevo = e.contratos.find((c) => c.folio === "CO-VR-07")!;
+      expect(nuevo).toMatchObject({
+        id: "ter-09-co-07",
+        terrenoId: "ter-09",
+        partida: "ACABADOS",
+        contratista: ganador.nombre,
+        proveedorId: ganadorId,
+        anticipoPct: 0.3,
+        fondoGarantiaPct: 0.05,
+        ...fechas,
+      });
+      expect(nuevo.conceptos.map((c) => c.precioUnitario)).toEqual(
+        preciosDe(10).map((p) => p.precioUnitario),
+      );
+      const actual = e.licitaciones.find((l) => l.id === enCurso.id)!;
+      expect(actual).toMatchObject({
+        estado: "ADJUDICADA",
+        ganadorId,
+        contratoObraId: "ter-09-co-07",
+        montoAdjudicado: montoContrato(nuevo),
+      });
+    });
+
+    it("con fechas inválidas, sin fechas o con la ronda abierta no cambia el estado", () => {
+      const cerrada = conRondaTresCerrada();
+      const adjudicar = (estado: r.ObraState, f?: typeof fechas) =>
+        r.adjudicarLicitacion(
+          estado,
+          enCurso.id,
+          ganadorId,
+          "x",
+          "Ana",
+          DEMO_TODAY,
+          ganador,
+          f,
+        );
+      expect(adjudicar(cerrada, { ...fechas, inicioPlan: DEMO_TODAY })).toBe(cerrada);
+      expect(adjudicar(cerrada, { ...fechas, finPlan: sumarDias(DEMO_TODAY, 1) })).toBe(
+        cerrada,
+      );
+      expect(adjudicar(cerrada)).toBe(cerrada);
+      const abierta = r.enviarInvitaciones(
+        cerrada,
+        enCurso.id,
+        [ganadorId],
+        "CORREO",
+        DEMO_TODAY,
+        "10:00",
+      );
+      expect(adjudicar(abierta, fechas)).toBe(abierta);
+    });
+
+    it("adjudicar ACABADOS crea ter-09-co-07/CO-VR-07, no agrega SIN_REPORTE y conserva SPI y CPI del héroe", () => {
+      const cerrada = conRondaTresCerrada();
+      const e = r.adjudicarLicitacion(
+        cerrada,
+        enCurso.id,
+        ganadorId,
+        "Mejor precio",
+        "Ana",
+        DEMO_TODAY,
+        ganador,
+        fechas,
+      );
+      const delHeroe = (estado: r.ObraState) =>
+        estado.contratos.filter((c) => c.terrenoId === "ter-09");
+      expect(delHeroe(e).map((c) => c.id)).toContain("ter-09-co-07");
+      expect(delHeroe(e)).toHaveLength(delHeroe(obra).length + 1);
+      const antes = indicadoresObra(delHeroe(obra), obra.cortes, obra.pagos, DEMO_TODAY)!;
+      const despues = indicadoresObra(delHeroe(e), e.cortes, e.pagos, DEMO_TODAY)!;
+      expect(despues.spi).toBeCloseTo(antes.spi!, 9);
+      expect(despues.cpi).toBeCloseTo(antes.cpi!, 9);
+      expect(despues.presupuesto).toBeGreaterThan(antes.presupuesto);
+      const sinReporte = (estado: r.ObraState) =>
+        alertasObra(delHeroe(estado), estado.cortes, estado.pagos, DEMO_TODAY).filter(
+          (a) => a.tipo === "SIN_REPORTE",
+        );
+      expect(sinReporte(e)).toEqual(sinReporte(obra));
+    });
   });
 });
 

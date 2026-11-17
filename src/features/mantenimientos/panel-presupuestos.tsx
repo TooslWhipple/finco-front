@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { BarraProgreso, SectionCard, type TonoBarra } from "@/components/shared";
@@ -20,6 +21,7 @@ import {
   DEMO_TODAY,
   disponiblePresupuesto,
   nivelPresupuesto,
+  rutaPlaza,
   type NivelPresupuesto,
   type PresupuestoMantenimiento,
 } from "@/domain";
@@ -123,11 +125,14 @@ function TarjetaPresupuesto({
   nombrePlaza,
   fila,
   puedeEditar,
+  enlazarPlaza,
   onEditar,
 }: {
   nombrePlaza: string;
   fila: FilaPresupuesto;
   puedeEditar: boolean;
+  /** El nombre de la plaza abre su ficha en la vista de mantenimiento. */
+  enlazarPlaza: boolean;
   onEditar: () => void;
 }) {
   const { presupuesto, consumo, nivel } = fila;
@@ -138,7 +143,18 @@ function TarjetaPresupuesto({
     <article className="flex flex-col gap-2 rounded-lg border border-brand-line bg-card p-4">
       <header className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="truncate font-medium text-brand-primary">{nombrePlaza}</h3>
+          <h3 className="truncate font-medium text-brand-primary">
+            {enlazarPlaza ? (
+              <Link
+                href={`${rutaPlaza(presupuesto.plazaId)}?vista=mantenimiento`}
+                className="underline-offset-4 hover:underline"
+              >
+                {nombrePlaza}
+              </Link>
+            ) : (
+              nombrePlaza
+            )}
+          </h3>
           <p className="text-xs text-brand-text-muted">Presupuesto {presupuesto.año}</p>
         </div>
         <span className="text-sm font-semibold text-brand-primary tabular-nums">
@@ -188,19 +204,28 @@ interface PanelPresupuestosProps {
   contexto: ContextoMantenimiento;
   /** Acota a una plaza (filtro de la pantalla o ficha de la plaza). */
   plazaId?: string;
+  /**
+   * Tablero de solo lectura: sin "Editar presupuesto" y con el nombre de cada plaza
+   * como enlace a su ficha en la vista de mantenimiento.
+   */
+  soloLectura?: boolean;
 }
 
 /**
  * Una tarjeta de presupuesto del año por plaza, con el consumo y su alerta. La PMO
- * (y el Superadmin) editan el monto desde aquí.
+ * (y el Superadmin) editan el monto desde aquí, salvo en `soloLectura`.
  */
-export function PanelPresupuestos({ contexto, plazaId }: PanelPresupuestosProps) {
+export function PanelPresupuestos({
+  contexto,
+  plazaId,
+  soloLectura = false,
+}: PanelPresupuestosProps) {
   const { rol } = useSesion();
   const presupuestos = usePresupuestosMantenimiento();
   const todos = useMantenimientos().datos;
   const [verTodas, setVerTodas] = useState(false);
   const [editando, setEditando] = useState<string | null>(null);
-  const puedeEditar = can(rol, "mantenimiento.presupuestoEditar");
+  const puedeEditar = !soloLectura && can(rol, "mantenimiento.presupuestoEditar");
 
   const filas = useMemo<FilaPresupuesto[]>(
     () =>
@@ -246,6 +271,7 @@ export function PanelPresupuestos({ contexto, plazaId }: PanelPresupuestosProps)
             nombrePlaza={contexto.nombrePlaza(fila.presupuesto.plazaId)}
             fila={fila}
             puedeEditar={puedeEditar}
+            enlazarPlaza={soloLectura}
             onEditar={() => setEditando(fila.presupuesto.plazaId)}
           />
         ))}

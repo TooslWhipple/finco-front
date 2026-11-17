@@ -4,6 +4,7 @@ import type {
   CanalAviso,
   DiaSemana,
   DisparadorAviso,
+  EntregaAviso,
   EnvioAviso,
   Factura,
   FechaISO,
@@ -22,8 +23,9 @@ export const DIAS_SEMANA: readonly { valor: DiaSemana; corto: string; largo: str
     { valor: "DOM", corto: "D", largo: "domingo" },
   ];
 
-/** Disparadores en el orden del ciclo de la factura. */
+/** Disparadores en el orden del ciclo de la factura (la emisión primero). */
 export const DISPARADORES: readonly DisparadorAviso[] = [
+  "FACTURA_EMITIDA",
   "ANTES_3",
   "DIA_PAGO",
   "ATRASO_5",
@@ -45,12 +47,15 @@ export function diaSemanaDe(fecha: FechaISO): DiaSemana {
   return DIAS_SEMANA[(indice + 6) % 7].valor;
 }
 
-/** Disparador que toca hoy a una factura (3 días antes, el día de pago, 5, 15 y 30 de atraso). */
+/**
+ * Disparador que toca hoy a una factura (3 días antes, el día de pago, 5, 15 y
+ * 30 de atraso). Los recargos no disparan avisos propios.
+ */
 export function disparadorDeFactura(
   factura: Factura,
   hoy: FechaISO,
 ): DisparadorAviso | null {
-  if (factura.pagadaEl) return null;
+  if (factura.pagadaEl || factura.concepto === "RECARGO") return null;
   const faltan = diasEntre(hoy, factura.vencimiento);
   if (faltan === 3) return "ANTES_3";
   if (faltan === 0) return "DIA_PAGO";
@@ -103,6 +108,18 @@ export function avisosParaEnviar(
     envios.filter((e) => e.enviadoEl === hoy).map((e) => e.facturaId),
   );
   return avisosDelDia(facturas, hoy).filter((a) => !yaHoy.has(a.factura.id));
+}
+
+/**
+ * Un aviso de factura emitida por cada factura, en el canal programado para la
+ * emisión, con la plantilla `FACTURA_EMITIDA`.
+ */
+export function entregasDeEmision(
+  facturas: readonly Factura[],
+  canal: CanalAviso,
+): EntregaAviso[] {
+  const plantillaId = idPlantilla("FACTURA_EMITIDA", canal);
+  return facturas.map((f) => ({ facturaId: f.id, plantillaId, canal }));
 }
 
 export interface Ejecucion {

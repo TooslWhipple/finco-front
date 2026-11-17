@@ -5,9 +5,12 @@ import { CalendarDays, CalendarX, Download, Send } from "lucide-react";
 import { toast } from "sonner";
 import {
   antiguedadSaldos,
+  clientesMorosos,
+  complementoDePago,
   DEMO_TODAY,
   disparadorManual,
   idPlantilla,
+  nombreLocatario,
   type Factura,
 } from "@/domain";
 import {
@@ -27,8 +30,8 @@ import { can } from "@/config/permissions";
 import {
   useContratos,
   useFacturas,
+  useFuentesLocatario,
   useLocales,
-  useLocatarios,
   usePlazas,
   useSesion,
 } from "@/hooks";
@@ -36,6 +39,7 @@ import { avisarProximaFase } from "@/lib/avisos";
 import {
   formatDiaMes,
   formatMesCorto,
+  formatMoneda,
   formatNumero,
   formatPorcentaje,
   formatPuntos,
@@ -44,6 +48,7 @@ import { MES_DEMO } from "@/lib/tiempo";
 import { useAppStore } from "@/store";
 import { AntiguedadSaldos } from "./antiguedad-saldos";
 import { AvisosAutomaticos } from "./avisos-automaticos";
+import { ClientesMorosos } from "./clientes-morosos";
 import {
   avisosAutomaticosHoy,
   cierreMesAnterior,
@@ -57,6 +62,7 @@ import {
   pendientesDeAviso,
   type FiltroEstatus,
 } from "./calculos";
+import { FacturacionAutomatica } from "./facturacion-automatica";
 import { formatMillones } from "./formato";
 import { ProximasFacturas } from "./proximas-facturas";
 import { SyncEnKontrol } from "./sync-enkontrol";
@@ -71,10 +77,11 @@ const MESES: readonly OpcionSelector[] = [
 
 const TODAS_LAS_PLAZAS = "todas";
 
-type Vista = "cuentas" | "avisos";
+type Vista = "cuentas" | "facturacion" | "avisos";
 
 const VISTAS = [
   { valor: "cuentas", etiqueta: "Cuentas por cobrar" },
+  { valor: "facturacion", etiqueta: "Facturación" },
   { valor: "avisos", etiqueta: "Avisos automáticos" },
 ] as const;
 
@@ -88,12 +95,13 @@ export function Cobranza() {
   const { datos: facturas } = useFacturas(mes);
   const { datos: locales } = useLocales();
   const { datos: plazas } = usePlazas();
-  const { datos: locatarios } = useLocatarios();
+  const fuentesLocatario = useFuentesLocatario();
   const { datos: contratos } = useContratos();
   const avisados = useAppStore((s) => s.cobranza.avisados);
   const enviosAviso = useAppStore((s) => s.cobranza.envios);
   const registrarSeguimiento = useAppStore((s) => s.registrarSeguimiento);
   const registrarAvisos = useAppStore((s) => s.registrarAvisos);
+  const registrarPagoEnStore = useAppStore((s) => s.registrarPago);
 
   const puedeGestionar = can(rol, "cobranza.gestionar");
 
@@ -119,10 +127,10 @@ export function Cobranza() {
       ),
     [plazaPorLocal, nombrePlazaPorId],
   );
-  const nombreLocatario = useMemo(
-    () => new Map((locatarios ?? []).map((t) => [t.id, t.nombre])),
-    [locatarios],
-  );
+  const nombrePorLocatario = useMemo(() => {
+    const ids = new Set((facturas ?? []).map((f) => f.locatarioId));
+    return new Map([...ids].map((id) => [id, nombreLocatario(id, fuentesLocatario)]));
+  }, [facturas, fuentesLocatario]);
   const folios = useMemo(
     () => new Map((facturas ?? []).map((f) => [f.id, f.folio ?? f.id])),
     [facturas],
@@ -132,6 +140,7 @@ export function Cobranza() {
   const kpis = useMemo(() => kpisCobranza(todas, mes, DEMO_TODAY), [todas, mes]);
   const conteo = useMemo(() => conteoPorEstatus(todas, DEMO_TODAY), [todas]);
   const cubos = useMemo(() => antiguedadSaldos(todas, DEMO_TODAY), [todas]);
+  const morosos = useMemo(() => clientesMorosos(todas, DEMO_TODAY), [todas]);
   const visibles = useMemo(
     () =>
       filtrarFacturas(
@@ -182,6 +191,17 @@ export function Cobranza() {
       toast.success(`Recordatorio registrado para ${factura.folio ?? factura.id}`);
     },
     [registrarSeguimiento],
+  );
+
+  const registrarPago = useCallback(
+    (renta: Factura) => {
+      const complemento = complementoDePago(renta, todas, DEMO_TODAY);
+      registrarPagoEnStore(renta.id, complemento);
+      toast.success(
+        `Pago registrado · complemento ${complemento.folio} por ${formatMoneda(complemento.monto)}`,
+      );
+    },
+    [todas, registrarPagoEnStore],
   );
 
   const enviarAvisos = () => {
@@ -256,12 +276,18 @@ export function Cobranza() {
 
       {vista === "avisos" ? (
         <AvisosAutomaticos />
+      ) : vista === "facturacion" ? (
+        <FacturacionAutomatica />
       ) : mesVacio ? (
         <SectionCard>
           <EmptyState
             icono={CalendarX}
             titulo="Sin facturación en este mes"
-            descripcion="El prototipo solo trae datos de cobranza de noviembre 2026."
+            descripcion={
+              mes > MES_DEMO
+                ? "La facturación de este mes aún no se emite: córrela desde la vista Facturación."
+                : "El prototipo solo trae datos de cobranza de noviembre 2026."
+            }
             accion={
               <Button variant="outline" onClick={() => setMes(MES_DEMO)}>
                 Ir a noviembre 2026
@@ -344,10 +370,11 @@ export function Cobranza() {
                 facturas={visibles}
                 codigoLocal={codigoLocal}
                 nombrePlaza={nombrePlazaPorLocal}
-                nombreLocatario={nombreLocatario}
+                nombrePorLocatario={nombrePorLocatario}
                 diaAniversario={diaAniversario}
                 puedeGestionar={puedeGestionar}
                 onRecordar={recordar}
+                onRegistrarPago={registrarPago}
               />
             </SectionCard>
 
@@ -360,6 +387,8 @@ export function Cobranza() {
               />
             </div>
           </div>
+
+          <ClientesMorosos morosos={morosos} />
         </>
       )}
     </div>

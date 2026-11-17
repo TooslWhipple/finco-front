@@ -20,6 +20,13 @@ interface TextoBase {
 }
 
 const TEXTOS: Record<DisparadorAviso, TextoBase> = {
+  FACTURA_EMITIDA: {
+    asunto: "Factura {folio} de la renta de {local}",
+    whatsapp:
+      "Hola {locatario}, te escribimos de Plazas Finco. Ya está emitida tu factura {folio} de la renta del local {local} en {plaza} por {monto}, con vencimiento el {vencimiento}. ¡Gracias!",
+    correo:
+      "Estimado equipo de {locatario}:\n\nLes compartimos la factura {folio} de la renta del local {local} en {plaza}, por {monto}, con vencimiento el {vencimiento}.",
+  },
   ANTES_3: {
     asunto: "Recordatorio: tu renta de {local} vence el {vencimiento}",
     whatsapp:
@@ -57,7 +64,7 @@ const TEXTOS: Record<DisparadorAviso, TextoBase> = {
   },
 };
 
-/** Diez plantillas: cinco disparadores por dos canales. */
+/** Doce plantillas: seis disparadores por dos canales. */
 export function crearPlantillasAviso(): PlantillaAviso[] {
   return (Object.keys(TEXTOS) as DisparadorAviso[]).flatMap((disparador) => {
     const t = TEXTOS[disparador];

@@ -106,10 +106,10 @@ export function estatusCompleto(
 
 /** El proveedor atiende la categoría del trabajo. */
 export function proveedorAtiende(
-  proveedor: Pick<Proveedor, "especialidades"> | undefined,
+  proveedor: Pick<Proveedor, "especialidadesMantenimiento"> | undefined,
   categoria: CategoriaMantenimiento,
 ): boolean {
-  return proveedor?.especialidades.includes(categoria) ?? false;
+  return proveedor?.especialidadesMantenimiento.includes(categoria) ?? false;
 }
 
 /** Incumplimientos de las invariantes (vacío si el registro es válido). */
@@ -117,7 +117,7 @@ export function erroresMantenimiento(
   m: DatosInvariantes,
   contexto: {
     local?: Pick<Local, "id" | "estatus">;
-    proveedor?: Pick<Proveedor, "especialidades">;
+    proveedor?: Pick<Proveedor, "especialidadesMantenimiento">;
   },
 ): string[] {
   const errores: string[] = [];
@@ -393,6 +393,13 @@ export function solicitarSobregiro(
       excedente: datos.excedente,
     },
   };
+}
+
+/** Trabajos cuyo sobregiro espera la autorización de Dirección. */
+export function sobregirosPendientes(
+  mantenimientos: readonly Mantenimiento[],
+): Mantenimiento[] {
+  return mantenimientos.filter((m) => m.autorizacionSobregiro?.estado === "PENDIENTE");
 }
 
 /**

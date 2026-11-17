@@ -21,7 +21,7 @@ import {
 } from "@/hooks";
 import type { ContextoExpediente } from "./contexto";
 import { EncabezadoExpediente } from "./encabezado-expediente";
-import { PESTANA_LICITACIONES, PESTANAS } from "./pestanas";
+import { PESTANA_CONTRATOS, PESTANA_LICITACIONES, PESTANAS } from "./pestanas";
 
 /** Expediente de un proyecto: del terreno a la entrega, en pestañas. */
 export function Expediente({ terrenoId }: { terrenoId: string }) {
@@ -36,6 +36,7 @@ export function Expediente({ terrenoId }: { terrenoId: string }) {
   const estimaciones = useEstimacionesObra(terrenoId);
   const licitaciones = useLicitaciones(terrenoId);
   const [licitacionEnfocadaId, setLicitacionEnfocadaId] = useState<string | null>(null);
+  const [contratoEnfocadoId, setContratoEnfocadoId] = useState<string | null>(null);
   const [pestanaId, setPestanaId] = useState(PESTANAS[0].id);
 
   if (!terreno) {
@@ -69,6 +70,11 @@ export function Expediente({ terrenoId }: { terrenoId: string }) {
     abrirLicitacion: (licitacionId) => {
       setLicitacionEnfocadaId(licitacionId);
       setPestanaId(PESTANA_LICITACIONES);
+    },
+    contratoEnfocadoId,
+    abrirContrato: (contratoId) => {
+      setContratoEnfocadoId(contratoId);
+      setPestanaId(PESTANA_CONTRATOS);
     },
     hoy: DEMO_TODAY,
     rol,

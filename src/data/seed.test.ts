@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   añosHastaFecha,
+  catalogoSinErrores,
   DEMO_TODAY,
+  erroresCatalogo,
+  montoDePrecios,
+  proveedoresActivos,
   antiguedadSaldos,
   carteraVencida,
   consumoPresupuesto,
@@ -11,6 +15,7 @@ import {
   diasAtraso,
   diasSinContacto,
   erroresMantenimiento,
+  proveedorAtiende,
   kpisMantenimiento,
   consecutivoDeFolio,
   embudoProspectos,
@@ -18,6 +23,7 @@ import {
   estatusCobro,
   evaluarCandados,
   localesDisponibles,
+  localesSinAbrir,
   ocupacion,
   porcentajeCobrado,
   prospectosPorLocal,
@@ -26,6 +32,7 @@ import {
   temperaturaProspecto,
   rentaVsMinimo,
 } from "@/domain";
+import { USUARIOS_DEMO } from "@/config/usuarios";
 import { CATALOGO, PROVEEDORES } from "./catalogo";
 import {
   COTIZACION_CANDADO,
@@ -448,6 +455,43 @@ describe("contratos", () => {
   });
 });
 
+describe("aperturas de la semilla", () => {
+  const ocupadosDe = (locales: typeof seed.locales) =>
+    locales.filter((l) => l.estatus === "OCUPADO");
+
+  it("la plaza héroe deja entre 40 y 60% de sus ocupados sin abrir", () => {
+    const ocupados = ocupadosDe(localesDe(PLAZA_HEROE_ID));
+    const sinAbrir = localesSinAbrir(ocupados, seed.contratos, DEMO_TODAY);
+    const fraccion = sinAbrir.length / ocupados.length;
+    expect(fraccion).toBeGreaterThanOrEqual(0.4);
+    expect(fraccion).toBeLessThanOrEqual(0.6);
+  });
+
+  it("fuera de la plaza héroe quedan algunos sin abrir, pero son minoría", () => {
+    const ocupados = ocupadosDe(seed.locales.filter((l) => l.plazaId !== PLAZA_HEROE_ID));
+    const fraccion =
+      localesSinAbrir(ocupados, seed.contratos, DEMO_TODAY).length / ocupados.length;
+    expect(fraccion).toBeGreaterThan(0);
+    expect(fraccion).toBeLessThan(0.5);
+  });
+
+  it("toda apertura cae entre el inicio y hoy y la registra un usuario de la demo", () => {
+    const ids = new Set(USUARIOS_DEMO.map((u) => u.id));
+    const abiertos = seed.contratos.filter((c) => c.apertura);
+    expect(abiertos.length).toBeGreaterThan(0);
+    for (const c of abiertos) {
+      const a = c.apertura!;
+      expect(a.fecha >= c.inicio && a.fecha <= DEMO_TODAY).toBe(true);
+      expect(a.registradaEl <= DEMO_TODAY).toBe(true);
+      expect(ids.has(a.registradaPor)).toBe(true);
+    }
+  });
+
+  it("es determinista", () => {
+    expect(crearSeed().contratos).toEqual(seed.contratos);
+  });
+});
+
 describe("terrenos", () => {
   it("son 14, con ids únicos y ciudades válidas", () => {
     expect(seed.terrenos).toHaveLength(14);
@@ -509,15 +553,125 @@ describe("integraciones", () => {
   });
 });
 
+describe("padrón de proveedores", () => {
+  const padron = seed.proveedores;
+  const porId = new Map(padron.map((p) => [p.id, p]));
+  const deMantenimiento = padron.filter((p) => p.especialidadesMantenimiento.length > 0);
+  const deObra = padron.filter((p) => p.partidasObra.length > 0);
+
+  it("une los 26 del catálogo con ids y RFC únicos, todos activos", () => {
+    expect(padron).toHaveLength(26);
+    expect(padron.map((p) => p.id)).toEqual(PROVEEDORES.map((p) => p.id));
+    expect(new Set(padron.map((p) => p.id)).size).toBe(26);
+    expect(new Set(padron.map((p) => p.rfc)).size).toBe(26);
+    expect(padron.every((p) => p.activo)).toBe(true);
+    expect(deMantenimiento).toHaveLength(8);
+    expect(deObra).toHaveLength(18);
+  });
+
+  it("los 8 de mantenimiento van primero, en su orden, con sus especialidades y RFC", () => {
+    expect(
+      padron.slice(0, 8).map((p) => [p.id, p.rfc, p.especialidadesMantenimiento]),
+    ).toEqual([
+      ["prv-1", "MCO180412K35", ["PINTURA", "IMPERMEABILIZACION", "LIMPIEZA"]],
+      ["prv-2", "ESP150720QA7", ["ELECTRICO"]],
+      ["prv-3", "CRN120306H92", ["CLIMA", "ELECTRICO"]],
+      ["prv-4", "PIS170918D41", ["PLOMERIA"]],
+      ["prv-5", "ICA140225L68", ["IMPERMEABILIZACION"]],
+      ["prv-6", "LPA130611T53", ["LIMPIEZA"]],
+      ["prv-7", "PAD160809B27", ["PINTURA"]],
+      ["prv-8", "STI190130M84", ["PLOMERIA", "ELECTRICO", "CLIMA"]],
+    ]);
+    expect(deMantenimiento.map((p) => p.id)).toEqual(padron.slice(0, 8).map((p) => p.id));
+  });
+
+  it("los de mantenimiento atienden todas las plazas; los de obra, ninguna", () => {
+    const todas = seed.plazas.map((p) => p.id);
+    for (const p of deMantenimiento) expect(p.plazaIds, p.id).toEqual(todas);
+    for (const p of deObra) {
+      expect(p.plazaIds, p.id).toEqual([]);
+      expect(p.especialidadesMantenimiento, p.id).toEqual([]);
+    }
+    expect(PROVEEDORES.every((p) => p.plazaIds.length === 0)).toBe(true);
+  });
+
+  it("todos traen contacto, y los de ACABADOS (07, 14 y 16 incluidos) WhatsApp", () => {
+    for (const p of padron) {
+      expect(p.contacto.nombre, p.id).not.toBe("");
+      expect(p.contacto.correo, p.id).toMatch(/^[^@\s]+@[^@\s]+\.mx$/);
+    }
+    const acabados = padron.filter(
+      (p) => p.activo && p.partidasObra.includes("ACABADOS"),
+    );
+    expect(acabados.map((p) => p.id)).toEqual(
+      expect.arrayContaining(["prv-obra-07", "prv-obra-14", "prv-obra-16"]),
+    );
+    for (const p of acabados) expect(p.contacto.whatsapp, p.id).not.toBe("");
+  });
+
+  it("los contratos de obra llevan el proveedorId de su contratista", () => {
+    for (const c of seed.obra.contratos) {
+      const proveedor = c.proveedorId ? porId.get(c.proveedorId) : undefined;
+      expect(proveedor?.nombre, c.folio).toBe(c.contratista);
+      expect(proveedor?.partidasObra.length, c.folio).toBeGreaterThan(0);
+    }
+  });
+
+  it("ACABADOS trae un catálogo válido de 4 a 6 conceptos ACA-NN, sin invitaciones y rondas solo por total", () => {
+    const acabados = seed.licitaciones.find(
+      (l) => l.estado === "EN_CURSO" && l.partida === "ACABADOS",
+    )!;
+    expect(acabados.conceptos.length).toBeGreaterThanOrEqual(4);
+    expect(acabados.conceptos.length).toBeLessThanOrEqual(6);
+    expect(acabados.conceptos.every((c) => /^ACA-\d{2}$/.test(c.clave))).toBe(true);
+    expect(catalogoSinErrores(erroresCatalogo(acabados, acabados.conceptos))).toBe(true);
+    expect(acabados.invitaciones).toEqual([]);
+    expect(acabados.rondas.map((r) => r.numero)).toEqual([1, 2]);
+    expect(
+      acabados.rondas.every((r) => r.propuestas.every((p) => p.precios === undefined)),
+    ).toBe(true);
+    expect(proveedoresActivos(acabados)).toContain("prv-obra-07");
+    // Precios unitarios de mercado de referencia: el catálogo queda en la escala del base.
+    const PU_MERCADO = [780, 165, 420, 95, 1_750];
+    const total = montoDePrecios(
+      acabados.conceptos,
+      acabados.conceptos.map((c, i) => ({
+        conceptoId: c.id,
+        precioUnitario: PU_MERCADO[i],
+      })),
+    );
+    expect(
+      Math.abs(total - acabados.presupuestoBase) / acabados.presupuestoBase,
+    ).toBeLessThan(0.02);
+  });
+
+  it("las licitaciones históricas no traen catálogo y su ganador sale del proveedorId del contrato", () => {
+    const contratoPorId = new Map(seed.obra.contratos.map((c) => [c.id, c]));
+    for (const l of seed.licitaciones.filter((x) => x.estado === "ADJUDICADA")) {
+      expect(l.conceptos, l.folio).toEqual([]);
+      expect(l.invitaciones, l.folio).toEqual([]);
+      expect(l.ganadorId, l.folio).toBe(
+        contratoPorId.get(l.contratoObraId!)?.proveedorId,
+      );
+    }
+  });
+
+  it("las licitaciones solo invitan a contratistas de obra", () => {
+    for (const l of seed.licitaciones) {
+      for (const id of l.invitados) {
+        expect(porId.get(id)?.partidasObra.length, `${l.folio} ${id}`).toBeGreaterThan(0);
+      }
+    }
+  });
+});
+
 describe("mantenimientos", () => {
   const plazaPorId = new Map(seed.plazas.map((p) => [p.id, p]));
   const localPorId = new Map(seed.locales.map((l) => [l.id, l]));
   const proveedorPorId = new Map(seed.proveedores.map((p) => [p.id, p]));
   const deAlborada = seed.mantenimientos.filter((m) => m.plazaId === PLAZA_HEROE_ID);
 
-  it("hay unos 200, con 8 proveedores y folios consecutivos únicos", () => {
-    expect(seed.proveedores).toHaveLength(8);
-    expect(seed.proveedores.map((p) => p.id)).toEqual(PROVEEDORES.map((p) => p.id));
+  it("hay unos 200, con folios consecutivos únicos", () => {
     expect(seed.mantenimientos.length).toBeGreaterThanOrEqual(150);
     expect(seed.mantenimientos.length).toBeLessThanOrEqual(260);
     expect(new Set(seed.mantenimientos.map((m) => m.id)).size).toBe(
@@ -529,11 +683,14 @@ describe("mantenimientos", () => {
     for (const m of seed.mantenimientos) expect(m.folio).toMatch(/^MNT-\d{4}-\d{4}$/);
   });
 
-  it("cada registro apunta a plaza, local de esa plaza y proveedor existentes", () => {
+  it("cada registro apunta a plaza, local de esa plaza y un proveedor de mantenimiento que la atiende", () => {
     for (const m of seed.mantenimientos) {
       expect(plazaPorId.has(m.plazaId), m.folio).toBe(true);
       if (m.localId) expect(localPorId.get(m.localId)?.plazaId, m.folio).toBe(m.plazaId);
-      expect(proveedorPorId.has(m.proveedorId), m.folio).toBe(true);
+      const proveedor = proveedorPorId.get(m.proveedorId);
+      expect(proveedor?.id, m.folio).toMatch(/^prv-[1-8]$/);
+      expect(proveedor?.plazaIds, m.folio).toContain(m.plazaId);
+      expect(proveedorAtiende(proveedor, m.categoria), m.folio).toBe(true);
     }
   });
 

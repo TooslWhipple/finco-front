@@ -1,108 +1,21 @@
 import { usuarioDeRol } from "@/config/usuarios";
 import {
+  conCatalogo,
   DEMO_TODAY,
   montoContrato,
   sumarDias,
+  type ConceptoLicitacion,
   type ContratoObra,
   type DescarteLicitacion,
   type FechaISO,
   type Licitacion,
   type PartidaObra,
   type PropuestaRonda,
-  type ProveedorObra,
+  type Proveedor,
   type RondaLicitacion,
 } from "@/domain";
+import { PROVEEDORES } from "./catalogo";
 import { ID_TERRENO_HEROE } from "./obra";
-
-/** Contratistas a los que se invita a licitar; incluye a los que ganaron los contratos del héroe. */
-export const PROVEEDORES_OBRA: readonly ProveedorObra[] = [
-  {
-    id: "prv-obra-01",
-    nombre: "Terracerías del Pacífico",
-    especialidades: ["TERRACERIAS", "CIMENTACION"],
-  },
-  {
-    id: "prv-obra-02",
-    nombre: "Constructora Delta",
-    especialidades: ["CIMENTACION", "ESTRUCTURA"],
-  },
-  {
-    id: "prv-obra-03",
-    nombre: "Grupo Constructor Mayab",
-    especialidades: ["MUROS", "ESTRUCTURA"],
-  },
-  {
-    id: "prv-obra-04",
-    nombre: "Instalaciones Hidrosinaloa",
-    especialidades: ["INST_HIDRAULICAS"],
-  },
-  {
-    id: "prv-obra-05",
-    nombre: "Electrificaciones del Noroeste",
-    especialidades: ["INST_ELECTRICAS"],
-  },
-  {
-    id: "prv-obra-06",
-    nombre: "Cubiertas y Losas del Norte",
-    especialidades: ["TECHOS", "ESTRUCTURA"],
-  },
-  {
-    id: "prv-obra-07",
-    nombre: "Acabados y Pisos del Bajío",
-    especialidades: ["ACABADOS"],
-  },
-  {
-    id: "prv-obra-08",
-    nombre: "Movimientos de Tierra del Golfo",
-    especialidades: ["TERRACERIAS"],
-  },
-  {
-    id: "prv-obra-09",
-    nombre: "Obras y Estructuras Marinas",
-    especialidades: ["MUROS", "CIMENTACION"],
-  },
-  {
-    id: "prv-obra-10",
-    nombre: "Constructora Tamaulipeca",
-    especialidades: ["TERRACERIAS", "MUROS"],
-  },
-  {
-    id: "prv-obra-11",
-    nombre: "Ingeniería Eléctrica Integral",
-    especialidades: ["INST_ELECTRICAS"],
-  },
-  {
-    id: "prv-obra-12",
-    nombre: "Hidráulica y Riego del Norte",
-    especialidades: ["INST_HIDRAULICAS"],
-  },
-  {
-    id: "prv-obra-13",
-    nombre: "Impermeabilizantes y Cubiertas Regio",
-    especialidades: ["TECHOS"],
-  },
-  { id: "prv-obra-14", nombre: "Pisos y Acabados Premier", especialidades: ["ACABADOS"] },
-  {
-    id: "prv-obra-15",
-    nombre: "Concretos y Obras del Pacífico",
-    especialidades: ["CIMENTACION", "ESTRUCTURA", "MUROS"],
-  },
-  {
-    id: "prv-obra-16",
-    nombre: "Edificaciones Lomas",
-    especialidades: ["MUROS", "ACABADOS", "TECHOS"],
-  },
-  {
-    id: "prv-obra-17",
-    nombre: "Grupo Edificador Sonora",
-    especialidades: ["MUROS", "ESTRUCTURA", "ACABADOS"],
-  },
-  {
-    id: "prv-obra-18",
-    nombre: "Servicios de Obra Civil Nova",
-    especialidades: ["TERRACERIAS", "TECHOS", "MUROS"],
-  },
-];
 
 /** Cómo se condujo la licitación de una partida del héroe. */
 interface SpecLicitacion {
@@ -167,19 +80,25 @@ const MOTIVOS_DESCARTE: readonly string[] = [
   "No acreditó experiencia en obras de este tamaño.",
 ];
 
-const PROVEEDOR_POR_NOMBRE = new Map(PROVEEDORES_OBRA.map((p) => [p.nombre, p]));
+/** Contratistas de obra del padrón (los que licitan partidas), en el orden del catálogo. */
+const CONTRATISTAS_OBRA = PROVEEDORES.filter((p) => p.partidasObra.length > 0);
+
+/** El padrón por id: el ganador de cada contrato se resuelve por `proveedorId`. */
+const PROVEEDOR_POR_ID: ReadonlyMap<string, Proveedor> = new Map(
+  PROVEEDORES.map((p) => [p.id, p]),
+);
 
 /** Los invitados priorizan al ganador y a quienes tienen la especialidad; el resto completa la lista. */
 function elegirInvitados(
   partida: PartidaObra,
-  ganador: ProveedorObra,
+  ganador: Proveedor,
   cuantos: number,
-): ProveedorObra[] {
-  const otros = PROVEEDORES_OBRA.filter((p) => p.id !== ganador.id);
-  const afines = otros.filter((p) => p.especialidades.includes(partida));
-  const resto = otros.filter((p) => !p.especialidades.includes(partida));
+): Proveedor[] {
+  const otros = CONTRATISTAS_OBRA.filter((p) => p.id !== ganador.id);
+  const afines = otros.filter((p) => p.partidasObra.includes(partida));
+  const resto = otros.filter((p) => !p.partidasObra.includes(partida));
   const elegidos = [ganador, ...afines, ...resto].slice(0, cuantos);
-  return PROVEEDORES_OBRA.filter((p) => elegidos.some((e) => e.id === p.id));
+  return CONTRATISTAS_OBRA.filter((p) => elegidos.some((e) => e.id === p.id));
 }
 
 function redondear(monto: number): number {
@@ -191,7 +110,9 @@ function licitacionAdjudicada(
   spec: SpecLicitacion,
   consecutivo: number,
 ): Licitacion | undefined {
-  const ganador = PROVEEDOR_POR_NOMBRE.get(contrato.contratista);
+  const ganador = contrato.proveedorId
+    ? PROVEEDOR_POR_ID.get(contrato.proveedorId)
+    : undefined;
   if (!ganador) return undefined;
   const adjudicado = montoContrato(contrato);
   const invitados = elegirInvitados(contrato.partida, ganador, spec.invitados);
@@ -287,10 +208,52 @@ function licitacionAdjudicada(
     adjudicadaPor: usuarioDeRol("PMO").nombre,
     adjudicadaEn: sumarDias(ancla, -10),
     contratoObraId: contrato.id,
+    conceptos: [],
+    invitaciones: [],
   };
 }
 
-/** Acabados del héroe: aún sin contrato; sirve para demostrar la captura de rondas en vivo. */
+/**
+ * Catálogo de acabados de la plaza (volúmenes de proyecto). Con precios
+ * unitarios de mercado suma alrededor de 6.4 M, la escala del presupuesto base.
+ */
+const CATALOGO_ACABADOS: readonly Omit<ConceptoLicitacion, "id">[] = [
+  {
+    clave: "ACA-01",
+    descripcion: "Piso de porcelanato 60×60 en pasillos y áreas comunes",
+    unidad: "M2",
+    volumen: 4_200,
+  },
+  {
+    clave: "ACA-02",
+    descripcion: "Aplanado fino y pintura vinílica en muros interiores",
+    unidad: "M2",
+    volumen: 9_500,
+  },
+  {
+    clave: "ACA-03",
+    descripcion: "Plafón de tablaroca con acabado liso en pasillos",
+    unidad: "M2",
+    volumen: 2_100,
+  },
+  {
+    clave: "ACA-04",
+    descripcion: "Zoclo de porcelanato de 10 cm",
+    unidad: "ML",
+    volumen: 3_800,
+  },
+  {
+    clave: "ACA-05",
+    descripcion: "Cancelería de aluminio con cristal templado en accesos",
+    unidad: "M2",
+    volumen: 180,
+  },
+];
+
+/**
+ * Acabados del héroe: aún sin contrato. Trae su catálogo y las rondas 1 y 2
+ * capturadas por total; la PMO invita por el portal y eso abre la ronda 3.
+ */
 function licitacionAcabadosEnCurso(consecutivo: number): Licitacion {
   const invitados = [
     "prv-obra-07",
@@ -322,8 +285,9 @@ function licitacionAcabadosEnCurso(consecutivo: number): Licitacion {
       .map((proveedorId) => ({ proveedorId, respondio: false })),
   ];
   const numero = String(consecutivo).padStart(2, "0");
-  return {
-    id: `${ID_TERRENO_HEROE}-lic-${numero}`,
+  const id = `${ID_TERRENO_HEROE}-lic-${numero}`;
+  const licitacion: Licitacion = {
+    id,
     folio: `LIC-VR-${numero}`,
     terrenoId: ID_TERRENO_HEROE,
     partida: "ACABADOS",
@@ -341,7 +305,13 @@ function licitacionAcabadosEnCurso(consecutivo: number): Licitacion {
       { numero: 2, fecha: sumarDias(DEMO_TODAY, -7), propuestas: aPropuestas(ronda2) },
     ],
     estado: "EN_CURSO",
+    conceptos: [],
+    invitaciones: [],
   };
+  return conCatalogo(
+    licitacion,
+    CATALOGO_ACABADOS.map((c, i) => ({ ...c, id: `${id}-k${i + 1}` })),
+  );
 }
 
 /**

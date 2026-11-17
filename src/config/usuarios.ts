@@ -29,6 +29,13 @@ export const USUARIOS_DEMO: readonly Usuario[] = [
     rol: "SUPERVISOR_OBRA",
     cargo: "Supervisor de obra",
   },
+  {
+    id: "usr-contratista",
+    nombre: "Contratista demo",
+    rol: "CONTRATISTA",
+    cargo: "Acabados y Pisos del Bajío",
+    proveedorId: "prv-obra-07",
+  },
 ];
 
 export const ETIQUETA_ROL: Record<Rol, string> = {
@@ -39,6 +46,7 @@ export const ETIQUETA_ROL: Record<Rol, string> = {
   COBRANZA: "Cobranza",
   PMO: "PMO",
   SUPERVISOR_OBRA: "Supervisor de obra",
+  CONTRATISTA: "Contratista",
 };
 
 export function usuarioPorId(id: string | null): Usuario | undefined {

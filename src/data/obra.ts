@@ -1,10 +1,12 @@
 import { usuarioDeRol } from "@/config/usuarios";
 import {
+  ANTICIPO_PCT,
   avancePlaneadoContrato,
   cierreSemana,
   DEMO_TODAY,
   ETIQUETA_PARTIDA,
   firmarEstimacion,
+  FONDO_GARANTIA_PCT,
   lunesDeSemana,
   pagoDeEstimacion,
   resolverEstimacion,
@@ -23,6 +25,7 @@ import {
   type UnidadObra,
   type VolumenCorte,
 } from "@/domain";
+import { PROVEEDOR_POR_NOMBRE } from "./catalogo";
 import { evidenciaCorte } from "./fotos";
 import { crearPrng, type Prng } from "./prng";
 
@@ -448,12 +451,6 @@ export interface DatosObra {
   estimaciones: EstimacionObra[];
 }
 
-/** Anticipo de los contratos de obra que se pagan por estimación. */
-const ANTICIPO_PCT = 0.3;
-
-/** Fondo de garantía que se retiene de cada estimación. */
-const FONDO_GARANTIA_PCT = 0.05;
-
 /** Última semana con corte posible: la anterior a la de "hoy", que aún corre. */
 const ULTIMA_SEMANA_CON_CORTE = sumarDias(lunesDeSemana(DEMO_TODAY), -7);
 
@@ -793,6 +790,7 @@ export function crearObra(terrenos: readonly Terreno[]): DatosObra {
         terrenoId: terreno.id,
         partida: c.partida,
         contratista: c.contratista,
+        proveedorId: PROVEEDOR_POR_NOMBRE.get(c.contratista)?.id,
         conceptos: conceptosDe(id, c.conceptos, spec.variacion, rng),
         inicioPlan: c.inicio,
         finPlan: c.fin,

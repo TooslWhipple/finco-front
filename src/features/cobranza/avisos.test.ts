@@ -10,6 +10,8 @@ const factura: Factura = {
   monto: 18_740,
   vencimiento: "2026-10-29",
   folio: "A-1042",
+  concepto: "RENTA",
+  origen: "SEMILLA",
 };
 const contexto = {
   locatario: "Café Aroma",

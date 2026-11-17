@@ -13,18 +13,6 @@ import { crearPrng, type Prng } from "./prng";
 const SEMILLA_FACTURAS = 8841;
 const TASA_IVA = 1.16;
 
-/** RFC de persona moral con formato válido pero ficticio, por proveedor. */
-const RFC_PROVEEDOR: Readonly<Record<string, string>> = {
-  "prv-1": "MCO180412K35",
-  "prv-2": "ESP150720QA7",
-  "prv-3": "CRN120306H92",
-  "prv-4": "PIS170918D41",
-  "prv-5": "ICA140225L68",
-  "prv-6": "LPA130611T53",
-  "prv-7": "PAD160809B27",
-  "prv-8": "STI190130M84",
-};
-
 /** Cuántas facturas libres y ligadas fuera de Alborada hay en el seed. */
 const LIGADAS_OTRAS = 2;
 const LIBRES_OTRAS = 6;
@@ -61,7 +49,7 @@ function factura(
   return {
     id: `fsat-${String(consecutivo).padStart(3, "0")}`,
     uuid: uuidFicticio(rng),
-    rfcEmisor: RFC_PROVEEDOR[m.proveedorId] ?? "XAXX010101000",
+    rfcEmisor: proveedor?.rfc ?? "XAXX010101000",
     emisor: proveedor?.nombre ?? m.proveedorId,
     fecha: fecha > DEMO_TODAY ? DEMO_TODAY : fecha,
     subtotal,

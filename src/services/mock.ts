@@ -1,6 +1,6 @@
 import {
   DEMO_TODAY,
-  estatusCobro,
+  facturasDelCorte,
   HORAS_APARTADO,
   INPC_ANUAL,
   UMBRAL_ALTA,
@@ -67,13 +67,7 @@ function crearCotizacionesMock(seed: Seed): CotizacionesRepository {
 
 function crearCobranzaMock(seed: Seed): CobranzaRepository {
   return {
-    listarCorte: async (mes) => {
-      if (!seed.facturas.some((f) => f.mes === mes)) return [];
-      return seed.facturas.filter(
-        (f) =>
-          f.mes === mes || (f.mes < mes && estatusCobro(f, DEMO_TODAY) === "VENCIDA"),
-      );
-    },
+    listarCorte: async (mes) => facturasDelCorte(seed.facturas, mes, DEMO_TODAY),
     obtener: async (id) => seed.facturas.find((f) => f.id === id),
   };
 }
@@ -102,7 +96,6 @@ function crearObraMock(seed: Seed): ObraRepository {
 function crearMantenimientosMock(seed: Seed): MantenimientosRepository {
   return {
     listar: async () => [...seed.mantenimientos],
-    listarProveedores: async () => [...seed.proveedores],
   };
 }
 

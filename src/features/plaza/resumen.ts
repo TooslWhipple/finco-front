@@ -3,6 +3,7 @@ import {
   DEMO_TODAY,
   DIAS_POR_VENCER,
   contratosPorVencer,
+  conVencimientoDeRenta,
   diasAtraso,
   diasEntre,
   type Contrato,
@@ -111,7 +112,10 @@ export function resumirLocalesPlaza(
   const renta = rentadosLista.reduce((s, l) => s + l.precioVigente, 0);
   const porPlanta: Record<string, number> = {};
   for (const l of locales) porPlanta[l.plantaId] = (porPlanta[l.plantaId] ?? 0) + 1;
-  const vencidas = facturas.filter((f) => ids.has(f.localId) && diasAtraso(f, hoy) > 0);
+  // Los recargos suman al saldo vencido con el vencimiento de su renta.
+  const vencidas = conVencimientoDeRenta(facturas).filter(
+    (f) => ids.has(f.localId) && diasAtraso(f, hoy) > 0,
+  );
   return {
     total: locales.length,
     porPlanta,

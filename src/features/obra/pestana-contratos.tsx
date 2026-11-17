@@ -112,9 +112,10 @@ export function PestanaContratos({
   contratos,
   licitaciones,
   abrirLicitacion,
+  contratoEnfocadoId,
   hoy,
 }: ContextoExpediente) {
-  const [seleccionadoId, setSeleccionadoId] = useState<string | null>(null);
+  const [seleccionadoId, setSeleccionadoId] = useState<string | null>(contratoEnfocadoId);
   const filas = useMemo(() => filasContratos(contratos, hoy), [contratos, hoy]);
   const seleccionado = contratos.find((c) => c.id === seleccionadoId);
   const licitacion = licitaciones.find((l) => l.contratoObraId === seleccionado?.id);

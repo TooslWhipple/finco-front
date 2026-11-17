@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Eye, FileSearch, MessageCircle } from "lucide-react";
+import { Fragment, useMemo, useState } from "react";
+import { Banknote, CornerDownRight, Eye, FileSearch, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { DEMO_TODAY, diasAtraso, estatusCobro, type Factura } from "@/domain";
 import { EmptyState } from "@/components/shared";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { formatDiaMes, formatMoneda, formatNumero } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { agruparRecargos } from "./calculos";
 import { ChipAtraso, ChipCobro } from "./chip-atraso";
 
 export const FILAS_POR_PAGINA = 9;
@@ -23,10 +24,11 @@ export const FILAS_POR_PAGINA = 9;
 /**
  * Anchos (px) de las columnas con `table-fixed`. Ancho disponible a 1440 px:
  * 1440 − sidebar 256 − main px-8 (64) = 1120; menos gap-6 (24) → 1096; 2fr/3 = 730;
- * menos p-5 de la card (40) = 690. Suma fija 562 → Locatario absorbe ~128.
- * La columna Locatario no lleva ancho: ocupa el resto y trunca.
+ * menos p-5 de la card (40) = 690. Suma fija 594 → Locatario absorbe ~96.
+ * La columna Locatario no lleva ancho: ocupa el resto y trunca. Acciones lleva
+ * "Recordar" y el botón de pago.
  */
-const ANCHOS_COLUMNAS = [null, 84, 58, 74, 58, 108, 80, 100] as const;
+const ANCHOS_COLUMNAS = [null, 84, 58, 74, 58, 108, 80, 132] as const;
 
 const ENCABEZADOS = [
   "Locatario",
@@ -39,17 +41,20 @@ const ENCABEZADOS = [
 ] as const;
 
 interface TablaCuentasProps {
+  /** Lista plana ya filtrada: rentas y, tras ellas o no, sus recargos. */
   facturas: Factura[];
   /** Código del local por id. */
   codigoLocal: ReadonlyMap<string, string>;
   /** Nombre de la plaza por id de local. */
   nombrePlaza: ReadonlyMap<string, string>;
-  /** Nombre del locatario por id. */
-  nombreLocatario: ReadonlyMap<string, string>;
+  /** Nombre del locatario por id (incluye prospectos y cotizaciones de contratos de la demo). */
+  nombrePorLocatario: ReadonlyMap<string, string>;
   /** Día de aniversario (facturación) por id de local. */
   diaAniversario: ReadonlyMap<string, number>;
   puedeGestionar: boolean;
   onRecordar: (factura: Factura) => void;
+  /** Pago total de la renta, con sus recargos. */
+  onRegistrarPago: (renta: Factura) => void;
 }
 
 /** Páginas visibles: la primera, las cercanas a la actual y la última, con "…" entre huecos. */
@@ -68,20 +73,20 @@ export function TablaCuentas({
   facturas,
   codigoLocal,
   nombrePlaza,
-  nombreLocatario,
+  nombrePorLocatario,
   diaAniversario,
   puedeGestionar,
   onRecordar,
+  onRegistrarPago,
 }: TablaCuentasProps) {
   const [pagina, setPagina] = useState(1);
-  const totalPaginas = Math.max(1, Math.ceil(facturas.length / FILAS_POR_PAGINA));
+  // Se filtra, cuenta y pagina por renta; los recargos van anidados bajo la suya.
+  const cuentas = useMemo(() => agruparRecargos(facturas), [facturas]);
+  const totalPaginas = Math.max(1, Math.ceil(cuentas.length / FILAS_POR_PAGINA));
   const actual = Math.min(pagina, totalPaginas);
-  const filas = facturas.slice(
-    (actual - 1) * FILAS_POR_PAGINA,
-    actual * FILAS_POR_PAGINA,
-  );
+  const filas = cuentas.slice((actual - 1) * FILAS_POR_PAGINA, actual * FILAS_POR_PAGINA);
 
-  if (facturas.length === 0) {
+  if (cuentas.length === 0) {
     return (
       <EmptyState
         icono={FileSearch}
@@ -115,81 +120,108 @@ export function TablaCuentas({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filas.map((f) => {
+          {filas.map(({ renta: f, recargos }) => {
             const estatus = estatusCobro(f, DEMO_TODAY);
             const dia =
               diaAniversario.get(f.localId) ?? Number(f.vencimiento.slice(8, 10));
+            const complemento = f.complementos?.at(-1);
             return (
-              <TableRow key={f.id} className="h-16">
-                <TableCell className="overflow-hidden">
-                  <p className="line-clamp-2 font-medium whitespace-normal text-brand-text">
-                    {nombreLocatario.get(f.locatarioId) ?? "Locatario"}
-                  </p>
-                  <p className="truncate text-xs text-brand-text-muted">
-                    {nombrePlaza.get(f.localId)} ·{" "}
-                    {codigoLocal.get(f.localId) ?? f.localId}
-                  </p>
-                </TableCell>
-                <TableCell className="text-brand-text-muted">
-                  Día {String(dia).padStart(2, "0")}
-                </TableCell>
-                <TableCell className="text-brand-text-muted">{f.folio ?? f.id}</TableCell>
-                <TableCell className="font-semibold tabular-nums">
-                  {formatMoneda(f.monto)}
-                </TableCell>
-                <TableCell className="text-brand-text-muted">
-                  {formatDiaMes(f.vencimiento)}
-                </TableCell>
-                <TableCell>
-                  {estatus === "VENCIDA" ? (
-                    <ChipAtraso dias={diasAtraso(f, DEMO_TODAY)} />
-                  ) : (
-                    <ChipCobro pagada={estatus === "PAGADA"} />
-                  )}
-                </TableCell>
-                <TableCell
-                  className="overflow-hidden text-xs text-brand-text-muted"
-                  title={f.historial?.join("\n")}
-                >
-                  <span className="line-clamp-2 whitespace-normal">
-                    {f.seguimiento ?? "—"}
-                  </span>
-                </TableCell>
-                <TableCell className="text-right">
-                  {estatus !== "PAGADA" && puedeGestionar ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="px-2"
-                      onClick={() => onRecordar(f)}
-                    >
-                      <MessageCircle aria-hidden />
-                      Recordar
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="px-2"
-                      onClick={() =>
-                        toast(
-                          `CFDI ${f.folio ?? f.id} · vista previa no disponible en el prototipo`,
-                        )
-                      }
-                    >
-                      <Eye aria-hidden />
-                      Ver CFDI
-                    </Button>
-                  )}
-                </TableCell>
-              </TableRow>
+              <Fragment key={f.id}>
+                <TableRow className="h-16">
+                  <TableCell className="overflow-hidden">
+                    <p className="line-clamp-2 font-medium whitespace-normal text-brand-text">
+                      {nombrePorLocatario.get(f.locatarioId) ?? "Locatario"}
+                    </p>
+                    <p className="truncate text-xs text-brand-text-muted">
+                      {nombrePlaza.get(f.localId)} ·{" "}
+                      {codigoLocal.get(f.localId) ?? f.localId}
+                    </p>
+                  </TableCell>
+                  <TableCell className="text-brand-text-muted">
+                    Día {String(dia).padStart(2, "0")}
+                  </TableCell>
+                  <TableCell className="overflow-hidden text-brand-text-muted">
+                    <p className="truncate">{f.folio ?? f.id}</p>
+                    {complemento ? (
+                      <p
+                        className="truncate text-xs text-brand-primary"
+                        title={`Complemento de pago ${complemento.folio} · ${formatMoneda(complemento.monto)} · ${formatDiaMes(complemento.fecha)}`}
+                      >
+                        {complemento.folio}
+                      </p>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="font-semibold tabular-nums">
+                    {formatMoneda(f.monto)}
+                  </TableCell>
+                  <TableCell className="text-brand-text-muted">
+                    {formatDiaMes(f.vencimiento)}
+                  </TableCell>
+                  <TableCell>
+                    {estatus === "VENCIDA" ? (
+                      <ChipAtraso dias={diasAtraso(f, DEMO_TODAY)} />
+                    ) : (
+                      <ChipCobro pagada={estatus === "PAGADA"} />
+                    )}
+                  </TableCell>
+                  <TableCell
+                    className="overflow-hidden text-xs text-brand-text-muted"
+                    title={f.historial?.join("\n")}
+                  >
+                    <span className="line-clamp-2 whitespace-normal">
+                      {f.seguimiento ?? "—"}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {estatus !== "PAGADA" && puedeGestionar ? (
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="px-2"
+                          onClick={() => onRecordar(f)}
+                        >
+                          <MessageCircle aria-hidden />
+                          Recordar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon-sm"
+                          aria-label={`Registrar pago de ${f.folio ?? f.id}`}
+                          title="Registrar pago"
+                          onClick={() => onRegistrarPago(f)}
+                        >
+                          <Banknote aria-hidden />
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="px-2"
+                        onClick={() =>
+                          toast(
+                            `CFDI ${f.folio ?? f.id} · vista previa no disponible en el prototipo`,
+                          )
+                        }
+                      >
+                        <Eye aria-hidden />
+                        Ver CFDI
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+                {recargos.map((r) => (
+                  <FilaRecargo key={r.id} recargo={r} />
+                ))}
+              </Fragment>
             );
           })}
         </TableBody>
       </Table>
       <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-brand-line pt-3 text-sm text-brand-text-muted">
         <span>
-          Mostrando {formatNumero(filas.length)} de {formatNumero(facturas.length)} · Los
+          Mostrando {formatNumero(filas.length)} de {formatNumero(cuentas.length)} · Los
           avisos salen solos: 3 días antes, el día de pago y a los 5, 15 y 30 días de
           atraso
         </span>
@@ -235,5 +267,36 @@ export function TablaCuentas({
         </nav>
       </div>
     </div>
+  );
+}
+
+/** Recargo anidado bajo su renta: sin folio ni acciones; se liquida con la renta. */
+function FilaRecargo({ recargo }: { recargo: Factura }) {
+  return (
+    <TableRow className="h-10 bg-brand-cream/40 hover:bg-brand-cream/60">
+      <TableCell className="overflow-hidden">
+        <p className="flex items-center gap-1 truncate pl-3 text-xs text-brand-text-muted">
+          <CornerDownRight aria-hidden className="size-3.5 shrink-0" />
+          Recargo moratorio
+        </p>
+      </TableCell>
+      <TableCell />
+      <TableCell className="text-brand-text-muted">—</TableCell>
+      <TableCell className="text-xs font-medium tabular-nums">
+        {formatMoneda(recargo.monto)}
+      </TableCell>
+      <TableCell className="text-xs text-brand-text-muted" title="Fecha del cargo">
+        {formatDiaMes(recargo.vencimiento)}
+      </TableCell>
+      <TableCell>
+        {recargo.pagadaEl ? (
+          <ChipCobro pagada />
+        ) : (
+          <span className="text-xs text-brand-text-muted">Con la renta</span>
+        )}
+      </TableCell>
+      <TableCell />
+      <TableCell />
+    </TableRow>
   );
 }

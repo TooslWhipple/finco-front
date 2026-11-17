@@ -1,5 +1,6 @@
 import {
   DEMO_TODAY,
+  diaDeFacturacion,
   diasAtraso,
   estatusCobro,
   sumarDias,
@@ -148,13 +149,15 @@ export function crearFactura(
     locatarioId: contrato.locatarioId,
     monto: contrato.rentaMensual,
     folio: `A-${FOLIO_BASE + n}`,
+    concepto: "RENTA" as const,
+    origen: "SEMILLA" as const,
   };
   let factura: Factura;
   if (atrasoDias !== undefined) {
     const vencimiento = sumarDias(DEMO_TODAY, -atrasoDias);
     factura = { ...base, mes: vencimiento.slice(0, 7), vencimiento };
   } else {
-    const dia = Math.min(diaDe(contrato.inicio), 28);
+    const dia = diaDeFacturacion(contrato);
     const vencimiento = `2026-11-${String(dia).padStart(2, "0")}`;
     const pagada = dia <= 2 || rng.prob(0.66);
     const pagadaEl = pagada

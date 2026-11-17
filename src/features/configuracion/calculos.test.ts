@@ -30,6 +30,15 @@ describe("matrizPermisos", () => {
     expect(filas.every((f) => f.permitido.SUPERADMIN)).toBe(true);
   });
 
+  it("el Contratista solo responde licitaciones, en el módulo de obra junto a gestionarlas", () => {
+    expect(filas.filter((f) => f.permitido.CONTRATISTA).map((f) => f.accion)).toEqual([
+      "licitacion.responder",
+    ]);
+    const obra = ACCIONES_MATRIZ.find((m) => m.modulo === "Obra y licitación")!;
+    const ids = obra.acciones.map((a) => a.accion);
+    expect(ids[ids.indexOf("licitacion.gestionar") + 1]).toBe("licitacion.responder");
+  });
+
   it("agrupa por módulo en el orden del catálogo", () => {
     const total = ACCIONES_MATRIZ.reduce((n, g) => n + g.acciones.length, 0);
     expect(filas).toHaveLength(total);

@@ -14,14 +14,17 @@ import {
   ETAPAS_TERRENO,
   reglaEfectiva,
   siguienteEtapaProspecto,
+  type AperturaLocal,
   type CambioPropuesto,
-  type CanalAviso,
+  type ComplementoPago,
   type Contrato,
   type Cotizacion,
   type EstadoCambio,
   type EtapaTerreno,
+  type EntregaAviso,
   type EnvioAviso,
   type EventoSync,
+  type Factura,
   type ExcepcionPrecio,
   type FechaISO,
   type Liberacion,
@@ -33,10 +36,12 @@ import {
   type Mantenimiento,
   type PresupuestoMantenimiento,
   type ProgramacionAvisos,
+  type ProgramacionEmision,
   type PlantillaAviso,
   type Prospecto,
   type TipoContactoProspecto,
   type ReglaActualizacion,
+  type ReglaRecargo,
   type Terreno,
   type ContratoObra,
   type ActividadCronograma,
@@ -46,7 +51,20 @@ import {
   type EstimacionObra,
   type PagoObra,
   type EntradaRonda,
+  type CanalAviso,
+  type CapturaRespuesta,
+  type ConceptoLicitacion,
+  type FechasContrato,
   type Licitacion,
+  type PrecioConcepto,
+  conCatalogo,
+  conInvitaciones,
+  conRespuesta,
+  conRondaCerrada,
+  contratoDeAdjudicacion,
+  errorAdjudicacion,
+  errorFechasContrato,
+  tieneCatalogo,
   conLicitacionAdjudicada,
   conProveedorDescartado,
   conRondaRegistrada,
@@ -59,6 +77,8 @@ import {
   pagoDeEstimacion,
   resolverCorte,
   resolverEstimacion,
+  rfcEnUso,
+  type Proveedor,
 } from "@/domain";
 
 /** Registro de un cambio hecho en vivo sobre un local (mínimo, regla). */
@@ -99,13 +119,23 @@ export interface CobranzaState {
   programacion: ProgramacionAvisos;
   /** Bitácora de envíos simulados, del más antiguo al más reciente. */
   envios: EnvioAviso[];
+  /** Facturas de renta emitidas en la demo (origen `EMISION`). */
+  emitidas: Factura[];
+  /** Recargos generados en la demo. */
+  recargos: Factura[];
+  /** Complementos de pago registrados en la demo, por renta pagada. */
+  pagos: Record<string, ComplementoPago[]>;
+  programacionEmision: ProgramacionEmision;
+  /** Regla vigente para los próximos recargos; editarla no toca los ya generados. */
+  reglaRecargo: ReglaRecargo;
 }
 
-/** Un aviso por enviar: a qué factura, con qué plantilla y por qué canal. */
-export interface EntregaAviso {
-  facturaId: string;
-  plantillaId: string;
-  canal: CanalAviso;
+/** Lo que produce una corrida de emisión, precalculado en el dominio. */
+export interface EmisionFacturas {
+  facturas: readonly Factura[];
+  recargos: readonly Factura[];
+  /** Avisos de factura emitida (no marcan `avisados`). */
+  entregas: readonly EntregaAviso[];
 }
 
 export interface IntegracionesState {
@@ -124,6 +154,8 @@ export interface ContratosState {
   nuevos: Contrato[];
   /** Contratos terminados en la demo (también los del seed), por id de contrato. */
   terminaciones: Record<string, { fecha: FechaISO; motivo: string }>;
+  /** Aperturas registradas en la demo, por id de contrato. */
+  aperturas: Record<string, AperturaLocal>;
 }
 
 /** Contratos de obra y cronograma de los proyectos (parten del seed). */
@@ -144,6 +176,11 @@ export interface MantenimientosState {
   mantenimientos: Mantenimiento[];
   presupuestos: PresupuestoMantenimiento[];
   facturasSat: FacturaSat[];
+}
+
+export interface ProveedoresState {
+  /** Padrón único de proveedores de mantenimiento y obra. */
+  padron: Proveedor[];
 }
 
 export interface ReglasDefaultState {
@@ -379,10 +416,22 @@ export function registrarAvisos(
   for (const e of entregas) {
     seguimientos[e.facturaId] = [...(seguimientos[e.facturaId] ?? []), texto];
   }
-  const envios = [
-    ...estado.envios,
+  const envios = anexarEnvios(estado.envios, entregas, fecha, hora, origen);
+  return { ...estado, seguimientos, avisados, envios };
+}
+
+/** Suma a la bitácora un envío simulado por entrega, con ids consecutivos. */
+function anexarEnvios(
+  envios: readonly EnvioAviso[],
+  entregas: readonly EntregaAviso[],
+  fecha: FechaISO,
+  hora: string,
+  origen: EnvioAviso["origen"],
+): EnvioAviso[] {
+  return [
+    ...envios,
     ...entregas.map((e, i) => ({
-      id: `env-${estado.envios.length + i + 1}`,
+      id: `env-${envios.length + i + 1}`,
       facturaId: e.facturaId,
       plantillaId: e.plantillaId,
       canal: e.canal,
@@ -391,7 +440,74 @@ export function registrarAvisos(
       origen,
     })),
   ];
-  return { ...estado, seguimientos, avisados, envios };
+}
+
+/** Agrega las facturas cuyo id aún no está en la lista. */
+function sinRepetir(actuales: readonly Factura[], nuevas: readonly Factura[]): Factura[] {
+  const ids = new Set(actuales.map((f) => f.id));
+  const agregadas = nuevas.filter((f) => {
+    if (ids.has(f.id)) return false;
+    ids.add(f.id);
+    return true;
+  });
+  return [...actuales, ...agregadas];
+}
+
+/**
+ * Guarda una corrida de emisión: las facturas emitidas y los recargos que no
+ * existían, y un envío simulado del aviso de cada factura emitida. Los avisos de
+ * emisión no marcan `avisados` (ese marcador es del aviso de atraso).
+ */
+export function emitirFacturacion(
+  estado: CobranzaState,
+  emision: EmisionFacturas,
+  fecha: FechaISO,
+  hora: string,
+  origen: EnvioAviso["origen"],
+): CobranzaState {
+  const yaEmitidas = new Set(estado.emitidas.map((f) => f.id));
+  const entregas = emision.entregas.filter((e) => !yaEmitidas.has(e.facturaId));
+  return {
+    ...estado,
+    emitidas: sinRepetir(estado.emitidas, emision.facturas),
+    recargos: sinRepetir(estado.recargos, emision.recargos),
+    envios: anexarEnvios(estado.envios, entregas, fecha, hora, origen),
+  };
+}
+
+/** Guarda los recargos que aún no existían. */
+export function generarRecargos(
+  estado: CobranzaState,
+  recargos: readonly Factura[],
+): CobranzaState {
+  return { ...estado, recargos: sinRepetir(estado.recargos, recargos) };
+}
+
+/**
+ * Registra el pago total de una renta con su complemento. Solo hay pago total:
+ * una renta ya pagada en la demo no admite otro.
+ */
+export function registrarPago(
+  estado: CobranzaState,
+  facturaId: string,
+  complemento: ComplementoPago,
+): CobranzaState {
+  if (estado.pagos[facturaId]?.length) return estado;
+  return { ...estado, pagos: { ...estado.pagos, [facturaId]: [complemento] } };
+}
+
+export function guardarProgramacionEmision(
+  estado: CobranzaState,
+  programacionEmision: ProgramacionEmision,
+): CobranzaState {
+  return { ...estado, programacionEmision };
+}
+
+export function editarReglaRecargo(
+  estado: CobranzaState,
+  reglaRecargo: ReglaRecargo,
+): CobranzaState {
+  return { ...estado, reglaRecargo };
 }
 
 /** Edita el texto de una plantilla; el asunto solo aplica a las de correo. */
@@ -563,6 +679,28 @@ export function aplicarTerminaciones(
   return contratos.map((c) => {
     const t = terminaciones[c.id];
     return t ? { ...c, estado: "TERMINADO", fin: t.fecha } : c;
+  });
+}
+
+/** Registra la apertura del local de un contrato; si ya hay una para ese contrato no hace nada. */
+export function registrarApertura(
+  estado: ContratosState,
+  contratoId: string,
+  apertura: AperturaLocal,
+): ContratosState {
+  if (estado.aperturas[contratoId]) return estado;
+  return { ...estado, aperturas: { ...estado.aperturas, [contratoId]: apertura } };
+}
+
+/** Aplica las aperturas registradas en la demo; la que trae el contrato (semilla) gana. */
+export function aplicarAperturas(
+  contratos: readonly Contrato[],
+  aperturas: ContratosState["aperturas"],
+): Contrato[] {
+  return contratos.map((c) => {
+    if (c.apertura) return c;
+    const a = aperturas[c.id];
+    return a ? { ...c, apertura: a } : c;
   });
 }
 
@@ -783,7 +921,12 @@ export function descartarProveedor(
   );
 }
 
-/** La PMO adjudica la licitación al ganador de la última ronda, con motivo. */
+/**
+ * La PMO adjudica la licitación al ganador de la última ronda cerrada, con motivo.
+ * Con catálogo, además nace el contrato de obra con los PU del ganador (`proveedor`
+ * del padrón y `fechas` válidas son obligatorios) y queda ligado en `contratoObraId`;
+ * si falta algo, el estado queda igual.
+ */
 export function adjudicarLicitacion(
   estado: ObraState,
   id: string,
@@ -791,10 +934,78 @@ export function adjudicarLicitacion(
   motivo: string,
   autor: string,
   hoy: FechaISO,
+  proveedor?: Pick<Proveedor, "id" | "nombre">,
+  fechas?: FechasContrato,
+): ObraState {
+  const licitacion = estado.licitaciones.find((l) => l.id === id);
+  if (!licitacion || errorAdjudicacion(licitacion, ganadorId, motivo) !== undefined) {
+    return estado;
+  }
+  const adjudicada = conLicitacionAdjudicada(licitacion, ganadorId, motivo, autor, hoy);
+  if (!tieneCatalogo(licitacion)) {
+    return actualizarLicitacion(estado, id, () => adjudicada);
+  }
+  if (!proveedor || proveedor.id !== ganadorId || !fechas) return estado;
+  if (errorFechasContrato(fechas, hoy) !== undefined) return estado;
+  const contrato = contratoDeAdjudicacion(
+    licitacion,
+    proveedor,
+    estado.contratos.filter((c) => c.terrenoId === licitacion.terrenoId),
+    fechas,
+  );
+  if (!contrato || estado.contratos.some((c) => c.id === contrato.id)) return estado;
+  return {
+    ...actualizarLicitacion(estado, id, () => ({
+      ...adjudicada,
+      contratoObraId: contrato.id,
+    })),
+    contratos: [...estado.contratos, contrato],
+  };
+}
+
+/** La PMO define o edita el catálogo mientras ninguna ronda tenga precios. */
+export function definirCatalogo(
+  estado: ObraState,
+  id: string,
+  conceptos: readonly ConceptoLicitacion[],
+): ObraState {
+  return actualizarLicitacion(estado, id, (l) => conCatalogo(l, conceptos));
+}
+
+/**
+ * Envío simulado del catálogo: las invitaciones quedan en la bitácora de la
+ * licitación y, si no hay ronda abierta, se abre la siguiente.
+ */
+export function enviarInvitaciones(
+  estado: ObraState,
+  id: string,
+  proveedorIds: readonly string[],
+  canal: CanalAviso,
+  fecha: FechaISO,
+  hora: string,
 ): ObraState {
   return actualizarLicitacion(estado, id, (l) =>
-    conLicitacionAdjudicada(l, ganadorId, motivo, autor, hoy),
+    conInvitaciones(l, proveedorIds, canal, fecha, hora),
   );
+}
+
+/** El contratista (o la PMO a su nombre) responde la ronda abierta por precio unitario. */
+export function responderLicitacion(
+  estado: ObraState,
+  id: string,
+  proveedorId: string,
+  precios: readonly PrecioConcepto[],
+  capturadaPor: CapturaRespuesta,
+  fecha: FechaISO,
+): ObraState {
+  return actualizarLicitacion(estado, id, (l) =>
+    conRespuesta(l, proveedorId, precios, capturadaPor, fecha),
+  );
+}
+
+/** La PMO cierra la ronda abierta; exige al menos una respuesta. */
+export function cerrarRonda(estado: ObraState, id: string): ObraState {
+  return actualizarLicitacion(estado, id, conRondaCerrada);
 }
 
 // --- mantenimientos -------------------------------------------------------
@@ -955,6 +1166,30 @@ export function desligarFacturaSat(
     facturasSat: estado.facturasSat.map((f) =>
       f.id === facturaId ? { ...f, mantenimientoId: undefined } : f,
     ),
+  };
+}
+
+// --- padrón de proveedores -----------------------------------------------
+
+/** Alta en el padrón; se ignora si el id ya existe o el RFC ya está registrado. */
+export function agregarProveedor(
+  estado: ProveedoresState,
+  proveedor: Proveedor,
+): ProveedoresState {
+  if (estado.padron.some((p) => p.id === proveedor.id)) return estado;
+  if (rfcEnUso(estado.padron, proveedor.rfc)) return estado;
+  return { padron: [...estado.padron, proveedor] };
+}
+
+/** Reemplaza los datos de un proveedor; se ignora si no existe o el RFC es de otro. */
+export function editarProveedor(
+  estado: ProveedoresState,
+  proveedor: Proveedor,
+): ProveedoresState {
+  if (!estado.padron.some((p) => p.id === proveedor.id)) return estado;
+  if (rfcEnUso(estado.padron, proveedor.rfc, proveedor.id)) return estado;
+  return {
+    padron: estado.padron.map((p) => (p.id === proveedor.id ? proveedor : p)),
   };
 }
 

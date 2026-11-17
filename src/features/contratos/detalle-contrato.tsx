@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { PanelDetalle, StatusChip } from "@/components/shared";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
+  contratoVigenteParaApertura,
   estadoVisibleContrato,
   type Contrato,
   type Cotizacion,
@@ -12,6 +13,10 @@ import {
   type Plaza,
 } from "@/domain";
 import { BotonLiberarLocal } from "@/features/local/boton-liberar-local";
+import {
+  BotonRegistrarApertura,
+  ChipApertura,
+} from "@/features/local/boton-registrar-apertura";
 import { describirRegla } from "@/features/plaza/resumen";
 import { formatFecha, formatMoneda } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -26,6 +31,8 @@ interface DetalleContratoProps {
   local?: Local;
   plaza?: Plaza;
   cotizacion?: Cotizacion;
+  /** El local del contrato está rentado y aún no abre (`localesSinAbrir`). */
+  sinAbrir: boolean;
   puedeGestionar: boolean;
   onEnviarAFirma: (id: string) => void;
   onRegistrarFirma: (id: string) => void;
@@ -55,6 +62,7 @@ export function DetalleContrato({
   local,
   plaza,
   cotizacion,
+  sinAbrir,
   puedeGestionar,
   onEnviarAFirma,
   onRegistrarFirma,
@@ -65,6 +73,7 @@ export function DetalleContrato({
   const rige = c.estado === "VIGENTE";
   const folio = c.folio ?? c.id;
   const renovable = rige && local !== undefined;
+  const pendienteApertura = contratoVigenteParaApertura(c, hoy) && sinAbrir;
 
   return (
     <PanelDetalle
@@ -87,6 +96,14 @@ export function DetalleContrato({
             "Local no disponible."
           ),
         },
+        ...(pendienteApertura || c.apertura
+          ? [
+              {
+                titulo: "Apertura",
+                contenido: <ChipApertura contrato={c} sinAbrir={pendienteApertura} />,
+              },
+            ]
+          : []),
         {
           titulo: "Vigencia",
           contenido: (
@@ -141,6 +158,9 @@ export function DetalleContrato({
             </Link>
           ) : null}
           {renovable ? <BotonLiberarLocal local={local} contrato={c} /> : null}
+          {pendienteApertura && local ? (
+            <BotonRegistrarApertura local={local} contrato={c} />
+          ) : null}
           {puedeGestionar ? (
             <>
               {c.estado === "BORRADOR" ? (

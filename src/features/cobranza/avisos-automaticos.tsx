@@ -11,6 +11,7 @@ import {
   disparadorDeFactura,
   HORA_DEMO,
   idPlantilla,
+  nombreLocatario,
   proximaEjecucion,
   type CanalAviso,
   type DiaSemana,
@@ -24,7 +25,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { can } from "@/config/permissions";
-import { useFacturas, useLocales, useLocatarios, usePlazas, useSesion } from "@/hooks";
+import {
+  useFacturas,
+  useFuentesLocatario,
+  useLocales,
+  usePlazas,
+  useSesion,
+} from "@/hooks";
 import { formatDiaMes, formatNumero } from "@/lib/format";
 import { MES_DEMO } from "@/lib/tiempo";
 import { cn } from "@/lib/utils";
@@ -35,8 +42,15 @@ import {
   VARIABLES_PLANTILLA,
   type ContextoAviso,
 } from "./avisos";
+import {
+  ETIQUETA_CANAL,
+  InterruptorProgramacion,
+  OPCIONES_CANAL,
+  SOLO_44,
+} from "./controles-programacion";
 
 const ETIQUETA_DISPARADOR: Record<DisparadorAviso, string> = {
+  FACTURA_EMITIDA: "Factura emitida",
   ANTES_3: "3 días antes del vencimiento",
   DIA_PAGO: "Día de pago",
   ATRASO_5: "5 días de atraso",
@@ -44,20 +58,8 @@ const ETIQUETA_DISPARADOR: Record<DisparadorAviso, string> = {
   ATRASO_30: "30 días de atraso",
 };
 
-const ETIQUETA_CANAL: Record<CanalAviso, string> = {
-  WHATSAPP: "WhatsApp",
-  CORREO: "Correo",
-};
-
-const OPCIONES_CANAL = [
-  { valor: "WHATSAPP", etiqueta: "WhatsApp" },
-  { valor: "CORREO", etiqueta: "Correo" },
-] as const;
-
 /** Envíos que muestra la bitácora; el resto queda en el estado. */
 const FILAS_BITACORA = 25;
-
-const SOLO_44 = "[&_button]:min-h-11 [&_button]:px-4";
 
 export function AvisosAutomaticos() {
   const { rol } = useSesion();
@@ -66,8 +68,9 @@ export function AvisosAutomaticos() {
   const { datos: facturas } = useFacturas(MES_DEMO);
   const { datos: locales } = useLocales();
   const { datos: plazas } = usePlazas();
-  const { datos: locatarios } = useLocatarios();
+  const fuentesLocatario = useFuentesLocatario();
 
+  const emitidas = useAppStore((s) => s.cobranza.emitidas);
   const plantillas = useAppStore((s) => s.cobranza.plantillas);
   const programacion = useAppStore((s) => s.cobranza.programacion);
   const envios = useAppStore((s) => s.cobranza.envios);
@@ -76,20 +79,26 @@ export function AvisosAutomaticos() {
   const registrarAvisos = useAppStore((s) => s.registrarAvisos);
 
   const todas = useMemo(() => facturas ?? [], [facturas]);
+  // Las emitidas del mes siguiente no están en el corte: la bitácora y la vista
+  // previa del aviso de emisión las buscan aparte.
+  const conEmitidas = useMemo(() => {
+    const ids = new Set(todas.map((f) => f.id));
+    return [...todas, ...emitidas.filter((f) => !ids.has(f.id))];
+  }, [todas, emitidas]);
   const local = useMemo(() => new Map((locales ?? []).map((l) => [l.id, l])), [locales]);
   const plazaPorId = useMemo(
     () => new Map((plazas ?? []).map((p) => [p.id, p.nombre])),
     [plazas],
   );
-  const locatarioPorId = useMemo(
-    () => new Map((locatarios ?? []).map((t) => [t.id, t.nombre])),
-    [locatarios],
-  );
+  const nombrePorLocatario = useMemo(() => {
+    const ids = new Set(conEmitidas.map((f) => f.locatarioId));
+    return new Map([...ids].map((id) => [id, nombreLocatario(id, fuentesLocatario)]));
+  }, [conEmitidas, fuentesLocatario]);
 
   const contextoDe = (factura: Factura): ContextoAviso => {
     const l = local.get(factura.localId);
     return {
-      locatario: locatarioPorId.get(factura.locatarioId) ?? factura.locatarioId,
+      locatario: nombrePorLocatario.get(factura.locatarioId) ?? factura.locatarioId,
       local: l?.codigo ?? factura.localId,
       plaza: (l && plazaPorId.get(l.plazaId)) ?? "",
       hoy: DEMO_TODAY,
@@ -187,7 +196,7 @@ export function AvisosAutomaticos() {
               <EditorPlantilla
                 key={plantilla.id}
                 plantilla={plantilla}
-                facturas={todas}
+                facturas={conEmitidas}
                 contextoDe={contextoDe}
                 puedeEditar={puedeEditar}
                 onGuardar={(parche) => {
@@ -201,7 +210,7 @@ export function AvisosAutomaticos() {
 
         <Bitacora
           envios={envios}
-          facturas={todas}
+          facturas={conEmitidas}
           plantillas={plantillas}
           contextoDe={contextoDe}
         />
@@ -209,30 +218,12 @@ export function AvisosAutomaticos() {
 
       <SectionCard titulo="Programación">
         <div className="space-y-5">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={activa}
+          <InterruptorProgramacion
+            activa={activa}
+            etiqueta={`Envío automático ${activa ? "activo" : "apagado"}`}
             disabled={!puedeEditar}
-            onClick={() => setActiva((a) => !a)}
-            className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg border border-brand-line px-3 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60"
-          >
-            Envío automático {activa ? "activo" : "apagado"}
-            <span
-              aria-hidden
-              className={cn(
-                "flex h-6 w-11 items-center rounded-full p-0.5 transition-colors",
-                activa ? "bg-brand-secondary" : "bg-brand-line",
-              )}
-            >
-              <span
-                className={cn(
-                  "size-5 rounded-full bg-white shadow-xs transition-transform",
-                  activa ? "translate-x-5" : "translate-x-0",
-                )}
-              />
-            </span>
-          </button>
+            onToggle={() => setActiva((a) => !a)}
+          />
 
           <div>
             <p className="mb-2 text-sm font-medium text-brand-text">Días de envío</p>
@@ -317,11 +308,15 @@ function EditorPlantilla({
   const [asunto, setAsunto] = useState(plantilla.asunto ?? "");
   const [cuerpo, setCuerpo] = useState(plantilla.cuerpo);
 
-  // Una factura real a la que hoy le toca este disparador; si ninguna, la más reciente sin pagar.
+  // Una factura real a la que hoy le toca este disparador (para el aviso de
+  // emisión, una emitida); si ninguna, la primera renta sin pagar.
   const ejemplo = useMemo(
     () =>
-      facturas.find((f) => disparadorDeFactura(f, DEMO_TODAY) === plantilla.disparador) ??
-      facturas.find((f) => !f.pagadaEl),
+      facturas.find((f) =>
+        plantilla.disparador === "FACTURA_EMITIDA"
+          ? f.origen === "EMISION" && f.concepto === "RENTA"
+          : disparadorDeFactura(f, DEMO_TODAY) === plantilla.disparador,
+      ) ?? facturas.find((f) => f.concepto === "RENTA" && !f.pagadaEl),
     [facturas, plantilla.disparador],
   );
   const mensaje = ejemplo

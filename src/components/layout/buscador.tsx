@@ -27,6 +27,7 @@ import {
   useLocatarios,
   usePlazas,
   useProspectos,
+  useSesion,
   useTerrenos,
 } from "@/hooks";
 import { formatMoneda } from "@/lib/format";
@@ -170,8 +171,16 @@ function ResultadosBusqueda({
   );
 }
 
-/** Buscador global ⌘K sobre plazas, locales, locatarios, contratos, prospectos y terrenos. */
+/**
+ * Buscador global ⌘K sobre plazas, locales, locatarios, contratos, prospectos y
+ * terrenos; el contratista externo no lo ve.
+ */
 export function Buscador() {
+  const { rol } = useSesion();
+  return rol === "CONTRATISTA" ? null : <BuscadorGlobal />;
+}
+
+function BuscadorGlobal() {
   const [abierto, setAbierto] = useState(false);
   const [consulta, setConsulta] = useState("");
 

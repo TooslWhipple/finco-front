@@ -1,6 +1,7 @@
 import {
   DEMO_TODAY,
   formatearFolio,
+  proveedorAtiende,
   sumarDias,
   type CategoriaMantenimiento,
   type EstatusMantenimiento,
@@ -177,9 +178,7 @@ function crearBorrador(
       ? "LOCATARIO"
       : "ADMINISTRACION";
   const cargoA = origen === "LOCATARIO" && rng.prob(0.7) ? "LOCATARIO" : "PLAZA";
-  const proveedor = rng.elegir(
-    PROVEEDORES.filter((p) => p.especialidades.includes(categoria)),
-  );
+  const proveedor = rng.elegir(PROVEEDORES.filter((p) => proveedorAtiende(p, categoria)));
   const plantilla = rng.elegir(
     (tipo === "PREVENTIVO" ? PREVENTIVOS : CORRECTIVOS)[categoria],
   );

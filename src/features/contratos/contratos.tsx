@@ -23,6 +23,7 @@ import {
   DEMO_TODAY,
   ESTADOS_VISIBLES_CONTRATO,
   estadoVisibleContrato,
+  localesSinAbrir,
   type Contrato,
 } from "@/domain";
 import { VistaPreviaContrato } from "@/features/cotizacion/vista-previa-contrato";
@@ -110,6 +111,9 @@ export function Contratos({ contratoInicialId }: ContratosProps) {
     : undefined;
   const localSel = seleccionado ? localesPorId.get(seleccionado.localId) : undefined;
   const plazaSel = localSel ? plazasPorId.get(localSel.plazaId) : undefined;
+  const sinAbrirSel = localSel
+    ? localesSinAbrir([localSel], lista, DEMO_TODAY).length > 0
+    : false;
   const ciudadSel = (ciudades ?? []).find((c) => c.id === plazaSel?.ciudadId);
   const puedeGestionar = can(rol, "contratos.gestionar");
 
@@ -298,6 +302,7 @@ export function Contratos({ contratoInicialId }: ContratosProps) {
                 local={localSel}
                 plaza={plazaSel}
                 cotizacion={cotizacionSel}
+                sinAbrir={sinAbrirSel}
                 puedeGestionar={puedeGestionar}
                 onEnviarAFirma={enviarContratoAFirma}
                 onRegistrarFirma={(id) => registrarFirmaContrato(id, AHORA_DEMO)}

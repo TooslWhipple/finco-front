@@ -69,7 +69,12 @@ describe("repositorios mock", () => {
   });
 
   it("configuración: usuarios, reglas por plaza y parámetros del dominio", async () => {
-    expect(await repos.configuracion.listarUsuarios()).toHaveLength(8);
+    const usuarios = await repos.configuracion.listarUsuarios();
+    expect(usuarios).toHaveLength(9);
+    expect(usuarios.find((u) => u.id === "usr-contratista")).toMatchObject({
+      rol: "CONTRATISTA",
+      proveedorId: "prv-obra-07",
+    });
     const reglas = await repos.configuracion.reglasDefault();
     expect(reglas["plz-alborada"]).toBeDefined();
     const parametros = await repos.configuracion.obtenerParametros();
@@ -79,8 +84,7 @@ describe("repositorios mock", () => {
     expect(Object.keys(parametros.inpcAnual).length).toBeGreaterThan(0);
   });
 
-  it("mantenimientos: lista el seed y sus proveedores", async () => {
+  it("mantenimientos: lista el seed", async () => {
     expect(await repos.mantenimientos.listar()).toEqual(seed.mantenimientos);
-    expect(await repos.mantenimientos.listarProveedores()).toHaveLength(8);
   });
 });

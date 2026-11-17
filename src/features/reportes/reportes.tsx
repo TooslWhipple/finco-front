@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Download, FileSearch, Share2 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -18,27 +19,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { can } from "@/config/permissions";
 import { IDS_VENDEDORES, nombreDeUsuario } from "@/config/usuarios";
-import { DEMO_TODAY } from "@/domain";
-import {
-  useCiudades,
-  useContratosVivos,
-  useCotizaciones,
-  useExcepciones,
-  useFacturas,
-  useLocales,
-  useLocatarios,
-  usePlazas,
-  useProspectos,
-  useSesion,
-  useTerrenos,
-} from "@/hooks";
-import { MES_DEMO } from "@/lib/tiempo";
+import { useCiudades, usePlazas, useSesion } from "@/hooks";
 import { AsistenteDatos } from "./asistente-datos";
 import { FILTRO_INICIAL, REPORTES, TODOS, acotarDatos, type IdReporte } from "./calculos";
 import { tablaACsv } from "./csv";
 import { formatearValor } from "./formato";
 import { GraficaBarras } from "./grafica-barras";
-import type { Celda, DatosReporte, FiltroReporte, ResultadoReporte } from "./tipos";
+import type { Celda, FiltroReporte, ResultadoReporte } from "./tipos";
+import { useDatosReporte } from "./use-datos-reporte";
 
 export type VistaReportes = "REPORTES" | "ASISTENTE";
 
@@ -60,7 +48,9 @@ function descargarCsv(nombre: string, contenido: string): void {
   URL.revokeObjectURL(url);
 }
 
-function columnasDe(resultado: ResultadoReporte): ColumnDef<Record<string, Celda>>[] {
+export function columnasDe(
+  resultado: ResultadoReporte,
+): ColumnDef<Record<string, Celda>>[] {
   return resultado.tabla.columnas.map((c) => ({
     id: c.clave,
     header: c.etiqueta,
@@ -73,63 +63,39 @@ function columnasDe(resultado: ResultadoReporte): ColumnDef<Record<string, Celda
   }));
 }
 
-export function Reportes({
-  vistaInicial = "REPORTES",
-}: {
-  vistaInicial?: VistaReportes;
-}) {
+/** Valor de `?vista=` que abre el asistente; sin él, la vista de reportes. */
+const PARAM_ASISTENTE = "asistente";
+
+/**
+ * Pantalla de Reportes. La vista (`?vista=asistente`) y el reporte (`?reporte=<id>`)
+ * viven en la URL: un enlace manda aunque la pantalla siga montada de una visita
+ * anterior. Un reporte desconocido o que el rol no ve abre el primero disponible.
+ */
+export function Reportes() {
+  const ruta = usePathname();
+  const router = useRouter();
+  const params = useSearchParams();
   const { rol } = useSesion();
   const ciudades = useCiudades().datos;
   const plazas = usePlazas().datos;
-  const locales = useLocales().datos;
-  const contratos = useContratosVivos().datos;
-  const facturas = useFacturas(MES_DEMO).datos;
-  const prospectos = useProspectos().datos;
-  const terrenos = useTerrenos().datos;
-  const locatarios = useLocatarios().datos;
-  const cotizaciones = useCotizaciones();
-  const excepciones = useExcepciones();
+  const datos = useDatosReporte();
 
-  const [vista, setVista] = useState<VistaReportes>(vistaInicial);
-  const [idReporte, setIdReporte] = useState<IdReporte>(REPORTES[0]!.id);
+  const vista: VistaReportes =
+    params.get("vista") === PARAM_ASISTENTE ? "ASISTENTE" : "REPORTES";
   const [filtro, setFiltro] = useState<FiltroReporte>(FILTRO_INICIAL);
-
-  const datos = useMemo<DatosReporte | undefined>(
-    () =>
-      ciudades && plazas && locales && contratos && facturas && locatarios
-        ? {
-            ciudades,
-            plazas,
-            locales,
-            contratos,
-            facturas,
-            prospectos,
-            terrenos,
-            locatarios,
-            cotizaciones,
-            excepciones,
-            hoy: DEMO_TODAY,
-          }
-        : undefined,
-    [
-      ciudades,
-      plazas,
-      locales,
-      contratos,
-      facturas,
-      prospectos,
-      terrenos,
-      locatarios,
-      cotizaciones,
-      excepciones,
-    ],
-  );
 
   const disponibles = useMemo(
     () => REPORTES.filter((r) => !r.requiere || can(rol, r.requiere)),
     [rol],
   );
-  const definicion = disponibles.find((r) => r.id === idReporte) ?? disponibles[0]!;
+  const idPedido = params.get("reporte");
+  const definicion = disponibles.find((r) => r.id === idPedido) ?? disponibles[0]!;
+
+  function irA(vistaNueva: VistaReportes, reporte: IdReporte) {
+    const consulta = new URLSearchParams({ reporte });
+    if (vistaNueva === "ASISTENTE") consulta.set("vista", PARAM_ASISTENTE);
+    router.push(`${ruta}?${consulta.toString()}`, { scroll: false });
+  }
   const resultado = useMemo(
     () => (datos ? definicion.calcular(acotarDatos(datos, filtro)) : undefined),
     [datos, definicion, filtro],
@@ -163,7 +129,7 @@ export function Reportes({
     if (!drilldown || typeof plazaId !== "string") return;
     const ciudadId = plazas?.find((p) => p.id === plazaId)?.ciudadId ?? TODOS;
     setFiltro({ ciudadId, plazaId });
-    setIdReporte(drilldown.destino);
+    irA(vista, drilldown.destino);
   };
 
   const exportar = () => {
@@ -202,7 +168,7 @@ export function Reportes({
         etiqueta="Vista de reportes"
         opciones={VISTAS}
         valor={vista}
-        onChange={setVista}
+        onChange={(v) => irA(v, definicion.id)}
       />
 
       {vista === "ASISTENTE" ? (
@@ -243,9 +209,9 @@ export function Reportes({
             <PillsFiltro
               etiqueta="Reporte"
               opciones={opcionesReporte}
-              valor={idReporte}
+              valor={definicion.id}
               onChange={(id) => {
-                setIdReporte(id);
+                irA(vista, id);
                 setFiltro((f) => ({ ...f, plazaId: TODOS }));
               }}
               envolver

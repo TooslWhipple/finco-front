@@ -5,6 +5,7 @@ import {
   rentaVsMinimo,
   rentasDeLocales,
   type Contrato,
+  type CumplimientoPlan,
   type ExcepcionPrecio,
   type Local,
   type Plaza,
@@ -208,38 +209,55 @@ export function reporteDescuentos(datos: DatosReporte): ResultadoReporte {
   };
 }
 
+/** Cumplimiento del plan de ingresos de una plaza con los locales y contratos del alcance. */
+export function cumplimientoDePlaza(plaza: Plaza, datos: DatosReporte): CumplimientoPlan {
+  const rentas = rentasDeLocales(
+    datos.locales.filter((l) => l.plazaId === plaza.id),
+    datos.contratos,
+    datos.hoy,
+  );
+  return cumplimientoPlan(rentas.ocupados, rentas.disponibles);
+}
+
+/** Plazas en operación con renta planeada, con su cumplimiento del plan. */
+function plazasConPlan(datos: DatosReporte): { plaza: Plaza; plan: CumplimientoPlan }[] {
+  return datos.plazas
+    .filter((p) => p.estatus === "EN_OPERACION")
+    .map((plaza) => ({ plaza, plan: cumplimientoDePlaza(plaza, datos) }))
+    .filter(({ plan }) => plan.planeada > 0);
+}
+
+/**
+ * Cumplimiento global del plan de ingresos (fracción 0-1): Σ contratada / Σ planeada
+ * de las plazas en operación con renta planeada. 0 si no hay ninguna.
+ */
+export function cumplimientoGlobal(datos: DatosReporte): number {
+  const plazas = plazasConPlan(datos);
+  const planeada = plazas.reduce((s, { plan }) => s + plan.planeada, 0);
+  const contratada = plazas.reduce((s, { plan }) => s + plan.contratada, 0);
+  return planeada === 0 ? 0 : contratada / planeada;
+}
+
 /** "Cumplimiento del plan de ingresos": renta contratada contra la planeada por la PMO, plaza por plaza. */
 export function reporteCumplimientoPlan(datos: DatosReporte): ResultadoReporte {
-  const filas = datos.plazas
-    .filter((p) => p.estatus === "EN_OPERACION")
-    .map((plaza) => {
-      const rentas = rentasDeLocales(
-        datos.locales.filter((l) => l.plazaId === plaza.id),
-        datos.contratos,
-        datos.hoy,
-      );
-      const plan = cumplimientoPlan(rentas.ocupados, rentas.disponibles);
-      return {
-        plazaId: plaza.id,
-        plaza: plaza.nombre,
-        planeada: plan.planeada,
-        contratada: plan.contratada,
-        cumplimiento: plan.cumplimientoPct / 100,
-        meta: plaza.metaCumplimientoPct / 100,
-        potencial: plan.potencialPct / 100,
-      };
-    })
-    .filter((f) => f.planeada > 0)
+  const filas = plazasConPlan(datos)
+    .map(({ plaza, plan }) => ({
+      plazaId: plaza.id,
+      plaza: plaza.nombre,
+      planeada: plan.planeada,
+      contratada: plan.contratada,
+      cumplimiento: plan.cumplimientoPct / 100,
+      meta: plaza.metaCumplimientoPct / 100,
+      potencial: plan.potencialPct / 100,
+    }))
     .toSorted((a, b) => a.cumplimiento - a.meta - (b.cumplimiento - b.meta));
 
   const bajoMeta = filas.filter((f) => f.cumplimiento < f.meta).length;
-  const planeada = filas.reduce((s, f) => s + f.planeada, 0);
-  const contratada = filas.reduce((s, f) => s + f.contratada, 0);
   return {
     resumen:
       filas.length === 0
         ? "No hay plazas en operación en este alcance."
-        : `Cumplimiento de ${formatPorcentaje(planeada === 0 ? 0 : contratada / planeada)} del plan de ingresos; ${formatNumero(bajoMeta)} de ${formatNumero(filas.length)} plazas están bajo su meta.`,
+        : `Cumplimiento de ${formatPorcentaje(cumplimientoGlobal(datos))} del plan de ingresos; ${formatNumero(bajoMeta)} de ${formatNumero(filas.length)} plazas están bajo su meta.`,
     grafica: {
       serie: "Cumplimiento del plan",
       formato: "porcentaje",

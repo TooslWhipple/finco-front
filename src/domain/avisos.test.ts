@@ -5,6 +5,8 @@ import {
   diaSemanaDe,
   disparadorDeFactura,
   disparadorManual,
+  DISPARADORES,
+  entregasDeEmision,
   proximaEjecucion,
 } from "./avisos";
 import type { EnvioAviso, Factura } from "./tipos";
@@ -18,6 +20,8 @@ const fac = (id: string, vencimiento: string, o: Partial<Factura> = {}): Factura
   mes: "2026-11",
   monto: 1_000,
   vencimiento,
+  concepto: "RENTA",
+  origen: "SEMILLA",
   ...o,
 });
 
@@ -34,11 +38,52 @@ describe("disparadorDeFactura", () => {
     ).toBeNull();
   });
 
+  it("un recargo no dispara avisos propios", () => {
+    const recargo = fac("r", "2026-11-03", {
+      concepto: "RECARGO",
+      origen: "EMISION",
+      facturaOrigenId: "b",
+    });
+    expect(disparadorDeFactura(recargo, HOY)).toBeNull();
+    expect(avisosDelDia([recargo, fac("b", "2026-10-29")], HOY)).toHaveLength(1);
+  });
+
   it("el manual cae al escalón de atraso más cercano", () => {
     expect(disparadorManual(fac("a", "2026-10-30"), HOY)).toBe("ATRASO_5");
     expect(disparadorManual(fac("b", "2026-10-10"), HOY)).toBe("ATRASO_15");
     expect(disparadorManual(fac("c", "2026-09-01"), HOY)).toBe("ATRASO_30");
     expect(disparadorManual(fac("d", "2026-11-03"), HOY)).toBe("DIA_PAGO");
+  });
+});
+
+describe("entregasDeEmision", () => {
+  it("genera una entrega por factura en el canal programado con la plantilla de emisión", () => {
+    const emitidas = [
+      fac("fac-em-A-2026-12", "2026-12-05", { origen: "EMISION" }),
+      fac("fac-em-B-2026-12", "2026-12-12", { origen: "EMISION" }),
+    ];
+    expect(entregasDeEmision(emitidas, "CORREO")).toEqual([
+      {
+        facturaId: "fac-em-A-2026-12",
+        plantillaId: "pl-factura_emitida-correo",
+        canal: "CORREO",
+      },
+      {
+        facturaId: "fac-em-B-2026-12",
+        plantillaId: "pl-factura_emitida-correo",
+        canal: "CORREO",
+      },
+    ]);
+    expect(entregasDeEmision(emitidas, "WHATSAPP")[0].plantillaId).toBe(
+      "pl-factura_emitida-whatsapp",
+    );
+  });
+
+  it("el disparador de emisión va primero y no sale con el ciclo de cobro", () => {
+    expect(DISPARADORES[0]).toBe("FACTURA_EMITIDA");
+    expect(avisosDelDia([fac("x", "2026-12-05", { origen: "EMISION" })], HOY)).toEqual(
+      [],
+    );
   });
 });
 

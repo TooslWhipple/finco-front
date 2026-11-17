@@ -31,6 +31,7 @@ export const ESTATUS = {
   POR_VENCER: { etiqueta: "Por vencer", tono: "naranja" },
   VENCIDO: { etiqueta: "Vencido", tono: "coral" },
   TERMINADO: { etiqueta: "Terminado", tono: "neutro" },
+  SIN_ABRIR: { etiqueta: "Sin abrir", tono: "naranja" },
   // Cotizaciones
   BORRADOR: { etiqueta: "Borrador", tono: "neutro" },
   ENVIADA: { etiqueta: "Enviada", tono: "indigo" },
@@ -68,6 +69,9 @@ export const ESTATUS = {
   CORRECTIVO: { etiqueta: "Correctivo", tono: "coral" },
   REQUIERE_AUTORIZACION: { etiqueta: "Requiere autorización", tono: "naranja" },
   SOBREGIRO_AUTORIZADO: { etiqueta: "Sobregiro autorizado", tono: "verde" },
+  // Padrón de proveedores
+  ACTIVO: { etiqueta: "Activo", tono: "verde" },
+  INACTIVO: { etiqueta: "Inactivo", tono: "neutro" },
   // Integraciones y log de sincronización
   CONECTADA: { etiqueta: "Conectada", tono: "verde" },
   CON_DIFERENCIAS: { etiqueta: "Con diferencias", tono: "naranja" },
@@ -80,6 +84,7 @@ export const ESTATUS = {
   ADJUDICADA: { etiqueta: "Adjudicada", tono: "verde" },
   SIN_RESPUESTA: { etiqueta: "No respondió", tono: "neutro" },
   DESCARTADO: { etiqueta: "Descartado", tono: "coral" },
+  CERRADA: { etiqueta: "Ronda cerrada", tono: "neutro" },
   // Temperatura de prospectos
   AL_DIA: { etiqueta: "Al día", tono: "verde" },
   TIBIO: { etiqueta: "Tibio", tono: "naranja" },

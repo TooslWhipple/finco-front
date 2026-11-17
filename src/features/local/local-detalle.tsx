@@ -8,7 +8,12 @@ import { GaleriaFotos, SectionCard, StatusChip } from "@/components/shared";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { can } from "@/config/permissions";
 import { fotosDeLocal } from "@/data/fotos";
-import { prospectosPorLocal } from "@/domain";
+import {
+  contratoVigenteParaApertura,
+  DEMO_TODAY,
+  localesSinAbrir,
+  prospectosPorLocal,
+} from "@/domain";
 import {
   useCiudades,
   useContratosVivos,
@@ -24,6 +29,7 @@ import { useAppStore } from "@/store";
 import type { EntradaBitacora } from "@/store/reducers";
 import { SeccionMantenimientos } from "@/features/mantenimientos/seccion-mantenimientos";
 import { BotonLiberarLocal } from "./boton-liberar-local";
+import { BotonRegistrarApertura, ChipApertura } from "./boton-registrar-apertura";
 import { BandejaActualizacionAnual } from "./bandeja-actualizacion-anual";
 import { construirHistorial, frenteLocalM } from "./calculos";
 import { HistorialCambios } from "./historial-cambios";
@@ -71,6 +77,13 @@ export function LocalDetalle({ plazaId, localId }: { plazaId: string; localId: s
   const contratoVigente = contratos?.find(
     (c) => c.localId === local.id && c.estado === "VIGENTE",
   );
+  // Para la apertura cuenta el vigente por estado y fechas; en un local renovado, el que ya abrió.
+  const vigentesApertura = (contratos ?? []).filter(
+    (c) => c.localId === local.id && contratoVigenteParaApertura(c, DEMO_TODAY),
+  );
+  const contratoApertura =
+    vigentesApertura.find((c) => c.apertura) ?? vigentesApertura[0];
+  const sinAbrir = localesSinAbrir([local], contratos ?? [], DEMO_TODAY).length > 0;
   const prospectos = prospectosPorLocal(prospectosTodos ?? []).get(local.id)?.length ?? 0;
 
   return (
@@ -81,6 +94,7 @@ export function LocalDetalle({ plazaId, localId }: { plazaId: string; localId: s
           <h1 className="mt-1 flex flex-wrap items-center gap-3 font-heading text-2xl font-bold text-brand-primary">
             Local {local.codigo}
             <StatusChip estatus={local.estatus} />
+            <ChipApertura contrato={contratoApertura} sinAbrir={sinAbrir} />
             {prospectos > 0 ? (
               <Link
                 href={`/prospectos?local=${local.id}`}
@@ -105,6 +119,9 @@ export function LocalDetalle({ plazaId, localId }: { plazaId: string; localId: s
           </Button>
           {contratoVigente ? (
             <BotonLiberarLocal local={local} contrato={contratoVigente} />
+          ) : null}
+          {sinAbrir && contratoApertura ? (
+            <BotonRegistrarApertura local={local} contrato={contratoApertura} />
           ) : null}
           {cotizable ? (
             <Link

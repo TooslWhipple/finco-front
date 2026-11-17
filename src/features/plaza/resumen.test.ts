@@ -80,6 +80,21 @@ describe("resumirLocalesPlaza", () => {
     expect(r.conAtraso).toBe(1);
     expect(r.montoVencido).toBe(facturas[0].monto);
   });
+
+  it("envejece el recargo con su renta en el monto vencido", () => {
+    const recargo = crearFactura({
+      id: "rec-f1-1",
+      localId: "p-A-03",
+      concepto: "RECARGO",
+      origen: "EMISION",
+      facturaOrigenId: "f1",
+      monto: 200,
+      vencimiento: HOY,
+    });
+    const r = resumirLocalesPlaza(locales, contratos, [...facturas, recargo], HOY);
+    expect(r.montoVencido).toBe(facturas[0].monto + 200);
+    expect(r.conAtraso).toBe(1);
+  });
 });
 
 describe("proximosVencimientos", () => {
