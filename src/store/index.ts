@@ -35,10 +35,9 @@ import {
   type TipoContactoProspecto,
   type ReglaActualizacion,
   type ReglaRecargo,
-  type Rol,
 } from "@/domain";
 import { evidenciaAntes, evidenciaCorte, evidenciaDespues } from "@/data/fotos";
-import { usuarioDeRol, usuarioPorId } from "@/config/usuarios";
+import { usuarioPorId } from "@/config/usuarios";
 import { formatMoneda } from "@/lib/format";
 import { crearEstadoInicial, type DatosDemo } from "./estado-inicial";
 import * as r from "./reducers";
@@ -49,7 +48,11 @@ export const VERSION_STORAGE = 21;
 
 export interface Acciones {
   iniciarSesion(usuarioId: string): void;
-  cambiarRol(rol: Rol): void;
+  /**
+   * Selector de la topbar: pasa la sesión a ese usuario demo aunque comparta rol
+   * con el actual (dos vendedores). Un id que no es de la demo no cambia nada.
+   */
+  cambiarUsuario(usuarioId: string): void;
   cerrarSesion(): void;
   crearCotizacion(cotizacion: Cotizacion): void;
   actualizarCotizacion(id: string, parche: Partial<Omit<Cotizacion, "id">>): void;
@@ -211,7 +214,9 @@ export const useAppStore = create<AppState>()(
       return {
         ...crearEstadoInicial(),
         iniciarSesion: (usuarioId) => set({ session: { usuarioId } }),
-        cambiarRol: (rol) => set({ session: { usuarioId: usuarioDeRol(rol).id } }),
+        cambiarUsuario: (usuarioId) => {
+          if (usuarioPorId(usuarioId)) set({ session: { usuarioId } });
+        },
         cerrarSesion: () => set({ session: { usuarioId: null } }),
         crearCotizacion: (cotizacion) =>
           set((s) => ({

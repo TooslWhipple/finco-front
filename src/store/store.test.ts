@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEMO_TODAY } from "@/domain";
 import { crearContrato } from "@/domain/fixtures";
+import { usuarioPorId } from "@/config/usuarios";
 
 const memoria = new Map<string, string>();
 vi.stubGlobal("localStorage", {
@@ -19,11 +20,27 @@ describe("store de la demo", () => {
     useAppStore.getState().cerrarSesion();
   });
 
-  it("cambiar de rol cambia de usuario", () => {
+  it("cambiar de usuario cambia de rol", () => {
     const s = useAppStore.getState();
     s.iniciarSesion("usr-mariana");
-    s.cambiarRol("SUPERADMIN");
+    s.cambiarUsuario("usr-laura");
     expect(useAppStore.getState().session.usuarioId).toBe("usr-laura");
+  });
+
+  it("cambia a otro usuario del mismo rol: de Sofía a Luis, los dos de Ventas", () => {
+    const s = useAppStore.getState();
+    s.iniciarSesion("usr-sofia");
+    s.cambiarUsuario("usr-luis");
+    const { usuarioId } = useAppStore.getState().session;
+    expect(usuarioId).toBe("usr-luis");
+    expect(usuarioPorId(usuarioId)?.rol).toBe("VENTAS");
+  });
+
+  it("un usuario que no es de la demo no cambia la sesión", () => {
+    const s = useAppStore.getState();
+    s.iniciarSesion("usr-sofia");
+    s.cambiarUsuario("usr-nadie");
+    expect(useAppStore.getState().session.usuarioId).toBe("usr-sofia");
   });
 
   it("firma las resoluciones con el usuario de la sesión", () => {
@@ -36,9 +53,9 @@ describe("store de la demo", () => {
     s.solicitarExcepcion(cot, local, "Cliente ancla");
     const exc = useAppStore.getState().aprobaciones.excepciones.at(-1)!;
     expect(exc.solicitadaPor).toBe("Jorge Ramírez");
-    s.cambiarRol("DIRECCION");
+    s.cambiarUsuario("usr-mariana");
     useAppStore.getState().autorizarExcepcion(exc.id, "Procede");
-    s.cambiarRol("PMO");
+    s.cambiarUsuario("usr-pmo");
     useAppStore.getState().aplicarExcepcion(exc.id);
     const resuelta = useAppStore
       .getState()
@@ -250,7 +267,7 @@ describe("store de la demo", () => {
     });
     expect(corte.evidencia.length).toBeGreaterThan(0);
 
-    s.cambiarRol("PMO");
+    s.cambiarUsuario("usr-pmo");
     s.rechazarCorte(corte.id, "");
     expect(useAppStore.getState().obra.cortes.at(-1)!.estado).toBe("FIRMADO_SUPERVISOR");
     s.validarCorte(corte.id);

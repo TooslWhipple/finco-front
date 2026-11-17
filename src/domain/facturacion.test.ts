@@ -10,6 +10,7 @@ import {
   recargosPendientes,
   REGLA_RECARGO_INICIAL,
 } from "./facturacion";
+import { contratoDesdeCotizacion } from "./contratos";
 import { crearContrato, crearCotizacion, crearFactura, crearProspecto } from "./fixtures";
 
 const HOY = "2026-11-03";
@@ -237,6 +238,38 @@ describe("nombreLocatario", () => {
 
   it("con un id desconocido devuelve un valor no vacío", () => {
     expect(nombreLocatario("nadie", fuentes)).toBe("nadie");
+  });
+
+  it("nombra al locatario de un contrato nacido de una cotización capturada a mano", () => {
+    const cotizacion = crearCotizacion({
+      id: "COT-2026-0419",
+      localId: "A-03",
+      prospecto: { nombre: "Cafetería Aurora", documentosCompletos: true },
+    });
+    const contrato = {
+      ...contratoDesdeCotizacion(cotizacion),
+      estado: "VIGENTE" as const,
+      inicio: "2026-11-01",
+    };
+    const [factura] = facturasAEmitir([contrato], [], DIC);
+    const conCotizacion = { ...fuentes, cotizaciones: [cotizacion] };
+
+    expect(contrato.locatarioId).toBe("COT-2026-0419");
+    expect(nombreLocatario(contrato.locatarioId, conCotizacion)).toBe("Cafetería Aurora");
+    expect(nombreLocatario(factura.locatarioId, conCotizacion)).toBe("Cafetería Aurora");
+  });
+
+  it("nombra al locatario de un contrato nacido de un prospecto registrado", () => {
+    const contrato = contratoDesdeCotizacion(
+      crearCotizacion({
+        id: "COT-2026-0420",
+        prospectoId: "prs-7",
+        prospecto: { nombre: "Capturado en la cotización", documentosCompletos: true },
+      }),
+    );
+
+    expect(contrato.locatarioId).toBe("prs-7");
+    expect(nombreLocatario(contrato.locatarioId, fuentes)).toBe("Tacos El Güero");
   });
 });
 

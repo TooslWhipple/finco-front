@@ -5,8 +5,8 @@ import type {
   ExcepcionPrecio,
   Factura,
   FechaISO,
+  FuentesLocatario,
   Local,
-  Locatario,
   Plaza,
   Prospecto,
   Terreno,
@@ -21,7 +21,8 @@ export interface DatosReporte {
   facturas: readonly Factura[];
   prospectos: readonly Prospecto[];
   terrenos: readonly Terreno[];
-  locatarios: readonly Locatario[];
+  /** De dónde sale el nombre del locatario de un contrato (`nombreLocatario`), sin filtro de vendedor. */
+  fuentesLocatario: FuentesLocatario;
   cotizaciones: readonly Cotizacion[];
   excepciones: readonly ExcepcionPrecio[];
   hoy: FechaISO;

@@ -2,6 +2,7 @@ import {
   RANGOS_RENTA,
   cumplimientoPlan,
   diasEntre,
+  nombreLocatario,
   rentaVsMinimo,
   rentasDeLocales,
   type Contrato,
@@ -59,7 +60,6 @@ function mesesDe(contrato: Pick<Contrato, "inicio" | "fin">): number {
 export function reporteRentasVsMinimo(datos: DatosReporte): ResultadoReporte {
   const vigentes = contratosVigentes(datos);
   const plazaPorId = new Map(datos.plazas.map((p) => [p.id, p]));
-  const locatarioPorId = new Map(datos.locatarios.map((l) => [l.id, l.nombre]));
   const excepcionPorCotizacion = new Map(
     datos.excepciones
       .filter((e) => e.estado === "APLICADA")
@@ -77,7 +77,7 @@ export function reporteRentasVsMinimo(datos: DatosReporte): ResultadoReporte {
         plazaId: local.plazaId,
         plaza: plazaPorId.get(local.plazaId)?.nombre ?? local.plazaId,
         local: local.codigo,
-        locatario: locatarioPorId.get(contrato.locatarioId) ?? "—",
+        locatario: nombreLocatario(contrato.locatarioId, datos.fuentesLocatario),
         renta: contrato.rentaMensual,
         minimo: local.precioMinimo,
         diferencia: comparacion.diferencia,
@@ -130,7 +130,7 @@ function filaExcepcion(
   const contrato = datos.contratos.find((c) => c.cotizacionId === e.cotizacionId);
   const cotizacion = datos.cotizaciones.find((c) => c.id === e.cotizacionId);
   const locatario = contrato
-    ? datos.locatarios.find((l) => l.id === contrato.locatarioId)?.nombre
+    ? nombreLocatario(contrato.locatarioId, datos.fuentesLocatario)
     : undefined;
   const plazo = cotizacion?.plazoMeses ?? (contrato ? mesesDe(contrato) : 0);
   const descuento = e.precioMinimo - e.rentaSolicitada;

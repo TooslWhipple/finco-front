@@ -181,12 +181,14 @@ export function useProspectos() {
 
 /**
  * Las tres fuentes de las que `nombreLocatario` resuelve el nombre de un
- * `locatarioId`: locatarios del repositorio, prospectos y cotizaciones visibles.
+ * `locatarioId`: locatarios del repositorio, prospectos y cotizaciones de todo el
+ * equipo. No se filtran por vendedor: el nombre de quien firma o paga un contrato
+ * no depende de quién mire (Cobranza no ve las cotizaciones de Ventas).
  */
 export function useFuentesLocatario(): FuentesLocatario {
   const { datos: locatarios } = useLocatarios();
-  const { datos: prospectos } = useProspectos();
-  const cotizaciones = useCotizaciones();
+  const prospectos = useAppStore((s) => s.prospectos.prospectos);
+  const cotizaciones = useTodasLasCotizaciones();
   return useMemo(
     () => ({ locatarios: locatarios ?? [], prospectos, cotizaciones }),
     [locatarios, prospectos, cotizaciones],

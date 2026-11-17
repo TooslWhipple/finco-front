@@ -8,6 +8,7 @@ import {
   useCotizaciones,
   useExcepciones,
   useFacturas,
+  useFuentesLocatario,
   useLocales,
   useLocatarios,
   usePlazas,
@@ -30,6 +31,7 @@ export function useDatosReporte(): DatosReporte | undefined {
   const prospectos = useProspectos().datos;
   const terrenos = useTerrenos().datos;
   const locatarios = useLocatarios().datos;
+  const fuentesLocatario = useFuentesLocatario();
   const cotizaciones = useCotizaciones();
   const excepciones = useExcepciones();
 
@@ -44,7 +46,7 @@ export function useDatosReporte(): DatosReporte | undefined {
             facturas,
             prospectos,
             terrenos,
-            locatarios,
+            fuentesLocatario,
             cotizaciones,
             excepciones,
             hoy: DEMO_TODAY,
@@ -59,6 +61,7 @@ export function useDatosReporte(): DatosReporte | undefined {
       prospectos,
       terrenos,
       locatarios,
+      fuentesLocatario,
       cotizaciones,
       excepciones,
     ],
