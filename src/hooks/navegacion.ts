@@ -2,11 +2,15 @@
 
 import { useMemo } from "react";
 import {
+  clientesMorosos,
   contratosSinCaptura,
   DEMO_TODAY,
+  DIAS_MOROSO_DESTACADO,
   estatusCobro,
   estimacionesPorAutorizar,
   semaforoTerreno,
+  sobregirosPendientes,
+  soloRentas,
   type ExcepcionPrecio,
   type Rol,
   type Terreno,
@@ -28,8 +32,9 @@ export function useBadges(): Record<IdBadge, number> {
   const facturas = useFacturas(MES_DEMO);
   const vencidas = useMemo(
     () =>
-      facturas.datos?.filter((f) => estatusCobro(f, DEMO_TODAY) === "VENCIDA").length ??
-      0,
+      soloRentas(facturas.datos ?? []).filter(
+        (f) => estatusCobro(f, DEMO_TODAY) === "VENCIDA",
+      ).length,
     [facturas.datos],
   );
   return {
@@ -145,6 +150,7 @@ function avisosDeObra(
     case "VENTAS":
     case "GERENTE_COMERCIAL":
     case "COBRANZA":
+    case "CONTRATISTA":
       return [];
   }
 }
@@ -210,8 +216,27 @@ export function useNotificaciones(rol: Rol | null): Notificacion[] {
   const mantenimientos = useAppStore((s) => s.mantenimientos.mantenimientos);
   const terrenos = useTerrenos().datos;
   const badges = useBadges();
+  const facturas = useFacturas(MES_DEMO).datos;
+  const morososDe30 = useMemo(
+    () =>
+      clientesMorosos(facturas ?? [], DEMO_TODAY).filter(
+        (m) => m.dias > DIAS_MOROSO_DESTACADO,
+      ).length,
+    [facturas],
+  );
   return useMemo(() => {
     if (!rol) return [];
+    const avisoMorosos: Notificacion[] =
+      morososDe30 > 0
+        ? [
+            {
+              id: "morosos",
+              titulo: `${morososDe30} ${morososDe30 === 1 ? "cliente" : "clientes"} con más de ${DIAS_MOROSO_DESTACADO} días`,
+              detalle: "Revisa el panel de clientes que se demoran en Cobranza.",
+              ruta: "/cobranza",
+            },
+          ]
+        : [];
     const enRojo = terrenos.filter(
       (t) => t.semaforoObra !== undefined && semaforoTerreno(t, DEMO_TODAY) === "ROJO",
     );
@@ -219,9 +244,7 @@ export function useNotificaciones(rol: Rol | null): Notificacion[] {
     const porAutorizar = contarPorAutorizar(aprobaciones);
     const porAplicar = contarPorAplicar(aprobaciones);
     const cambiosPend = contarCambiosPendientes(aprobaciones);
-    const sobregiros = mantenimientos.filter(
-      (m) => m.autorizacionSobregiro?.estado === "PENDIENTE",
-    ).length;
+    const sobregiros = sobregirosPendientes(mantenimientos).length;
     switch (rol) {
       case "SUPERADMIN":
         return [
@@ -258,16 +281,19 @@ export function useNotificaciones(rol: Rol | null): Notificacion[] {
         );
       }
       case "COBRANZA":
-        return badges.cobranza > 0
-          ? [
-              {
-                id: "vencidas",
-                titulo: `${badges.cobranza} cuentas con atraso`,
-                detalle: "Pendientes de seguimiento en el corte de noviembre.",
-                ruta: "/cobranza",
-              },
-            ]
-          : [];
+        return [
+          ...(badges.cobranza > 0
+            ? [
+                {
+                  id: "vencidas",
+                  titulo: `${badges.cobranza} cuentas con atraso`,
+                  detalle: "Pendientes de seguimiento en el corte de noviembre.",
+                  ruta: "/cobranza",
+                },
+              ]
+            : []),
+          ...avisoMorosos,
+        ];
       case "PMO":
         return [...avisoPorAplicar(porAplicar), ...deObra];
       case "SUPERVISOR_OBRA":
@@ -287,7 +313,19 @@ export function useNotificaciones(rol: Rol | null): Notificacion[] {
                 },
               ]
             : []),
+          ...avisoMorosos,
         ];
+      case "CONTRATISTA":
+        return [];
     }
-  }, [rol, aprobaciones, cotizaciones, obra, mantenimientos, terrenos, badges.cobranza]);
+  }, [
+    rol,
+    aprobaciones,
+    cotizaciones,
+    obra,
+    mantenimientos,
+    terrenos,
+    badges.cobranza,
+    morososDe30,
+  ]);
 }

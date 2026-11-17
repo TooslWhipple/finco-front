@@ -7,6 +7,7 @@ import {
   avanceEsperado,
   diasEntre,
   embudoProspectos,
+  localesSinAbrir,
   rentaVsMinimo,
   semaforoTerreno,
   type SemaforoTerreno,
@@ -15,6 +16,7 @@ import { formatMoneda, formatNumero, formatPorcentaje } from "@/lib/format";
 import { resumirPlazasMapa } from "@/features/mapa/agregados";
 import {
   contratosVigentes,
+  cumplimientoDePlaza,
   reporteCumplimientoPlan,
   reporteDescuentos,
   reporteRentasVsMinimo,
@@ -29,6 +31,7 @@ export const FILTRO_INICIAL: FiltroReporte = { ciudadId: TODOS, plazaId: TODOS }
 
 export type IdReporte =
   | "OCUPACION"
+  | "OCUPACION_PLAN"
   | "COBRANZA"
   | "PRECIOS"
   | "RENTAS_MINIMO"
@@ -87,10 +90,30 @@ const TONO_SEMAFORO: Record<SemaforoTerreno, TonoBarra> = {
 
 const TONO_RANGO = { ALTA: "verde", MEDIA: "ambar", BAJA: "rojo" } as const;
 
+/** Locales rentados que aún no abren, por id de plaza (`localesSinAbrir`). */
+function sinAbrirPorPlaza(datos: DatosReporte): Map<string, number> {
+  const porPlaza = new Map<string, number>();
+  for (const l of localesSinAbrir(datos.locales, datos.contratos, datos.hoy)) {
+    porPlaza.set(l.plazaId, (porPlaza.get(l.plazaId) ?? 0) + 1);
+  }
+  return porPlaza;
+}
+
+/** Locales en cotización, por id de plaza. */
+function enCotizacionPorPlaza(datos: DatosReporte): Map<string, number> {
+  const porPlaza = new Map<string, number>();
+  for (const l of datos.locales) {
+    if (l.estatus !== "EN_COTIZACION") continue;
+    porPlaza.set(l.plazaId, (porPlaza.get(l.plazaId) ?? 0) + 1);
+  }
+  return porPlaza;
+}
+
 export function reporteOcupacion(datos: DatosReporte): ResultadoReporte {
   const operativas = resumirPlazasMapa(datos.ciudades, datos.plazas, datos.locales)
     .filter((p) => p.plaza.estatus === "EN_OPERACION")
     .toSorted((a, b) => b.ocupacion - a.ocupacion);
+  const sinAbrir = sinAbrirPorPlaza(datos);
   const locales = operativas.reduce((s, p) => s + p.totalLocales, 0);
   const ocupados = operativas.reduce((s, p) => s + p.ocupados, 0);
   const global = locales === 0 ? 0 : ocupados / locales;
@@ -115,6 +138,7 @@ export function reporteOcupacion(datos: DatosReporte): ResultadoReporte {
         { clave: "locales", etiqueta: "Locales", formato: "numero" },
         { clave: "ocupados", etiqueta: "Ocupados", formato: "numero" },
         { clave: "disponibles", etiqueta: "Por colocar", formato: "numero" },
+        { clave: "sinAbrir", etiqueta: "Sin abrir", formato: "numero" },
         { clave: "ocupacion", etiqueta: "Ocupación", formato: "porcentaje" },
       ],
       filas: operativas.map((p) => ({
@@ -123,8 +147,95 @@ export function reporteOcupacion(datos: DatosReporte): ResultadoReporte {
         locales: p.totalLocales,
         ocupados: p.ocupados,
         disponibles: p.disponibles,
+        sinAbrir: sinAbrir.get(p.plaza.id) ?? 0,
         ocupacion: p.ocupacion,
       })),
+    },
+  };
+}
+
+/** Fila del reporte "Ocupación y plan de ingresos" (fracciones 0-1 en ocupación, cumplimiento y meta). */
+export type FilaOcupacionPlan = {
+  plazaId: string;
+  plaza: string;
+  locales: number;
+  rentados: number;
+  /** Disponibles más preventa (`localesPorColocar`). */
+  porColocar: number;
+  enCotizacion: number;
+  /** Rentados que el locatario aún no abre (`localesSinAbrir`). */
+  sinAbrir: number;
+  ocupacion: number;
+  /** Cumplimiento del plan de ingresos; 0 si la plaza no tiene renta planeada. */
+  cumplimiento: number;
+  meta: number;
+};
+
+/**
+ * Ocupación y cumplimiento del plan por plaza en operación, de la más rezagada
+ * contra su meta a la más holgada. Rentados + por colocar + en cotización = locales.
+ */
+export function filasOcupacionPlan(datos: DatosReporte): FilaOcupacionPlan[] {
+  const sinAbrir = sinAbrirPorPlaza(datos);
+  const enCotizacion = enCotizacionPorPlaza(datos);
+  return resumirPlazasMapa(datos.ciudades, datos.plazas, datos.locales)
+    .filter((p) => p.plaza.estatus === "EN_OPERACION")
+    .map((p) => {
+      const plan = cumplimientoDePlaza(p.plaza, datos);
+      return {
+        plazaId: p.plaza.id,
+        plaza: p.plaza.nombre,
+        locales: p.totalLocales,
+        rentados: p.ocupados,
+        porColocar: p.disponibles,
+        enCotizacion: enCotizacion.get(p.plaza.id) ?? 0,
+        sinAbrir: sinAbrir.get(p.plaza.id) ?? 0,
+        ocupacion: p.ocupacion,
+        cumplimiento: plan.cumplimientoPct / 100,
+        meta: p.plaza.metaCumplimientoPct / 100,
+      };
+    })
+    .toSorted((a, b) => a.cumplimiento - a.meta - (b.cumplimiento - b.meta));
+}
+
+/** "Ocupación y plan de ingresos": ocupación, sin abrir y cumplimiento del plan en una sola tabla. */
+export function reporteOcupacionPlan(datos: DatosReporte): ResultadoReporte {
+  const filas = filasOcupacionPlan(datos);
+  const locales = filas.reduce((s, f) => s + f.locales, 0);
+  const rentados = filas.reduce((s, f) => s + f.rentados, 0);
+  const sinAbrir = filas.reduce((s, f) => s + f.sinAbrir, 0);
+  const bajoMeta = filas.filter((f) => f.cumplimiento < f.meta).length;
+  return {
+    resumen:
+      filas.length === 0
+        ? "No hay plazas en operación en este alcance."
+        : `Ocupación de ${formatPorcentaje(locales === 0 ? 0 : rentados / locales)}, ${formatNumero(sinAbrir)} locales rentados sin abrir y ${formatNumero(bajoMeta)} de ${formatNumero(filas.length)} plazas bajo su meta del plan de ingresos.`,
+    grafica: {
+      serie: "Cumplimiento del plan",
+      formato: "porcentaje",
+      puntos: filas.map((f) => ({
+        etiqueta: f.plaza,
+        valor: f.cumplimiento,
+        tono: f.cumplimiento < f.meta ? "rojo" : "verde",
+      })),
+    },
+    tabla: {
+      columnas: [
+        { clave: "plaza", etiqueta: "Plaza" },
+        { clave: "locales", etiqueta: "Locales", formato: "numero" },
+        { clave: "rentados", etiqueta: "Rentados", formato: "numero" },
+        { clave: "porColocar", etiqueta: "Por colocar", formato: "numero" },
+        { clave: "enCotizacion", etiqueta: "En cotización", formato: "numero" },
+        { clave: "sinAbrir", etiqueta: "Sin abrir", formato: "numero" },
+        { clave: "ocupacion", etiqueta: "% Ocupación", formato: "porcentaje" },
+        {
+          clave: "cumplimiento",
+          etiqueta: "% Cumplimiento del plan",
+          formato: "porcentaje",
+        },
+        { clave: "meta", etiqueta: "Meta", formato: "porcentaje" },
+      ],
+      filas,
     },
   };
 }
@@ -408,6 +519,15 @@ export const REPORTES: readonly DefinicionReporte[] = [
     descripcion: "Locales rentados contra el total, plaza por plaza.",
     archivo: "ocupacion-por-plaza",
     calcular: reporteOcupacion,
+  },
+  {
+    id: "OCUPACION_PLAN",
+    titulo: "Ocupación y plan de ingresos",
+    descripcion:
+      "Por plaza: locales rentados, por colocar, en cotización y sin abrir, con el cumplimiento del plan de ingresos contra su meta. Haz clic en una plaza para ver su cumplimiento.",
+    archivo: "ocupacion-plan-ingresos",
+    calcular: reporteOcupacionPlan,
+    drilldown: { destino: "CUMPLIMIENTO_PLAN", clavePlaza: "plazaId" },
   },
   {
     id: "COBRANZA",

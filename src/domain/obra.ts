@@ -103,6 +103,12 @@ const TOLERANCIA = 1e-9;
 /** Días que un corte firmado puede esperar la validación antes de alertar. */
 export const DIAS_MAX_VALIDACION = 3;
 
+/** Fracción (0-1) de anticipo de los contratos de obra que se pagan por estimación. */
+export const ANTICIPO_PCT = 0.3;
+
+/** Fracción (0-1) del fondo de garantía que se retiene de cada estimación. */
+export const FONDO_GARANTIA_PCT = 0.05;
+
 /** Domingo de la semana de un corte: desde esa fecha su volumen cuenta. */
 export function cierreSemana(semana: FechaISO): FechaISO {
   return sumarDias(semana, 6);

@@ -12,9 +12,19 @@ import {
   StatusChip,
   Timeline,
 } from "@/components/shared";
-import { ETIQUETA_PARTIDA, type Licitacion, type ProveedorObra } from "@/domain";
-import { formatMonedaMillones, formatPorcentaje } from "@/lib/format";
 import {
+  ETIQUETA_PARTIDA,
+  rondaAbierta,
+  rondasConPrecios,
+  tieneCatalogo,
+  type Licitacion,
+  type Proveedor,
+} from "@/domain";
+import { ETIQUETA_CANAL } from "@/features/cobranza/controles-programacion";
+import { formatFecha, formatMonedaMillones, formatPorcentaje } from "@/lib/format";
+import { ComparativoPorConcepto } from "./comparativo-conceptos";
+import {
+  nombreProveedor,
   datosGraficaRondas,
   descripcionContraBase,
   eventosDecision,
@@ -28,13 +38,24 @@ function CeldaMonto({ celda }: { celda: CeldaRonda }) {
   switch (celda.tipo) {
     case "MONTO":
       return (
-        <MoneyAmount
-          valor={celda.monto}
-          className={celda.esMejor ? "font-semibold text-brand-secondary" : undefined}
-        />
+        <span className="block">
+          <MoneyAmount
+            valor={celda.monto}
+            className={celda.esMejor ? "font-semibold text-brand-secondary" : undefined}
+          />
+          {celda.capturadaPor ? (
+            <span className="block text-xs text-brand-text-muted">
+              {celda.capturadaPor === "CONTRATISTA"
+                ? "Respondió en el portal"
+                : "Capturado por PMO"}
+            </span>
+          ) : null}
+        </span>
       );
     case "SIN_RESPUESTA":
       return <StatusChip estatus="SIN_RESPUESTA" />;
+    case "POR_RESPONDER":
+      return <StatusChip estatus="PENDIENTE" etiqueta="Por responder" />;
     case "DESCARTADO":
       return (
         <Ayuda texto={celda.motivo}>
@@ -46,10 +67,13 @@ function CeldaMonto({ celda }: { celda: CeldaRonda }) {
   }
 }
 
-function columnasProveedores(rondas: number): ColumnDef<FilaProveedor>[] {
-  const porRonda = Array.from({ length: rondas }, (_, i): ColumnDef<FilaProveedor> => ({
-    id: `ronda-${i + 1}`,
-    header: `Ronda ${i + 1}`,
+function columnasProveedores(licitacion: Licitacion): ColumnDef<FilaProveedor>[] {
+  const porRonda = licitacion.rondas.map((ronda, i): ColumnDef<FilaProveedor> => ({
+    id: `ronda-${ronda.numero}`,
+    header:
+      ronda.estado === "ABIERTA"
+        ? `Ronda ${ronda.numero} · abierta`
+        : `Ronda ${ronda.numero}`,
     enableSorting: false,
     cell: ({ row }) => <CeldaMonto celda={row.original.celdas[i]} />,
   }));
@@ -75,7 +99,7 @@ function columnasProveedores(rondas: number): ColumnDef<FilaProveedor>[] {
 
 interface DetalleLicitacionProps {
   licitacion: Licitacion;
-  proveedores: readonly ProveedorObra[];
+  proveedores: readonly Proveedor[];
 }
 
 /** Indicadores, evolución por ronda, tabla de proveedores y decisión de una licitación. */
@@ -83,7 +107,9 @@ export function DetalleLicitacion({ licitacion, proveedores }: DetalleLicitacion
   const resumen = resumenLicitacion(licitacion);
   const enCurso = licitacion.estado === "EN_CURSO";
   const filas = matrizProveedores(licitacion, proveedores);
-  const columnas = columnasProveedores(licitacion.rondas.length);
+  const columnas = columnasProveedores(licitacion);
+  const conCatalogo = tieneCatalogo(licitacion);
+  const abierta = rondaAbierta(licitacion);
   const grafica = datosGraficaRondas(licitacion, proveedores);
   const eventos = eventosDecision(licitacion, proveedores);
   const contraBase = resumen.contraBase && descripcionContraBase(resumen.contraBase);
@@ -157,13 +183,43 @@ export function DetalleLicitacion({ licitacion, proveedores }: DetalleLicitacion
           <SectionCard titulo="Proveedores por ronda" sinPadding>
             <DataTable columns={columnas} data={filas} />
           </SectionCard>
+          {rondasConPrecios(licitacion).length > 0 ? (
+            <ComparativoPorConcepto licitacion={licitacion} proveedores={proveedores} />
+          ) : null}
+          {licitacion.invitaciones.length > 0 ? (
+            <SectionCard titulo="Invitaciones enviadas">
+              <ul className="divide-y divide-brand-line">
+                {licitacion.invitaciones.map((inv, i) => (
+                  <li
+                    key={`${inv.proveedorId}-${i}`}
+                    className="flex flex-wrap items-center justify-between gap-2 py-2"
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-brand-primary">
+                        {nombreProveedor(proveedores, inv.proveedorId)}
+                      </span>
+                      <span className="block text-xs text-brand-text-muted">
+                        {ETIQUETA_CANAL[inv.canal]} · {formatFecha(inv.enviadaEl)} ·{" "}
+                        {inv.hora}
+                      </span>
+                    </span>
+                    <StatusChip estatus="SIMULADO" />
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+          ) : null}
         </div>
         <SectionCard titulo="Decisión" className="min-w-0">
           <Timeline eventos={eventos} />
           {enCurso ? (
             <p className="mt-4 text-sm text-brand-text-muted">
-              Pendiente de adjudicar. Adjudicar no crea el contrato: se dará de alta al
-              firmarse.
+              {abierta
+                ? `Ronda ${abierta.numero} abierta: ciérrala para comparar y adjudicar. `
+                : "Pendiente de adjudicar. "}
+              {conCatalogo
+                ? "Al adjudicar se crea el contrato de obra con los precios unitarios del ganador."
+                : "Adjudicar no crea el contrato: se dará de alta al firmarse."}
             </p>
           ) : licitacion.contratoObraId ? null : (
             <p className="mt-4 text-sm text-brand-text-muted">

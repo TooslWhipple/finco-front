@@ -8,13 +8,16 @@ export type Rol =
   | "COBRANZA"
   | "PMO"
   | "SUPERVISOR_OBRA"
-  | "GERENTE_COMERCIAL";
+  | "GERENTE_COMERCIAL"
+  | "CONTRATISTA";
 
 export interface Usuario {
   id: string;
   nombre: string;
   rol: Rol;
   cargo: string;
+  /** Proveedor del padrón al que representa; obligatorio si `rol === "CONTRATISTA"`. */
+  proveedorId?: string;
 }
 
 export interface Ciudad {
@@ -140,6 +143,15 @@ export interface Locatario {
  */
 export type EstadoContrato = "BORRADOR" | "EN_FIRMA" | "VIGENTE" | "TERMINADO";
 
+/** Registro de que el locatario ya abrió su local (empezó a usarlo). */
+export interface AperturaLocal {
+  /** Día en que el locatario abrió. */
+  fecha: FechaISO;
+  /** `Usuario.id` de quien registró la apertura. */
+  registradaPor: string;
+  registradaEl: FechaISO;
+}
+
 export interface Contrato {
   id: string;
   localId: string;
@@ -152,6 +164,8 @@ export interface Contrato {
   folio?: string;
   /** Cotización de la que nació el contrato, si la hay. */
   cotizacionId?: string;
+  /** Apertura del local por el locatario; ausente si aún no abre. */
+  apertura?: AperturaLocal;
 }
 
 export type EstadoCambio = "PENDIENTE" | "APROBADO" | "RECHAZADO";
@@ -319,21 +333,43 @@ export interface Candado {
   detalle: string;
 }
 
+/** Qué cobra la factura: la renta del mes o el recargo moratorio de una renta. */
+export type ConceptoFactura = "RENTA" | "RECARGO";
+
+/** De dónde viene la factura: la semilla de la demo o la emisión automática. */
+export type OrigenFactura = "SEMILLA" | "EMISION";
+
+/** Complemento de pago (CFDI de pago) simulado de una factura liquidada. */
+export interface ComplementoPago {
+  id: string;
+  fecha: FechaISO;
+  monto: number;
+  /** Folio `CP-<folio de la factura>`. */
+  folio: string;
+}
+
 export interface Factura {
   id: string;
   localId: string;
   locatarioId: string;
-  /** Mes facturado, `YYYY-MM`. */
+  /** Mes facturado, `YYYY-MM`. En un recargo, el de su renta de origen. */
   mes: string;
   monto: number;
+  /** En un recargo, la fecha del cargo. */
   vencimiento: FechaISO;
   pagadaEl?: FechaISO;
-  /** Folio del CFDI. */
+  /** Folio del CFDI; los recargos no llevan. */
   folio?: string;
   /** Último seguimiento de cobranza. */
   seguimiento?: string;
   /** Seguimientos previos y el actual, del más antiguo al más reciente. */
   historial?: string[];
+  concepto: ConceptoFactura;
+  origen: OrigenFactura;
+  /** Renta (`Factura.id`) que originó el recargo; solo en los `RECARGO`. */
+  facturaOrigenId?: string;
+  /** Complementos del pago registrado en la demo. */
+  complementos?: ComplementoPago[];
 }
 
 export type EstatusCobro = "PAGADA" | "VIGENTE" | "VENCIDA";
@@ -414,6 +450,8 @@ export interface ContratoObra {
   terrenoId: string;
   partida: PartidaObra;
   contratista: string;
+  /** Proveedor del padrón que ejecuta el contrato (el vínculo no depende del nombre). */
+  proveedorId?: string;
   conceptos: ConceptoObra[];
   inicioPlan: FechaISO;
   finPlan: FechaISO;
@@ -546,19 +584,43 @@ export interface EventoSync {
 
 // --- licitación de obra ----------------------------------------------------
 
-/** Contratista o proveedor al que se invita a licitar una partida de obra. */
-export interface ProveedorObra {
+/** Renglón del catálogo que se licita: lo que se cotiza, sin precio. */
+export interface ConceptoLicitacion {
   id: string;
-  nombre: string;
-  especialidades: PartidaObra[];
+  clave: string;
+  descripcion: string;
+  unidad: UnidadObra;
+  volumen: number;
+}
+
+/** Envío (simulado) del catálogo a un proveedor del padrón. */
+export interface InvitacionLicitacion {
+  proveedorId: string;
+  canal: CanalAviso;
+  enviadaEl: FechaISO;
+  /** "HH:mm". */
+  hora: string;
+  /** `RondaLicitacion.numero` a la que invita. */
+  ronda: number;
+}
+
+/** Precio unitario (MXN) que un proveedor ofreció para un concepto del catálogo. */
+export interface PrecioConcepto {
+  conceptoId: string;
+  precioUnitario: number;
 }
 
 /** Lo que un proveedor ofreció en una ronda (sin `monto` = no respondió). */
 export interface PropuestaRonda {
   proveedorId: string;
   respondio: boolean;
+  /** Con `precios`, es la suma de volumen × precio unitario del catálogo. */
   monto?: number;
   nota?: string;
+  precios?: PrecioConcepto[];
+  /** Quién capturó la respuesta: el contratista en el portal o la PMO a su nombre. */
+  capturadaPor?: "CONTRATISTA" | "PMO";
+  respondidaEl?: FechaISO;
 }
 
 /** Ronda de propuestas; de la 2 en adelante solo participan los que siguen en la competencia. */
@@ -566,6 +628,8 @@ export interface RondaLicitacion {
   numero: number;
   fecha: FechaISO;
   propuestas: PropuestaRonda[];
+  /** Sin estado (las rondas históricas) cuenta como cerrada. */
+  estado?: "ABIERTA" | "CERRADA";
 }
 
 export type EstadoLicitacion = "EN_CURSO" | "ADJUDICADA";
@@ -597,6 +661,9 @@ export interface Licitacion {
   adjudicadaEn?: FechaISO;
   /** Contrato de obra que nació de la adjudicación (si ya se firmó). */
   contratoObraId?: string;
+  /** Catálogo de conceptos que se cotiza por precio unitario; vacío = se captura el total. */
+  conceptos: ConceptoLicitacion[];
+  invitaciones: InvitacionLicitacion[];
 }
 
 export type TipoMantenimiento = "PREVENTIVO" | "CORRECTIVO";
@@ -613,10 +680,28 @@ export type OrigenMantenimiento = "ADMINISTRACION" | "LOCATARIO";
 /** Quién paga el trabajo. */
 export type CargoMantenimiento = "PLAZA" | "LOCATARIO";
 
+/** Datos de contacto de un proveedor; la cadena vacía significa "sin dato". */
+export interface ContactoProveedor {
+  nombre: string;
+  correo: string;
+  whatsapp: string;
+}
+
+/**
+ * Proveedor del padrón único: atiende mantenimiento (por categoría y plaza), obra
+ * (por partida) o ambos. `PropuestaRonda.proveedorId`, `Licitacion.invitados` y
+ * `Mantenimiento.proveedorId` apuntan a su `id`.
+ */
 export interface Proveedor {
   id: string;
   nombre: string;
-  especialidades: CategoriaMantenimiento[];
+  rfc: string;
+  contacto: ContactoProveedor;
+  especialidadesMantenimiento: CategoriaMantenimiento[];
+  partidasObra: PartidaObra[];
+  /** Plazas donde atiende mantenimiento. */
+  plazaIds: string[];
+  activo: boolean;
 }
 
 /** Trabajo de mantenimiento de una plaza o de uno de sus locales. Montos en MXN. */
@@ -686,9 +771,12 @@ export interface FacturaSat {
 
 // --- Avisos de cobranza programados -----------------------------------------
 
-/** Momento del ciclo de una factura en que sale un aviso automático. */
+/**
+ * Momento del ciclo de una factura en que sale un aviso automático.
+ * `FACTURA_EMITIDA` sale con la emisión mensual, no con el ciclo de cobro.
+ */
 export type DisparadorAviso =
-  "ANTES_3" | "DIA_PAGO" | "ATRASO_5" | "ATRASO_15" | "ATRASO_30";
+  "FACTURA_EMITIDA" | "ANTES_3" | "DIA_PAGO" | "ATRASO_5" | "ATRASO_15" | "ATRASO_30";
 
 export type CanalAviso = "WHATSAPP" | "CORREO";
 
@@ -712,6 +800,32 @@ export interface ProgramacionAvisos {
   dias: DiaSemana[];
   /** "HH:mm". */
   hora: string;
+}
+
+/** Un aviso por enviar: a qué factura, con qué plantilla y por qué canal. */
+export interface EntregaAviso {
+  facturaId: string;
+  plantillaId: string;
+  canal: CanalAviso;
+}
+
+/** Emisión mensual automática de las facturas de renta del mes siguiente. */
+export interface ProgramacionEmision {
+  activa: boolean;
+  /** Día del mes en que corre la emisión (1-28). */
+  dia: number;
+  /** "HH:mm". */
+  hora: string;
+  /** Canal por el que sale el aviso de factura emitida. */
+  canal: CanalAviso;
+}
+
+/** Recargo moratorio sobre la renta vencida, sin capitalizar. */
+export interface ReglaRecargo {
+  /** Fracción del monto de la renta (0-1) que se carga en cada recargo. */
+  porcentaje: number;
+  /** Días de atraso sin recargo; el primero cae el día `diasGracia + 1`. */
+  diasGracia: number;
 }
 
 /** Bitácora de envíos. En la demo ninguno sale de verdad: todos son simulados. */

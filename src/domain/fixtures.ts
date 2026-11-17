@@ -7,6 +7,7 @@ import type {
   Licitacion,
   Local,
   Prospecto,
+  Proveedor,
   ReglaActualizacion,
   Terreno,
 } from "./tipos";
@@ -68,6 +69,8 @@ export function crearFactura(parcial: Partial<Factura> = {}): Factura {
     mes: "2026-11",
     monto: 10_000,
     vencimiento: "2026-11-03",
+    concepto: "RENTA",
+    origen: "SEMILLA",
     ...parcial,
   };
 }
@@ -194,6 +197,22 @@ export function crearLicitacion(parcial: Partial<Licitacion> = {}): Licitacion {
       },
     ],
     estado: "EN_CURSO",
+    conceptos: [],
+    invitaciones: [],
+    ...parcial,
+  };
+}
+
+export function crearProveedor(parcial: Partial<Proveedor> = {}): Proveedor {
+  return {
+    id: "prv-1",
+    nombre: "Mantenimientos Comerciales",
+    rfc: "MCO180412K35",
+    contacto: { nombre: "", correo: "", whatsapp: "" },
+    especialidadesMantenimiento: ["PINTURA"],
+    partidasObra: [],
+    plazaIds: ["p1"],
+    activo: true,
     ...parcial,
   };
 }

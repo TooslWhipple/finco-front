@@ -2,12 +2,15 @@ import type { Rol } from "@/domain";
 import {
   BarChart3,
   Building,
+  Building2,
   CalendarCheck,
+  ClipboardList,
   Cog,
   FileText,
   FileSignature,
   Home,
   Layers,
+  LayoutDashboard,
   Map,
   PlugZap,
   Receipt,
@@ -34,6 +37,8 @@ export interface ItemNavegacion {
   inactivoEn?: RegExp;
   /** Roles que ven el ítem; si se omite, lo ven todos. */
   roles?: readonly Rol[];
+  /** Solo lo ven los `roles` listados: ni Dirección ni Superadmin lo heredan. */
+  soloRoles?: boolean;
 }
 
 export interface GrupoNavegacion {
@@ -53,6 +58,14 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
     id: "operacion",
     titulo: "Operación",
     items: [
+      {
+        id: "resumen-comercial",
+        roles: ["GERENTE_COMERCIAL"],
+        etiqueta: "Resumen comercial",
+        ruta: "/resumen-comercial",
+        icono: LayoutDashboard,
+        prefijo: "/resumen-comercial",
+      },
       {
         id: "disponibilidad",
         roles: ["VENTAS", "GERENTE_COMERCIAL"],
@@ -125,6 +138,23 @@ export const NAVEGACION: readonly GrupoNavegacion[] = [
         icono: Wrench,
         prefijo: "/mantenimientos",
       },
+      {
+        id: "proveedores",
+        roles: ["PMO", "SUPERVISOR_OBRA"],
+        etiqueta: "Proveedores",
+        ruta: "/proveedores",
+        icono: Building2,
+        prefijo: "/proveedores",
+      },
+      {
+        id: "mis-licitaciones",
+        roles: ["CONTRATISTA"],
+        soloRoles: true,
+        etiqueta: "Mis licitaciones",
+        ruta: "/mis-licitaciones",
+        icono: ClipboardList,
+        prefijo: "/mis-licitaciones",
+      },
     ],
   },
   {
@@ -186,7 +216,9 @@ export function itemActivo(item: ItemNavegacion, ruta: string): boolean {
 }
 
 function visiblePara(item: ItemNavegacion, rol: Rol): boolean {
-  return !item.roles || ROLES_VEN_TODO.includes(rol) || item.roles.includes(rol);
+  if (!item.roles) return true;
+  if (item.roles.includes(rol)) return true;
+  return !item.soloRoles && ROLES_VEN_TODO.includes(rol);
 }
 
 /** Grupos del menú con solo los ítems que ve el rol (los grupos vacíos se omiten). */

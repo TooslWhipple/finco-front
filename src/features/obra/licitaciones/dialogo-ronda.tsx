@@ -11,14 +11,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Campo } from "@/features/cotizacion/campo";
+import { CLASE_SELECT, Campo } from "@/features/cotizacion/campo";
 import {
   proveedoresActivos,
+  rondaAbierta,
   type EntradaRonda,
   type Licitacion,
-  type ProveedorObra,
+  type PrecioConcepto,
+  type Proveedor,
 } from "@/domain";
+import { formatFecha } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { nombreProveedor } from "./agregados";
+import { FormularioPrecios } from "./formulario-precios";
 import {
   entradaDeRonda,
   validarRonda,
@@ -30,7 +35,7 @@ interface DialogoRondaProps {
   abierto: boolean;
   onCambioAbierto: (abierto: boolean) => void;
   licitacion: Licitacion;
-  proveedores: readonly ProveedorObra[];
+  proveedores: readonly Proveedor[];
   onRegistrar: (entrada: EntradaRonda) => void;
 }
 
@@ -131,6 +136,102 @@ export function DialogoRonda({ abierto, onCambioAbierto, ...props }: DialogoRond
     <Dialog open={abierto} onOpenChange={onCambioAbierto}>
       <DialogContent>
         <FormularioRonda {...props} onCerrar={() => onCambioAbierto(false)} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface DialogoRespuestaProps {
+  abierto: boolean;
+  onCambioAbierto: (abierto: boolean) => void;
+  licitacion: Licitacion;
+  proveedores: readonly Proveedor[];
+  onCapturar: (proveedorId: string, precios: PrecioConcepto[]) => void;
+}
+
+/** De dónde viene la respuesta vigente de un proveedor en la ronda abierta. */
+function origenRespuesta(licitacion: Licitacion, proveedorId: string): string {
+  const propuesta = rondaAbierta(licitacion)?.propuestas.find(
+    (p) => p.proveedorId === proveedorId,
+  );
+  if (!propuesta?.respondio) return "Por responder.";
+  const fecha = propuesta.respondidaEl
+    ? ` el ${formatFecha(propuesta.respondidaEl)}`
+    : "";
+  return propuesta.capturadaPor === "CONTRATISTA"
+    ? `Respondió en el portal${fecha}. Si capturas, sobrescribes su respuesta.`
+    : `Capturado por PMO${fecha}.`;
+}
+
+/**
+ * La PMO captura por precio unitario la respuesta de un proveedor de la ronda
+ * abierta (la que mandó por correo o por teléfono); puede sobrescribir la del portal.
+ */
+export function DialogoRespuesta({
+  abierto,
+  onCambioAbierto,
+  licitacion,
+  proveedores,
+  onCapturar,
+}: DialogoRespuestaProps) {
+  const abiertaRonda = rondaAbierta(licitacion);
+  const participantes = abiertaRonda?.propuestas.map((p) => p.proveedorId) ?? [];
+  const [proveedorId, setProveedorId] = useState(
+    () =>
+      abiertaRonda?.propuestas.find((p) => !p.respondio)?.proveedorId ??
+      participantes[0] ??
+      "",
+  );
+  const propuesta = abiertaRonda?.propuestas.find((p) => p.proveedorId === proveedorId);
+  const cerrar = () => onCambioAbierto(false);
+  return (
+    <Dialog open={abierto} onOpenChange={onCambioAbierto}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>
+            Capturar respuesta · ronda {abiertaRonda?.numero ?? licitacion.rondas.length}
+          </DialogTitle>
+          <DialogDescription>
+            Captura el precio unitario de cada concepto a nombre del proveedor; queda como
+            capturado por PMO.
+          </DialogDescription>
+        </DialogHeader>
+        <Campo
+          etiqueta="Proveedor"
+          htmlFor="respuesta-proveedor"
+          ayuda={proveedorId ? origenRespuesta(licitacion, proveedorId) : undefined}
+        >
+          <select
+            id="respuesta-proveedor"
+            className={cn(CLASE_SELECT, "h-11 text-base md:text-base")}
+            value={proveedorId}
+            onChange={(e) => setProveedorId(e.target.value)}
+          >
+            {participantes.map((id) => (
+              <option key={id} value={id}>
+                {nombreProveedor(proveedores, id)}
+              </option>
+            ))}
+          </select>
+        </Campo>
+        {proveedorId ? (
+          <FormularioPrecios
+            key={proveedorId}
+            licitacion={licitacion}
+            proveedorId={proveedorId}
+            inicial={propuesta?.precios}
+            etiquetaEnviar="Guardar respuesta"
+            onEnviar={(precios) => {
+              onCapturar(proveedorId, precios);
+              cerrar();
+            }}
+            secundarias={
+              <Button type="button" variant="outline" className="h-11" onClick={cerrar}>
+                Volver
+              </Button>
+            }
+          />
+        ) : null}
       </DialogContent>
     </Dialog>
   );

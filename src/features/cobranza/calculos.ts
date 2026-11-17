@@ -1,10 +1,14 @@
 import {
   avisosDelDia,
   carteraVencida,
+  conVencimientoDeRenta,
+  diaDeFacturacion,
   diasAtraso,
   diasEntre,
   estatusCobro,
+  montoCobrado,
   porcentajeCobrado,
+  soloRentas,
   sumarDias,
   type Contrato,
   type EstatusCobro,
@@ -41,9 +45,16 @@ export interface KpisCobranza {
 /** Meta de cobrado al día que la guía muestra junto al porcentaje. */
 export const META_COBRADO = 0.95;
 
-/** Cartera vencida a una fecha pasada: sin pagar a esa fecha y ya vencida entonces. */
+/**
+ * Cartera vencida a una fecha pasada: sin pagar a esa fecha y ya vencida
+ * entonces. Un recargo cuenta solo si ya se había cargado a esa fecha, y
+ * envejece con el vencimiento de su renta.
+ */
 export function carteraVencidaAl(facturas: Factura[], fecha: FechaISO): number {
-  return facturas
+  const cargadas = facturas.filter(
+    (f) => f.concepto === "RENTA" || f.vencimiento <= fecha,
+  );
+  return conVencimientoDeRenta(cargadas)
     .filter(
       (f) => diasEntre(f.vencimiento, fecha) > 0 && (!f.pagadaEl || f.pagadaEl > fecha),
     )
@@ -60,8 +71,10 @@ export function kpisCobranza(
   mes: string,
   hoy: string,
 ): KpisCobranza {
-  const delMes = facturas.filter((f) => f.mes === mes);
-  const vencidas = facturas.filter((f) => estatusCobro(f, hoy) === "VENCIDA");
+  // Los contadores y el cobrado son de rentas; los recargos solo suman a los saldos.
+  const rentas = soloRentas(facturas);
+  const delMes = rentas.filter((f) => f.mes === mes);
+  const vencidas = rentas.filter((f) => estatusCobro(f, hoy) === "VENCIDA");
   const conAtraso = new Set(vencidas.map((f) => f.locatarioId));
   const masDe60 = new Set(
     vencidas.filter((f) => diasAtraso(f, hoy) > 60).map((f) => f.locatarioId),
@@ -69,20 +82,23 @@ export function kpisCobranza(
   return {
     facturado: delMes.reduce((s, f) => s + f.monto, 0),
     facturasDelMes: delMes.length,
-    cobrado: delMes.filter((f) => f.pagadaEl).reduce((s, f) => s + f.monto, 0),
+    cobrado: montoCobrado(delMes),
     porcentajeCobrado: porcentajeCobrado(delMes),
     carteraVencida: carteraVencida(facturas, hoy),
     carteraVencidaMesAnterior: carteraVencidaAl(facturas, cierreMesAnterior(mes)),
     locatariosConAtraso: conAtraso.size,
     locatariosMasDe60: masDe60.size,
     facturasVencidas: vencidas.length,
-    porVencer: facturas.filter((f) => estatusCobro(f, hoy) === "VIGENTE").length,
+    porVencer: rentas.filter((f) => estatusCobro(f, hoy) === "VIGENTE").length,
   };
 }
 
-/** Facturas que no están vencidas (pagadas o vigentes): el cubo "Al corriente". */
+/**
+ * Saldos que no están vencidos (pagados o vigentes): el cubo "Al corriente".
+ * Los recargos envejecen con el vencimiento de su renta.
+ */
 export function montoAlCorriente(facturas: Factura[], hoy: string): number {
-  return facturas
+  return conVencimientoDeRenta(facturas)
     .filter((f) => estatusCobro(f, hoy) !== "VENCIDA")
     .reduce((s, f) => s + f.monto, 0);
 }
@@ -105,13 +121,6 @@ export function avisosAutomaticosHoy(
   const avisos = avisosDelDia(facturas, hoy);
   const correo = avisos.filter((a) => a.canal === "CORREO").length;
   return { total: avisos.length, whatsapp: avisos.length - correo, correo };
-}
-
-const DIA_MAXIMO_FACTURACION = 28;
-
-/** Día del mes en que se factura el contrato (aniversario, tope 28). */
-export function diaDeFacturacion(contrato: Contrato): number {
-  return Math.min(Number(contrato.inicio.slice(8, 10)), DIA_MAXIMO_FACTURACION);
 }
 
 /** Día de aniversario por local, con el contrato vigente a `hoy` (o el más reciente). */
@@ -160,21 +169,26 @@ export function facturasPorDia(
   });
 }
 
-/** Cuántas facturas hay por estatus (para las pills de filtro). */
+/** Cuántas rentas hay por estatus (para las pills de filtro); los recargos no cuentan. */
 export function conteoPorEstatus(
   facturas: Factura[],
   hoy: string,
 ): Record<FiltroEstatus, number> {
+  const rentas = soloRentas(facturas);
   const conteo: Record<FiltroEstatus, number> = {
-    TODAS: facturas.length,
+    TODAS: rentas.length,
     PAGADA: 0,
     VIGENTE: 0,
     VENCIDA: 0,
   };
-  for (const f of facturas) conteo[estatusCobro(f, hoy)] += 1;
+  for (const f of rentas) conteo[estatusCobro(f, hoy)] += 1;
   return conteo;
 }
 
+/**
+ * Lista plana filtrada por estatus y plaza. El filtro se decide sobre las
+ * rentas; cada recargo se queda si y solo si se queda su renta.
+ */
 export function filtrarFacturas(
   facturas: Factura[],
   hoy: string,
@@ -182,11 +196,48 @@ export function filtrarFacturas(
   plazaPorLocal: ReadonlyMap<string, string>,
   plazaId: string | null,
 ): Factura[] {
-  return facturas.filter(
-    (f) =>
-      (estatus === "TODAS" || estatusCobro(f, hoy) === estatus) &&
-      (plazaId === null || plazaPorLocal.get(f.localId) === plazaId),
+  const quedan = new Set(
+    soloRentas(facturas)
+      .filter(
+        (f) =>
+          (estatus === "TODAS" || estatusCobro(f, hoy) === estatus) &&
+          (plazaId === null || plazaPorLocal.get(f.localId) === plazaId),
+      )
+      .map((f) => f.id),
   );
+  return facturas.filter((f) =>
+    f.concepto === "RENTA"
+      ? quedan.has(f.id)
+      : f.facturaOrigenId !== undefined && quedan.has(f.facturaOrigenId),
+  );
+}
+
+/** Fila de la tabla de cuentas: una renta con sus recargos anidados. */
+export interface FilaCuenta {
+  renta: Factura;
+  /** Recargos de la renta, del primero al último cargo. */
+  recargos: Factura[];
+}
+
+/**
+ * Agrupa la lista plana en filas por renta, con sus recargos anidados en orden
+ * de cargo. La tabla filtra, cuenta y pagina sobre estas filas; un recargo cuya
+ * renta no está en la lista se descarta.
+ */
+export function agruparRecargos(facturas: readonly Factura[]): FilaCuenta[] {
+  const recargosPorRenta = new Map<string, Factura[]>();
+  for (const f of facturas) {
+    if (f.concepto !== "RECARGO" || !f.facturaOrigenId) continue;
+    const lista = recargosPorRenta.get(f.facturaOrigenId) ?? [];
+    lista.push(f);
+    recargosPorRenta.set(f.facturaOrigenId, lista);
+  }
+  return soloRentas(facturas).map((renta) => ({
+    renta,
+    recargos: (recargosPorRenta.get(renta.id) ?? []).sort((a, b) =>
+      a.vencimiento.localeCompare(b.vencimiento),
+    ),
+  }));
 }
 
 export type NivelAtraso = "leve" | "medio" | "grave";
@@ -198,12 +249,14 @@ export function nivelAtraso(dias: number): NivelAtraso {
   return "grave";
 }
 
-/** Facturas vencidas sin aviso enviado. */
+/** Rentas vencidas sin aviso enviado; los recargos no llevan aviso propio. */
 export function pendientesDeAviso(
   facturas: Factura[],
   hoy: string,
   avisados: readonly string[],
 ): Factura[] {
   const ya = new Set(avisados);
-  return facturas.filter((f) => estatusCobro(f, hoy) === "VENCIDA" && !ya.has(f.id));
+  return soloRentas(facturas).filter(
+    (f) => estatusCobro(f, hoy) === "VENCIDA" && !ya.has(f.id),
+  );
 }

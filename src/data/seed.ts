@@ -54,6 +54,8 @@ import { asignarVendedores, type CotizacionBase } from "./vendedores";
 
 export const SEMILLA_SEED = 2026;
 export const AÑO_ACTUALIZACION = 2027;
+/** Usuario (PMO) que figura como quien registró las aperturas de la semilla. */
+export const REGISTRA_APERTURAS_SEED = "usr-pmo";
 
 /** Conjunto completo de datos ficticios de la demo. */
 export interface Seed {
@@ -165,7 +167,10 @@ export function crearSeed(): Seed {
   const locales = [...heroe.locales, ...generado.locales];
   const facturas = [...heroe.facturas, ...generado.facturas];
   const locatarios = [...heroe.locatarios, ...generado.locatarios];
-  const contratos = [...heroe.contratos, ...generado.contratos];
+  const contratos = sembrarAperturas(
+    [...heroe.contratos, ...generado.contratos],
+    locales,
+  );
   const cotizacionesSeed = asignarVendedores(
     [...heroe.cotizaciones, ...cotizacionesGeneradas],
     new Set([
@@ -213,10 +218,7 @@ export function crearSeed(): Seed {
     terrenos,
     obra,
     licitaciones: crearLicitaciones(obra.contratos),
-    proveedores: PROVEEDORES.map((p) => ({
-      ...p,
-      especialidades: [...p.especialidades],
-    })),
+    proveedores: sembrarProveedores(plazas),
     mantenimientos,
     presupuestosMantenimiento: crearPresupuestosMantenimiento(plazas, mantenimientos),
     facturasSat: crearFacturasSat(mantenimientos),
@@ -226,6 +228,64 @@ export function crearSeed(): Seed {
     programacionAvisos,
     enviosAviso: crearEnviosAviso(facturas, programacionAvisos),
   };
+}
+
+/**
+ * Padrón de la semilla: copia del catálogo en el que los proveedores de
+ * mantenimiento atienden todas las plazas (sus ids nacen aquí, no en el catálogo).
+ */
+function sembrarProveedores(plazas: readonly Plaza[]): Proveedor[] {
+  const todas = plazas.map((p) => p.id);
+  return PROVEEDORES.map((p) => ({
+    ...p,
+    contacto: { ...p.contacto },
+    especialidadesMantenimiento: [...p.especialidadesMantenimiento],
+    partidasObra: [...p.partidasObra],
+    plazaIds: p.especialidadesMantenimiento.length > 0 ? [...todas] : [...p.plazaIds],
+  }));
+}
+
+/**
+ * Aperturas de la semilla, en una pasada determinista que no consume `rng` (para no
+ * desplazar contratos, atrasos ni facturas). Por plaza, los contratos de locales
+ * OCUPADO se ordenan por `inicio` descendente: en la plaza héroe quedan sin abrir
+ * los ⌊n/2⌋ más recientes y en las demás 1 de cada 5 (índices 0, 5, 10…). El resto
+ * abre `índice % 31` días después de su inicio (índice en la lista de contratos),
+ * sin pasar de `DEMO_TODAY`; un contrato que aún no empieza no lleva apertura.
+ */
+function sembrarAperturas(contratos: Contrato[], locales: Local[]): Contrato[] {
+  const plazaDe = new Map(locales.map((l) => [l.id, l.plazaId]));
+  const ocupados = new Set(
+    locales.filter((l) => l.estatus === "OCUPADO").map((l) => l.id),
+  );
+  const porPlaza = new Map<string, Contrato[]>();
+  for (const c of contratos) {
+    const plazaId = plazaDe.get(c.localId);
+    if (plazaId === undefined || !ocupados.has(c.localId)) continue;
+    const lista = porPlaza.get(plazaId);
+    if (lista) lista.push(c);
+    else porPlaza.set(plazaId, [c]);
+  }
+  const sinAbrir = new Set<string>();
+  for (const [plazaId, lista] of porPlaza) {
+    const recientes = [...lista].sort((a, b) =>
+      b.inicio < a.inicio ? -1 : b.inicio > a.inicio ? 1 : 0,
+    );
+    recientes.forEach((c, i) => {
+      const queda =
+        plazaId === PLAZA_HEROE_ID ? i < Math.floor(recientes.length / 2) : i % 5 === 0;
+      if (queda) sinAbrir.add(c.id);
+    });
+  }
+  return contratos.map((c, i) => {
+    if (sinAbrir.has(c.id) || c.inicio > DEMO_TODAY) return c;
+    const abrio = sumarDias(c.inicio, i % 31);
+    const fecha = abrio > DEMO_TODAY ? DEMO_TODAY : abrio;
+    return {
+      ...c,
+      apertura: { fecha, registradaPor: REGISTRA_APERTURAS_SEED, registradaEl: fecha },
+    };
+  });
 }
 
 /**

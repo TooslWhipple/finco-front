@@ -13,11 +13,14 @@ import {
   mejorPropuestaPorRonda,
   montoEnRonda,
   proveedoresActivos,
+  rondasCerradas,
   tasaRespuesta,
+  ultimaRondaCerrada,
+  type CapturaRespuesta,
   type ComparacionBase,
   type EstadoLicitacion,
   type Licitacion,
-  type ProveedorObra,
+  type Proveedor,
   type TasaRespuesta,
 } from "@/domain";
 import { formatFecha, formatMoneda, formatPorcentaje } from "@/lib/format";
@@ -30,8 +33,12 @@ export const ESTADO_LICITACION: Readonly<
   ADJUDICADA: { etiqueta: "Adjudicada", estatus: "ADJUDICADA" },
 };
 
+/** Lo único que las vistas de licitación leen de un proveedor del padrón. */
+export type ProveedorNombrado = Pick<Proveedor, "id" | "nombre">;
+
+/** Nombre del proveedor en el padrón completo (activo o no); el id si no está. */
 export function nombreProveedor(
-  proveedores: readonly ProveedorObra[],
+  proveedores: readonly ProveedorNombrado[],
   id: string,
 ): string {
   return proveedores.find((p) => p.id === id)?.nombre ?? id;
@@ -49,7 +56,7 @@ export interface FilaLicitacion {
 
 export function filasLicitaciones(
   licitaciones: readonly Licitacion[],
-  proveedores: readonly ProveedorObra[],
+  proveedores: readonly ProveedorNombrado[],
 ): FilaLicitacion[] {
   return licitaciones.map((licitacion) => ({
     licitacion,
@@ -66,13 +73,14 @@ export function filasLicitaciones(
 
 /** Qué se muestra en la celda de un proveedor en una ronda. */
 export type CeldaRonda =
-  | { tipo: "MONTO"; monto: number; esMejor: boolean }
+  | { tipo: "MONTO"; monto: number; esMejor: boolean; capturadaPor?: CapturaRespuesta }
   | { tipo: "SIN_RESPUESTA" }
+  | { tipo: "POR_RESPONDER" }
   | { tipo: "DESCARTADO"; motivo: string }
   | { tipo: "FUERA" };
 
 export interface FilaProveedor {
-  proveedor: ProveedorObra;
+  proveedor: ProveedorNombrado;
   celdas: CeldaRonda[];
   esGanador: boolean;
 }
@@ -80,7 +88,7 @@ export interface FilaProveedor {
 /** Proveedores invitados × rondas, para la tabla del detalle. */
 export function matrizProveedores(
   licitacion: Licitacion,
-  proveedores: readonly ProveedorObra[],
+  proveedores: readonly ProveedorNombrado[],
 ): FilaProveedor[] {
   const mejores = mejorPropuestaPorRonda(licitacion);
   return licitacion.invitados.map((id) => {
@@ -93,20 +101,19 @@ export function matrizProveedores(
           tipo: "MONTO",
           monto: propuesta.monto,
           esMejor: mejor?.proveedorId === id,
+          capturadaPor: propuesta.capturadaPor,
         };
       }
-      if (propuesta) return { tipo: "SIN_RESPUESTA" };
+      if (propuesta) {
+        return { tipo: ronda.estado === "ABIERTA" ? "POR_RESPONDER" : "SIN_RESPUESTA" };
+      }
       if (descarte && descarte.ronda < ronda.numero) {
         return { tipo: "DESCARTADO", motivo: descarte.motivo };
       }
       return { tipo: "FUERA" };
     });
     return {
-      proveedor: proveedores.find((p) => p.id === id) ?? {
-        id,
-        nombre: id,
-        especialidades: [],
-      },
+      proveedor: proveedores.find((p) => p.id === id) ?? { id, nombre: id },
       celdas,
       esGanador: licitacion.ganadorId === id,
     };
@@ -120,15 +127,16 @@ export interface DatosGrafica {
   series: SerieLineas[];
 }
 
-/** Evolución de cada proveedor que presentó propuesta, ronda por ronda. */
+/** Evolución de cada proveedor que presentó propuesta, ronda por ronda (solo rondas cerradas). */
 export function datosGraficaRondas(
   licitacion: Licitacion,
-  proveedores: readonly ProveedorObra[],
+  proveedores: readonly ProveedorNombrado[],
 ): DatosGrafica {
+  const cerradas = rondasCerradas(licitacion);
   const ids = licitacion.invitados.filter((id) =>
-    licitacion.rondas.some((r) => montoEnRonda(r, id) !== undefined),
+    cerradas.some((r) => montoEnRonda(r, id) !== undefined),
   );
-  const datos = licitacion.rondas.map((ronda) => {
+  const datos = cerradas.map((ronda) => {
     const punto: Record<string, string | number | null> = {
       ronda: `Ronda ${ronda.numero}`,
     };
@@ -194,16 +202,17 @@ export function descripcionContraBase(comparacion: ComparacionBase): {
 /** Del primer sobre a la adjudicación: rondas, descartes y decisión, en orden. */
 export function eventosDecision(
   licitacion: Licitacion,
-  proveedores: readonly ProveedorObra[],
+  proveedores: readonly ProveedorNombrado[],
 ): EventoTimeline[] {
   const eventos: EventoTimeline[] = [];
   const mejores = mejorPropuestaPorRonda(licitacion);
   for (const ronda of licitacion.rondas) {
     const mejor = mejores.find((m) => m.ronda === ronda.numero);
     const respondieron = ronda.propuestas.filter((p) => p.respondio).length;
+    const abierta = ronda.estado === "ABIERTA" ? " abierta" : "";
     eventos.push({
       id: `ronda-${ronda.numero}`,
-      titulo: `Ronda ${ronda.numero}: ${respondieron} de ${ronda.propuestas.length} respondieron`,
+      titulo: `Ronda ${ronda.numero}${abierta}: ${respondieron} de ${ronda.propuestas.length} respondieron`,
       detalle: mejor
         ? `Mejor propuesta: ${nombreProveedor(proveedores, mejor.proveedorId)}, ${formatMoneda(mejor.monto)}`
         : undefined,
@@ -249,12 +258,12 @@ export function candidatoMasBajo(
   return mejor?.id ?? "";
 }
 
-/** Participantes de la siguiente ronda o candidatos a ganar, con su última propuesta. */
+/** Participantes de la siguiente ronda o candidatos a ganar, con su propuesta de la última ronda cerrada. */
 export function candidatosAGanar(
   licitacion: Licitacion,
-  proveedores: readonly ProveedorObra[],
+  proveedores: readonly ProveedorNombrado[],
 ): { id: string; nombre: string; monto: number }[] {
-  const ultima = licitacion.rondas[licitacion.rondas.length - 1];
+  const ultima = ultimaRondaCerrada(licitacion);
   if (!ultima) return [];
   return proveedoresActivos(licitacion).flatMap((id) => {
     const monto = montoEnRonda(ultima, id);

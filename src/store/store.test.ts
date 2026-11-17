@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DEMO_TODAY } from "@/domain";
+import { crearContrato } from "@/domain/fixtures";
 
 const memoria = new Map<string, string>();
 vi.stubGlobal("localStorage", {
@@ -88,6 +90,7 @@ describe("store de la demo", () => {
     expect(e.integraciones.eventos).toHaveLength(8);
     expect(e.prospectos.prospectos).toEqual(crearSeed().prospectos);
     expect(e.terrenos.terrenos).toEqual(crearSeed().terrenos);
+    expect(e.proveedores.padron).toEqual(crearSeed().proveedores);
     expect(e.locales.ajustes).toEqual({});
     expect(e.session.usuarioId).toBe("usr-patricia");
   });
@@ -106,6 +109,7 @@ describe("store de la demo", () => {
       "metas",
       "obra",
       "prospectos",
+      "proveedores",
       "reglasDefault",
       "session",
       "terrenos",
@@ -293,5 +297,37 @@ describe("store de la demo", () => {
     };
     useAppStore.getState().liberarLocal(local, contrato, "2026-11-10", "x");
     expect(useAppStore.getState().locales.ajustes[local.id]).toBeUndefined();
+  });
+
+  describe("registrarApertura", () => {
+    const contrato = crearContrato({ id: "ctr-apertura", inicio: "2026-06-01" });
+
+    it("guarda el usuario de la sesión y la fecha de la demo, sin sobrescribir", () => {
+      const s = useAppStore.getState();
+      s.iniciarSesion("usr-pmo");
+      s.registrarApertura(contrato, "2026-10-20");
+      expect(useAppStore.getState().contratos.aperturas[contrato.id]).toEqual({
+        fecha: "2026-10-20",
+        registradaPor: "usr-pmo",
+        registradaEl: DEMO_TODAY,
+      });
+      useAppStore.getState().registrarApertura(contrato, "2026-10-25");
+      expect(useAppStore.getState().contratos.aperturas[contrato.id].fecha).toBe(
+        "2026-10-20",
+      );
+    });
+
+    it("sin sesión no registra", () => {
+      useAppStore.getState().registrarApertura(contrato, "2026-10-20");
+      expect(useAppStore.getState().contratos.aperturas).toEqual({});
+    });
+
+    it("una fecha fuera de [inicio, hoy] no registra", () => {
+      const s = useAppStore.getState();
+      s.iniciarSesion("usr-pmo");
+      s.registrarApertura(contrato, "2026-05-31");
+      s.registrarApertura(contrato, "2026-11-04");
+      expect(useAppStore.getState().contratos.aperturas).toEqual({});
+    });
   });
 });

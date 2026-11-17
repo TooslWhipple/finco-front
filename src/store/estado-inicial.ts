@@ -1,3 +1,4 @@
+import { PROGRAMACION_EMISION_INICIAL, REGLA_RECARGO_INICIAL } from "@/domain";
 import { crearSeed } from "@/data/seed";
 import type {
   AprobacionesState,
@@ -10,6 +11,7 @@ import type {
   MantenimientosState,
   ObraState,
   ProspectosState,
+  ProveedoresState,
   ReglasDefaultState,
   TerrenosState,
 } from "./reducers";
@@ -30,13 +32,14 @@ export interface DatosDemo {
   terrenos: TerrenosState;
   obra: ObraState;
   mantenimientos: MantenimientosState;
+  proveedores: ProveedoresState;
   reglasDefault: ReglasDefaultState;
   metas: MetasState;
 }
 
 /**
  * Estado de la demo recién reiniciada. Las listas mutables (cotizaciones,
- * excepciones, bandeja anual, prospectos, terrenos, mantenimientos) parten del seed; el resto de los datos se lee
+ * excepciones, bandeja anual, prospectos, terrenos, mantenimientos, padrón de proveedores) parten del seed; el resto de los datos se lee
  * siempre de los repositorios.
  */
 export function crearEstadoInicial(): DatosDemo {
@@ -54,11 +57,16 @@ export function crearEstadoInicial(): DatosDemo {
       plantillas: seed.plantillasAviso,
       programacion: seed.programacionAvisos,
       envios: seed.enviosAviso,
+      emitidas: [],
+      recargos: [],
+      pagos: {},
+      programacionEmision: PROGRAMACION_EMISION_INICIAL,
+      reglaRecargo: REGLA_RECARGO_INICIAL,
     },
     integraciones: { sincronizaciones: {}, eventos: seed.eventosSync },
     locales: { ajustes: {} },
     prospectos: { prospectos: seed.prospectos },
-    contratos: { nuevos: [], terminaciones: {} },
+    contratos: { nuevos: [], terminaciones: {}, aperturas: {} },
     terrenos: { terrenos: seed.terrenos },
     obra: {
       contratos: seed.obra.contratos,
@@ -73,6 +81,7 @@ export function crearEstadoInicial(): DatosDemo {
       presupuestos: seed.presupuestosMantenimiento,
       facturasSat: seed.facturasSat,
     },
+    proveedores: { padron: seed.proveedores },
     reglasDefault: { porPlaza: {} },
     metas: { porPlaza: {} },
   };

@@ -1,0 +1,66 @@
+"use client";
+
+import { useMemo } from "react";
+import { DEMO_TODAY } from "@/domain";
+import {
+  useCiudades,
+  useContratosVivos,
+  useCotizaciones,
+  useExcepciones,
+  useFacturas,
+  useLocales,
+  useLocatarios,
+  usePlazas,
+  useProspectos,
+  useTerrenos,
+} from "@/hooks";
+import { MES_DEMO } from "@/lib/tiempo";
+import type { DatosReporte } from "./tipos";
+
+/**
+ * Estado vivo de la demo compuesto como `DatosReporte` (contratos con terminaciones y
+ * aperturas, facturas del corte de `MES_DEMO`). `undefined` mientras carga.
+ */
+export function useDatosReporte(): DatosReporte | undefined {
+  const ciudades = useCiudades().datos;
+  const plazas = usePlazas().datos;
+  const locales = useLocales().datos;
+  const contratos = useContratosVivos().datos;
+  const facturas = useFacturas(MES_DEMO).datos;
+  const prospectos = useProspectos().datos;
+  const terrenos = useTerrenos().datos;
+  const locatarios = useLocatarios().datos;
+  const cotizaciones = useCotizaciones();
+  const excepciones = useExcepciones();
+
+  return useMemo<DatosReporte | undefined>(
+    () =>
+      ciudades && plazas && locales && contratos && facturas && locatarios
+        ? {
+            ciudades,
+            plazas,
+            locales,
+            contratos,
+            facturas,
+            prospectos,
+            terrenos,
+            locatarios,
+            cotizaciones,
+            excepciones,
+            hoy: DEMO_TODAY,
+          }
+        : undefined,
+    [
+      ciudades,
+      plazas,
+      locales,
+      contratos,
+      facturas,
+      prospectos,
+      terrenos,
+      locatarios,
+      cotizaciones,
+      excepciones,
+    ],
+  );
+}

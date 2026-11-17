@@ -29,6 +29,10 @@ export interface ContextoExpediente {
   licitacionEnfocadaId: string | null;
   /** Cambia a la pestaña de licitaciones con esa licitación abierta. */
   abrirLicitacion: (licitacionId: string) => void;
+  /** Contrato que se abre al entrar a su pestaña (el que nació al adjudicar). */
+  contratoEnfocadoId: string | null;
+  /** Cambia a la pestaña de contratos de obra con ese contrato abierto. */
+  abrirContrato: (contratoId: string) => void;
   hoy: FechaISO;
   rol: Rol | null;
 }

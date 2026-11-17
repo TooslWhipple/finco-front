@@ -3,7 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment } from "react";
-import { useLocal, usePlaza, useTerrenos } from "@/hooks";
+import { INICIO_POR_ROL } from "@/config/permissions";
+import {
+  useLocal,
+  usePlaza,
+  useProveedores,
+  useSesion,
+  useTerrenos,
+  useTodasLasLicitaciones,
+} from "@/hooks";
 
 const ETIQUETAS: Readonly<Record<string, string>> = {
   plazas: "Plazas y locales",
@@ -15,10 +23,13 @@ const ETIQUETAS: Readonly<Record<string, string>> = {
   "terrenos-y-proyectos": "Terrenos y proyectos",
   cobranza: "Cobranza",
   mantenimientos: "Mantenimientos",
+  proveedores: "Proveedores",
   integraciones: "Integraciones",
   reportes: "Reportes",
   configuracion: "Configuración",
   "precios-y-reglas": "Precios y reglas",
+  "mis-licitaciones": "Mis licitaciones",
+  "resumen-comercial": "Resumen comercial",
 };
 
 /** `/plazas` agrupa las plazas pero no es una pantalla: no se enlaza. */
@@ -39,6 +50,16 @@ function NombreTerreno({ id }: { id: string }) {
   return <>{terreno?.nombre ?? id}</>;
 }
 
+function NombreProveedor({ id }: { id: string }) {
+  const proveedor = useProveedores().find((p) => p.id === id);
+  return <>{proveedor?.nombre ?? id}</>;
+}
+
+function FolioLicitacion({ id }: { id: string }) {
+  const licitacion = useTodasLasLicitaciones().find((l) => l.id === id);
+  return <>{licitacion?.folio ?? id}</>;
+}
+
 /** Etiqueta de un segmento de la ruta; los ids se resuelven contra los datos. */
 function Etiqueta({ segmentos, indice }: { segmentos: string[]; indice: number }) {
   const segmento = segmentos[indice];
@@ -46,12 +67,17 @@ function Etiqueta({ segmentos, indice }: { segmentos: string[]; indice: number }
   if (previo === "plazas") return <NombrePlaza id={segmento} />;
   if (previo === "locales") return <CodigoLocal id={segmento} />;
   if (previo === "terrenos-y-proyectos") return <NombreTerreno id={segmento} />;
+  if (previo === "proveedores") return <NombreProveedor id={segmento} />;
+  if (previo === "mis-licitaciones") return <FolioLicitacion id={segmento} />;
   if (segmento === "locales") return <>Locales</>;
   return <>{ETIQUETAS[segmento] ?? segmento}</>;
 }
 
 export function Breadcrumb() {
   const ruta = usePathname();
+  const { rol } = useSesion();
+  // El contratista externo no ve el panorama: su "Inicio" es su portal.
+  const inicio = rol === "CONTRATISTA" ? INICIO_POR_ROL[rol] : "/";
   const segmentos = ruta.split("/").filter(Boolean);
   // "/locales" no es una pantalla: su segmento solo ancla el id del local.
   const visibles = segmentos.map((_, i) => i).filter((i) => segmentos[i] !== "locales");
@@ -72,7 +98,7 @@ export function Breadcrumb() {
       aria-label="Ruta"
       className="flex min-w-0 flex-1 items-center gap-1.5 text-sm whitespace-nowrap text-brand-text-muted [&>span:last-child]:min-w-0 [&>span:last-child]:truncate"
     >
-      <Link href="/" className="hover:text-brand-primary">
+      <Link href={inicio} className="hover:text-brand-primary">
         Inicio
       </Link>
       {visibles.map((i, n) => {

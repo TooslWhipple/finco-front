@@ -5,8 +5,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { ArrowLeft } from "lucide-react";
 import { DataTable, MoneyAmount, SectionCard, StatusChip } from "@/components/shared";
 import { Button } from "@/components/ui/button";
-import { PROVEEDORES_OBRA } from "@/data/licitaciones";
-import { ETIQUETA_PARTIDA } from "@/domain";
+import { ETIQUETA_PARTIDA, rondaAbierta } from "@/domain";
+import { useProveedores } from "@/hooks";
 import type { ContextoExpediente } from "../contexto";
 import { AccionesLicitacion } from "./acciones-licitacion";
 import { ESTADO_LICITACION, filasLicitaciones, type FilaLicitacion } from "./agregados";
@@ -84,14 +84,16 @@ const COLUMNAS: ColumnDef<FilaLicitacion>[] = [
 export function PestanaLicitaciones({
   licitaciones,
   licitacionEnfocadaId,
+  abrirContrato,
   rol,
 }: ContextoExpediente) {
   const [seleccionadaId, setSeleccionadaId] = useState<string | null>(
     licitacionEnfocadaId,
   );
+  const proveedores = useProveedores();
   const filas = useMemo(
-    () => filasLicitaciones(licitaciones, PROVEEDORES_OBRA),
-    [licitaciones],
+    () => filasLicitaciones(licitaciones, proveedores),
+    [licitaciones, proveedores],
   );
   const seleccionada = licitaciones.find((l) => l.id === seleccionadaId);
 
@@ -120,18 +122,28 @@ export function PestanaLicitaciones({
             {seleccionada.folio} · {ETIQUETA_PARTIDA[seleccionada.partida]}
             <StatusChip estatus={estatus} etiqueta={etiqueta} />
           </h2>
-          <p className="mt-1 text-sm text-brand-text-muted">
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-brand-text-muted">
             {seleccionada.invitados.length} proveedores invitados ·{" "}
             {seleccionada.rondas.length} rondas
+            {seleccionada.conceptos.length > 0
+              ? ` · ${seleccionada.conceptos.length} conceptos en el catálogo`
+              : null}
+            {rondaAbierta(seleccionada) ? (
+              <StatusChip
+                estatus="ABIERTO"
+                etiqueta={`Ronda ${rondaAbierta(seleccionada)?.numero} abierta`}
+              />
+            ) : null}
           </p>
         </div>
         <AccionesLicitacion
           licitacion={seleccionada}
-          proveedores={PROVEEDORES_OBRA}
+          proveedores={proveedores}
           rol={rol}
+          abrirContrato={abrirContrato}
         />
       </header>
-      <DetalleLicitacion licitacion={seleccionada} proveedores={PROVEEDORES_OBRA} />
+      <DetalleLicitacion licitacion={seleccionada} proveedores={proveedores} />
     </div>
   );
 }

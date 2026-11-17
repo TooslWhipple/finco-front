@@ -4,12 +4,14 @@ import {
   contratosPorVencer,
   localesDisponibles,
   localesPorColocar,
+  localesSinAbrir,
   montoCobrado,
   ocupacion,
   porcentajeCobrado,
   variacionOcupacion,
 } from "./kpis";
-import { crearFactura, crearLocal } from "./fixtures";
+import { antiguedadSaldos } from "./cobranza";
+import { crearContrato, crearFactura, crearLocal } from "./fixtures";
 import { DEMO_TODAY } from "./fechas";
 import type { Contrato } from "./tipos";
 
@@ -68,6 +70,38 @@ describe("cobranza kpis", () => {
     expect(porcentajeCobrado(facturas)).toBeCloseTo(0.1);
     expect(porcentajeCobrado([])).toBe(0);
   });
+
+  const recargo = (o: Parameters<typeof crearFactura>[0]) =>
+    crearFactura({ concepto: "RECARGO", origen: "EMISION", monto: 60, ...o });
+
+  it("la cartera vencida suma el recargo con el vencimiento de su renta y cuadra con la antigüedad", () => {
+    const renta = crearFactura({ id: "r1", monto: 3_000, vencimiento: "2026-10-01" });
+    // Cargado hoy: por su propia fecha no estaría vencido, pero envejece con su renta.
+    const cargo = recargo({
+      id: "rec-r1-1",
+      facturaOrigenId: "r1",
+      vencimiento: DEMO_TODAY,
+    });
+    const conRecargo = [renta, cargo];
+    expect(carteraVencida(conRecargo, DEMO_TODAY)).toBe(3_060);
+    const total = antiguedadSaldos(conRecargo, DEMO_TODAY).reduce(
+      (s, c) => s + c.monto,
+      0,
+    );
+    expect(total).toBe(carteraVencida(conRecargo, DEMO_TODAY));
+  });
+
+  it("un recargo pagado no suma al cobrado ni altera el porcentaje", () => {
+    const renta = crearFactura({ id: "r2", monto: 1_000, pagadaEl: "2026-11-02" });
+    const otra = crearFactura({ id: "r3", monto: 1_000, vencimiento: "2026-11-20" });
+    const pagado = recargo({
+      id: "rec-r2-1",
+      facturaOrigenId: "r2",
+      pagadaEl: "2026-11-02",
+    });
+    expect(montoCobrado([renta, otra, pagado])).toBe(1_000);
+    expect(porcentajeCobrado([renta, otra, pagado])).toBeCloseTo(0.5);
+  });
 });
 
 describe("kpis del panorama", () => {
@@ -97,5 +131,59 @@ describe("kpis del panorama", () => {
     ];
     expect(variacionOcupacion([a, b], contratos, "2026-09-30")).toBe(50);
     expect(variacionOcupacion([], contratos, "2026-09-30")).toBe(0);
+  });
+});
+
+describe("localesSinAbrir", () => {
+  const hoy = DEMO_TODAY;
+  const apertura = {
+    fecha: "2024-02-01",
+    registradaPor: "usr-pmo",
+    registradaEl: "2024-02-01",
+  };
+  const ocupado = (id: string) => crearLocal({ id, estatus: "OCUPADO" });
+  const ctr = (localId: string, parcial: Partial<Contrato> = {}) =>
+    crearContrato({
+      id: `ctr-${localId}-${parcial.inicio ?? "base"}`,
+      localId,
+      ...parcial,
+    });
+
+  it("devuelve el OCUPADO con contrato vigente sin apertura", () => {
+    const r = localesSinAbrir([ocupado("a")], [ctr("a")], hoy);
+    expect(r.map((l) => l.id)).toEqual(["a"]);
+  });
+
+  it("excluye abiertos, terminados, disponibles y no ocupados con contrato vigente", () => {
+    const locales = [
+      ocupado("abierto"),
+      ocupado("terminado"),
+      crearLocal({ id: "disponible", estatus: "DISPONIBLE" }),
+      crearLocal({ id: "cotizacion", estatus: "EN_COTIZACION" }),
+    ];
+    const contratos = [
+      ctr("abierto", { apertura }),
+      ctr("terminado", { estado: "TERMINADO" }),
+      ctr("disponible"),
+      ctr("cotizacion"),
+    ];
+    expect(localesSinAbrir(locales, contratos, hoy)).toEqual([]);
+  });
+
+  it("excluye un OCUPADO sin contratos vigentes, vencido o futuro", () => {
+    const locales = [ocupado("sin"), ocupado("vencido"), ocupado("futuro")];
+    const contratos = [
+      ctr("vencido", { inicio: "2020-01-01", fin: "2026-11-02" }),
+      ctr("futuro", { inicio: "2026-11-04", fin: "2029-11-04" }),
+    ];
+    expect(localesSinAbrir(locales, contratos, hoy)).toEqual([]);
+  });
+
+  it("un local renovado con apertura en uno de sus vigentes ya está abierto", () => {
+    const contratos = [
+      ctr("r", { inicio: "2024-01-01", apertura }),
+      ctr("r", { inicio: "2026-11-01" }),
+    ];
+    expect(localesSinAbrir([ocupado("r")], contratos, hoy)).toEqual([]);
   });
 });

@@ -5,8 +5,7 @@ import {
   type FechaISO,
   type Prospecto,
 } from "@/domain";
-
-const RFC = /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/;
+import { MENSAJE_RFC_INVALIDO, RFC } from "@/lib/rfc";
 
 export const esquemaNuevoProspecto = z.object({
   nombre: z.string().trim().min(3, "Captura la razón social o el nombre"),
@@ -14,7 +13,7 @@ export const esquemaNuevoProspecto = z.object({
     .string()
     .trim()
     .transform((v) => v.toUpperCase())
-    .pipe(z.string().regex(RFC, "RFC inválido: 12 o 13 caracteres")),
+    .pipe(z.string().regex(RFC, MENSAJE_RFC_INVALIDO)),
   giro: z.string().trim().min(3, "Captura el giro del negocio"),
   contactoNombre: z.string().trim().min(3, "Captura el nombre del contacto"),
   telefono: z

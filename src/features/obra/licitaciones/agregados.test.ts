@@ -1,22 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { PROVEEDORES_OBRA } from "@/data/licitaciones";
-import { crearLicitacion } from "@/domain/fixtures";
-import { conLicitacionAdjudicada } from "@/domain";
+import { crearLicitacion, crearProveedor } from "@/domain/fixtures";
+import {
+  conCatalogo,
+  conInvitaciones,
+  conLicitacionAdjudicada,
+  conRespuesta,
+} from "@/domain";
 import {
   candidatoMasBajo,
+  candidatosAGanar,
   datosGraficaRondas,
   descripcionContraBase,
   eventosDecision,
   matrizProveedores,
+  nombreProveedor,
   resumenLicitacion,
 } from "./agregados";
 import { entradaDeRonda, validarRonda } from "./esquemas";
 
 const proveedores = [
-  { id: "A", nombre: "Alfa", especialidades: [] },
-  { id: "B", nombre: "Beta", especialidades: [] },
-  { id: "C", nombre: "Gama", especialidades: [] },
-  { id: "D", nombre: "Delta", especialidades: [] },
+  { id: "A", nombre: "Alfa" },
+  { id: "B", nombre: "Beta" },
+  { id: "C", nombre: "Gama" },
+  { id: "D", nombre: "Delta" },
 ];
 const licitacion = crearLicitacion();
 
@@ -69,8 +75,75 @@ describe("agregados de licitación", () => {
     ).toBeDefined();
   });
 
-  it("los proveedores del catálogo son únicos", () => {
-    expect(new Set(PROVEEDORES_OBRA.map((p) => p.id)).size).toBe(PROVEEDORES_OBRA.length);
+  it("nombreProveedor resuelve contra el padrón completo y cae al id si no está", () => {
+    const padron = [crearProveedor({ id: "X", nombre: "Equis", activo: false })];
+    expect(nombreProveedor(padron, "X")).toBe("Equis");
+    expect(nombreProveedor(padron, "Y")).toBe("Y");
+  });
+});
+
+describe("candidatosAGanar", () => {
+  it("una ronda abierta no cambia los candidatos de la última ronda cerrada", () => {
+    const conCat = conCatalogo(licitacion, [
+      { id: "k1", clave: "ACA-01", descripcion: "Piso", unidad: "M2", volumen: 10 },
+    ]);
+    const abierta = conInvitaciones(
+      conCat,
+      ["A", "C"],
+      "WHATSAPP",
+      "2026-10-01",
+      "09:00",
+    );
+    expect(abierta.rondas).toHaveLength(3);
+    expect(candidatosAGanar(abierta, proveedores)).toEqual(
+      candidatosAGanar(licitacion, proveedores),
+    );
+    expect(candidatosAGanar(abierta, proveedores).map((c) => c.id)).toEqual(["A", "C"]);
+  });
+});
+
+describe("ronda abierta en la matriz, la gráfica y la línea de tiempo", () => {
+  const conCat = conCatalogo(licitacion, [
+    { id: "k1", clave: "ACA-01", descripcion: "Piso", unidad: "M2", volumen: 10 },
+  ]);
+  const abierta = conInvitaciones(conCat, ["A", "C"], "WHATSAPP", "2026-10-01", "09:00");
+
+  it("una ronda abierta marca POR_RESPONDER y no aparece en datosGraficaRondas", () => {
+    const filas = matrizProveedores(abierta, proveedores);
+    const celda = (id: string) => filas.find((f) => f.proveedor.id === id)!.celdas[2];
+    expect(celda("A").tipo).toBe("POR_RESPONDER");
+    expect(celda("C").tipo).toBe("POR_RESPONDER");
+    expect(celda("D").tipo).toBe("FUERA");
+    expect(datosGraficaRondas(abierta, proveedores)).toEqual(
+      datosGraficaRondas(licitacion, proveedores),
+    );
+  });
+
+  it("la respuesta del portal se distingue de la que capturó la PMO", () => {
+    const respondida = conRespuesta(
+      abierta,
+      "A",
+      [{ conceptoId: "k1", precioUnitario: 500 }],
+      "CONTRATISTA",
+      "2026-10-02",
+    );
+    const celda = matrizProveedores(respondida, proveedores)[0].celdas[2];
+    expect(celda).toEqual({
+      tipo: "MONTO",
+      monto: 5_000,
+      esMejor: false,
+      capturadaPor: "CONTRATISTA",
+    });
+  });
+
+  it('eventosDecision titula la ronda abierta "Ronda 3 abierta: 0 de 2 respondieron"', () => {
+    const ronda3 = eventosDecision(abierta, proveedores).find((e) => e.id === "ronda-3");
+    expect(ronda3?.titulo).toBe("Ronda 3 abierta: 0 de 2 respondieron");
+    expect(ronda3?.detalle).toBeUndefined();
+  });
+
+  it("la gráfica y el ahorro de una licitación histórica no cambian", () => {
+    expect(resumenLicitacion(abierta)).toEqual(resumenLicitacion(licitacion));
   });
 });
 

@@ -14,10 +14,12 @@ export type Accion =
   | "obra.estimacionRegistrar"
   | "obra.estimacionAutorizar"
   | "licitacion.gestionar"
+  | "licitacion.responder"
   | "precioMinimo.editar"
   | "regla.editar"
   | "actualizacionAnual.resolver"
   | "local.liberar"
+  | "local.registrarApertura"
   | "cobranza.gestionar"
   | "cobranza.avisosProgramar"
   | "integraciones.sincronizar"
@@ -27,6 +29,7 @@ export type Accion =
   | "mantenimientos.gestionar"
   | "mantenimiento.presupuestoEditar"
   | "mantenimiento.sobregiroAutorizar"
+  | "proveedores.gestionar"
   | "configuracion.editar";
 
 const TODAS: readonly Accion[] = [
@@ -42,10 +45,12 @@ const TODAS: readonly Accion[] = [
   "obra.estimacionRegistrar",
   "obra.estimacionAutorizar",
   "licitacion.gestionar",
+  "licitacion.responder",
   "precioMinimo.editar",
   "regla.editar",
   "actualizacionAnual.resolver",
   "local.liberar",
+  "local.registrarApertura",
   "cobranza.gestionar",
   "cobranza.avisosProgramar",
   "integraciones.sincronizar",
@@ -55,6 +60,7 @@ const TODAS: readonly Accion[] = [
   "mantenimientos.gestionar",
   "mantenimiento.presupuestoEditar",
   "mantenimiento.sobregiroAutorizar",
+  "proveedores.gestionar",
   "configuracion.editar",
 ];
 
@@ -64,6 +70,7 @@ const ACCIONES_VENTAS: readonly Accion[] = [
   "excepcion.solicitar",
   "prospectos.gestionar",
   "contratos.gestionar",
+  "local.registrarApertura",
 ];
 
 /** Matriz rol → acciones permitidas. */
@@ -78,6 +85,7 @@ export const PERMISOS: Record<Rol, readonly Accion[]> = {
   SUPERADMIN: TODAS,
   COBRANZA: [
     "local.liberar",
+    "local.registrarApertura",
     "cobranza.gestionar",
     "cobranza.avisosProgramar",
     "integraciones.sincronizar",
@@ -93,9 +101,12 @@ export const PERMISOS: Record<Rol, readonly Accion[]> = {
     "licitacion.gestionar",
     "actualizacionAnual.resolver",
     "local.liberar",
+    "local.registrarApertura",
     "mantenimiento.presupuestoEditar",
+    "proveedores.gestionar",
   ],
   SUPERVISOR_OBRA: ["obra.corteCapturar", "obra.estimacionRegistrar"],
+  CONTRATISTA: ["licitacion.responder"],
 };
 
 export function can(rol: Rol | null | undefined, accion: Accion): boolean {
@@ -111,9 +122,10 @@ export function veTodoElEquipo(rol: Rol): boolean {
 export const INICIO_POR_ROL: Record<Rol, string> = {
   DIRECCION: "/",
   VENTAS: "/disponibilidad",
-  GERENTE_COMERCIAL: "/disponibilidad",
+  GERENTE_COMERCIAL: "/resumen-comercial",
   SUPERADMIN: "/precios-y-reglas",
   COBRANZA: "/cobranza",
   PMO: "/terrenos-y-proyectos",
   SUPERVISOR_OBRA: `/terrenos-y-proyectos/${ID_TERRENO_HEROE}`,
+  CONTRATISTA: "/mis-licitaciones",
 };

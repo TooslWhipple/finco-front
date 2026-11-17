@@ -17,6 +17,7 @@ export interface PestanaExpediente {
 }
 
 export const PESTANA_LICITACIONES = "licitaciones";
+export const PESTANA_CONTRATOS = "contratos";
 
 /** Pestañas del expediente, en orden. Sumar una nueva es agregar un elemento. */
 export const PESTANAS: readonly PestanaExpediente[] = [
@@ -28,7 +29,7 @@ export const PESTANAS: readonly PestanaExpediente[] = [
     Componente: PestanaCronograma,
   },
   {
-    id: "contratos",
+    id: PESTANA_CONTRATOS,
     etiqueta: "Contratos de obra",
     visible: (c) => c.contratos.length > 0,
     Componente: PestanaContratos,

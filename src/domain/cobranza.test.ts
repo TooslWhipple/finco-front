@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { antiguedadSaldos, diasAtraso, estatusCobro, rangoAntiguedad } from "./cobranza";
+import {
+  antiguedadSaldos,
+  clientesMorosos,
+  conVencimientoDeRenta,
+  diasAtraso,
+  estatusCobro,
+  facturasDelCorte,
+  rangoAntiguedad,
+} from "./cobranza";
 import { crearFactura } from "./fixtures";
 import { DEMO_TODAY, diasEntre } from "./fechas";
 
@@ -76,5 +84,137 @@ describe("antiguedadSaldos", () => {
       "61-90",
       "+90",
     ]);
+  });
+});
+
+describe("facturasDelCorte", () => {
+  const nov = crearFactura({ id: "nov", mes: "2026-11", vencimiento: "2026-11-20" });
+  const vieja = crearFactura({ id: "vieja", mes: "2026-08", vencimiento: "2026-08-10" });
+  const viejaPagada = crearFactura({
+    id: "vieja-pagada",
+    mes: "2026-07",
+    vencimiento: "2026-07-10",
+    pagadaEl: "2026-11-03",
+  });
+  const pagadaAntes = crearFactura({
+    id: "pagada-antes",
+    mes: "2026-09",
+    vencimiento: "2026-09-10",
+    pagadaEl: "2026-10-01",
+  });
+  const dic = crearFactura({
+    id: "fac-em-A-09-2026-12",
+    mes: "2026-12",
+    vencimiento: "2026-12-05",
+    origen: "EMISION",
+  });
+  const recargo = crearFactura({
+    id: "rec-vieja-1",
+    concepto: "RECARGO",
+    origen: "EMISION",
+    facturaOrigenId: "vieja",
+    mes: "2026-08",
+    vencimiento: "2026-08-16",
+    monto: 200,
+  });
+  const recargoHuerfano = crearFactura({
+    id: "rec-pagada-antes-1",
+    concepto: "RECARGO",
+    facturaOrigenId: "pagada-antes",
+    mes: "2026-09",
+  });
+  const todas = [nov, vieja, viejaPagada, pagadaAntes, dic, recargo, recargoHuerfano];
+  const ids = (mes: string) => facturasDelCorte(todas, mes, DEMO_TODAY).map((f) => f.id);
+
+  it("un mes posterior a hoy muestra solo las facturas de ese mes", () => {
+    expect(ids("2026-12")).toEqual(["fac-em-A-09-2026-12"]);
+  });
+
+  it("el corte del mes arrastra las vencidas y la vieja pagada dentro del mes, con su recargo", () => {
+    expect(ids("2026-11")).toEqual(["nov", "vieja", "vieja-pagada", "rec-vieja-1"]);
+  });
+
+  it("el recargo sigue a su renta: sale con ella", () => {
+    const sinRenta = facturasDelCorte([nov, recargo], "2026-11", DEMO_TODAY);
+    expect(sinRenta.map((f) => f.id)).toEqual(["nov"]);
+  });
+});
+
+describe("recargos en los saldos", () => {
+  const renta = conAtraso(40, 10_000);
+  const rentaConId = { ...renta, id: "fac-r" };
+  const recargo = (k: number, vencimiento: string) =>
+    crearFactura({
+      id: `rec-fac-r-${k}`,
+      concepto: "RECARGO",
+      origen: "EMISION",
+      facturaOrigenId: "fac-r",
+      mes: rentaConId.mes,
+      monto: 200,
+      vencimiento,
+    });
+  const recargos = [recargo(1, "2026-09-30"), recargo(2, "2026-10-30")];
+
+  it("conVencimientoDeRenta da a cada recargo el vencimiento de su renta", () => {
+    const huerfano = crearFactura({
+      id: "rec-x-1",
+      concepto: "RECARGO",
+      facturaOrigenId: "x",
+      vencimiento: "2026-10-10",
+    });
+    const salida = conVencimientoDeRenta([rentaConId, ...recargos, huerfano]);
+    expect(salida.slice(1, 3).map((f) => f.vencimiento)).toEqual([
+      rentaConId.vencimiento,
+      rentaConId.vencimiento,
+    ]);
+    expect(salida[0]).toBe(rentaConId);
+    expect(salida[3].vencimiento).toBe("2026-10-10");
+  });
+
+  it("antiguedadSaldos cuenta solo la renta y suma sus recargos en el rango de la renta", () => {
+    const cubos = antiguedadSaldos([rentaConId, ...recargos], DEMO_TODAY);
+    expect(cubos[1]).toEqual({ rango: "31-60", facturas: 1, monto: 10_400 });
+    expect(cubos[0]).toEqual({ rango: "1-30", facturas: 0, monto: 0 });
+  });
+});
+
+describe("clientesMorosos", () => {
+  const renta = (id: string, locatarioId: string, dias: number, monto = 1_000) => ({
+    ...conAtraso(dias, monto),
+    id,
+    locatarioId,
+  });
+  const facturas = [
+    renta("a1", "A", 10),
+    renta("a2", "A", 45),
+    renta("b1", "B", 45, 5_000),
+    renta("c1", "C", 6, 100),
+    { ...renta("d1", "D", 90), pagadaEl: "2026-10-01" },
+    crearFactura({ id: "e1", locatarioId: "E", vencimiento: "2026-11-20" }),
+    crearFactura({ id: "a3", locatarioId: "A", monto: 500, vencimiento: "2026-11-20" }),
+    { ...renta("a0", "A", 60, 7_000), pagadaEl: "2026-11-01" },
+    crearFactura({
+      id: "rec-a2-1",
+      locatarioId: "A",
+      concepto: "RECARGO",
+      origen: "EMISION",
+      facturaOrigenId: "a2",
+      monto: 20,
+      vencimiento: DEMO_TODAY,
+    }),
+  ];
+
+  it("incluye a todos los morosos y ordena por atraso y luego por saldo", () => {
+    const morosos = clientesMorosos(facturas, DEMO_TODAY);
+    expect(morosos.map((m) => m.locatarioId)).toEqual(["B", "A", "C"]);
+  });
+
+  it("toma el máximo atraso de sus rentas vencidas y suma al saldo todo lo sin pagar", () => {
+    const a = clientesMorosos(facturas, DEMO_TODAY).find((m) => m.locatarioId === "A")!;
+    expect(a.dias).toBe(45);
+    // Rentas vencidas (1 000 + 1 000), su recargo (20) y la renta aún vigente (500);
+    // la pagada no suma.
+    expect(a.saldo).toBe(2_520);
+    expect(a.facturaIds).toEqual(["a2", "a1"]);
   });
 });

@@ -14,7 +14,6 @@ import type {
   Planta,
   Plaza,
   Prospecto,
-  Proveedor,
   ReglaActualizacion,
   Terreno,
   ContratoObra,
@@ -107,7 +106,6 @@ export interface ObraRepository {
 export interface MantenimientosRepository {
   /** Mantenimientos del seed; los de la demo viven en el store. */
   listar(): Promise<Mantenimiento[]>;
-  listarProveedores(): Promise<Proveedor[]>;
 }
 
 /** Parámetros del dominio que la pantalla de Configuración muestra en solo lectura. */

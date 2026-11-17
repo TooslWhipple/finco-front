@@ -6,6 +6,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import {
   contratoDesdeCotizacion,
   liberarLocal,
+  validarApertura,
   DEMO_TODAY,
   HORA_DEMO,
   type Contrato,
@@ -13,17 +14,27 @@ import {
   type EntradaCorte,
   type EntradaEstimacion,
   type EntradaRonda,
+  type EntregaAviso,
+  type CanalAviso,
+  type ConceptoLicitacion,
+  type FechasContrato,
+  type PrecioConcepto,
+  type ComplementoPago,
   type EnvioAviso,
   type EstadoCambio,
   type EstatusMantenimiento,
   type EtapaTerreno,
   type EventoSync,
+  type Factura,
   type FechaISO,
   type Local,
   type ProgramacionAvisos,
+  type ProgramacionEmision,
   type Prospecto,
+  type Proveedor,
   type TipoContactoProspecto,
   type ReglaActualizacion,
+  type ReglaRecargo,
   type Rol,
 } from "@/domain";
 import { evidenciaAntes, evidenciaCorte, evidenciaDespues } from "@/data/fotos";
@@ -34,7 +45,7 @@ import * as r from "./reducers";
 
 export const CLAVE_STORAGE = "finco-demo";
 /** Subir al cambiar la forma del estado persistido: descarta lo viejo. */
-export const VERSION_STORAGE = 16;
+export const VERSION_STORAGE = 21;
 
 export interface Acciones {
   iniciarSesion(usuarioId: string): void;
@@ -59,13 +70,29 @@ export interface Acciones {
   registrarSeguimiento(facturaId: string, texto: string): void;
   /** Registra avisos simulados (bitácora, avisadas y seguimiento de cada factura). */
   registrarAvisos(
-    entregas: readonly r.EntregaAviso[],
+    entregas: readonly EntregaAviso[],
     texto: string,
     origen: EnvioAviso["origen"],
     hora?: string,
   ): void;
   editarPlantillaAviso(id: string, parche: { asunto?: string; cuerpo: string }): void;
   guardarProgramacionAvisos(programacion: ProgramacionAvisos): void;
+  /**
+   * Guarda una corrida de emisión (facturas, recargos y el aviso simulado de
+   * cada factura emitida), precalculada con `facturasAEmitir`, `recargosPendientes`
+   * y `entregasDeEmision`.
+   */
+  emitirFacturacion(
+    emision: r.EmisionFacturas,
+    origen: EnvioAviso["origen"],
+    hora?: string,
+  ): void;
+  /** Guarda los recargos precalculados con `recargosPendientes`. */
+  generarRecargos(recargos: readonly Factura[]): void;
+  /** Pago total de una renta con su complemento (`complementoDePago`). */
+  registrarPago(facturaId: string, complemento: ComplementoPago): void;
+  guardarProgramacionEmision(programacion: ProgramacionEmision): void;
+  editarReglaRecargo(regla: ReglaRecargo): void;
   /** Anota una sincronización en el log y fija el último sync de la integración. */
   registrarSync(evento: Omit<EventoSync, "id">): void;
   registrarProspecto(prospecto: Prospecto): void;
@@ -88,6 +115,11 @@ export interface Acciones {
    * aplica el repricing por los años transcurridos (lista, mínimo e historial).
    */
   liberarLocal(local: Local, contrato: Contrato, fecha: FechaISO, motivo: string): void;
+  /**
+   * Registra que el locatario abrió el local del contrato en `fecha`. Solo con
+   * sesión y si `validarApertura` pasa; una apertura ya registrada no se sobrescribe.
+   */
+  registrarApertura(contrato: Contrato, fecha: FechaISO): void;
   moverEtapaTerreno(id: string, etapa: EtapaTerreno): void;
   actualizarAvanceTerreno(id: string, avancePct: number): void;
   /** Alta de un mantenimiento programado, con el siguiente folio. */
@@ -127,8 +159,40 @@ export interface Acciones {
   registrarRonda(licitacionId: string, entrada: EntradaRonda): void;
   /** La PMO saca a un proveedor de la competencia; el motivo es obligatorio. */
   descartarProveedor(licitacionId: string, proveedorId: string, motivo: string): void;
-  /** La PMO adjudica la licitación al ganador de la última ronda, con su motivo. */
-  adjudicarLicitacion(licitacionId: string, ganadorId: string, motivo: string): void;
+  /**
+   * La PMO adjudica la licitación al ganador de la última ronda cerrada, con su
+   * motivo. Con catálogo, `fechas` es obligatorio y nace el contrato de obra.
+   */
+  adjudicarLicitacion(
+    licitacionId: string,
+    ganadorId: string,
+    motivo: string,
+    fechas?: FechasContrato,
+  ): void;
+  /** La PMO define o edita el catálogo de conceptos mientras no haya precios. */
+  definirCatalogo(licitacionId: string, conceptos: readonly ConceptoLicitacion[]): void;
+  /** Envío simulado del catálogo; abre la siguiente ronda si no hay una abierta. */
+  enviarInvitaciones(
+    licitacionId: string,
+    proveedorIds: readonly string[],
+    canal: CanalAviso,
+    hora?: string,
+  ): void;
+  /**
+   * Respuesta por precio unitario en la ronda abierta. `capturadaPor` sale del rol
+   * de la sesión; el contratista solo responde por su propio proveedor.
+   */
+  responderLicitacion(
+    licitacionId: string,
+    proveedorId: string,
+    precios: readonly PrecioConcepto[],
+  ): void;
+  /** La PMO cierra la ronda abierta (exige al menos una respuesta). */
+  cerrarRonda(licitacionId: string): void;
+  /** La PMO da de alta un proveedor en el padrón (id y RFC únicos). */
+  agregarProveedor(proveedor: Proveedor): void;
+  /** La PMO edita un proveedor del padrón; el RFC no puede ser el de otro. */
+  editarProveedor(proveedor: Proveedor): void;
   establecerReglaDefault(plazaId: string, regla: ReglaActualizacion): void;
   ajustarLocal(localId: string, ajuste: r.AjusteLocal): void;
   /** Vuelve todo al estado inicial, conservando la sesión actual. */
@@ -266,6 +330,22 @@ export const useAppStore = create<AppState>()(
           set((s) => ({ cobranza: r.editarPlantilla(s.cobranza, id, parche) })),
         guardarProgramacionAvisos: (programacion) =>
           set((s) => ({ cobranza: r.guardarProgramacion(s.cobranza, programacion) })),
+        emitirFacturacion: (emision, origen, hora = HORA_DEMO) =>
+          set((s) => ({
+            cobranza: r.emitirFacturacion(s.cobranza, emision, DEMO_TODAY, hora, origen),
+          })),
+        generarRecargos: (recargos) =>
+          set((s) => ({ cobranza: r.generarRecargos(s.cobranza, recargos) })),
+        registrarPago: (facturaId, complemento) =>
+          set((s) => ({
+            cobranza: r.registrarPago(s.cobranza, facturaId, complemento),
+          })),
+        guardarProgramacionEmision: (programacion) =>
+          set((s) => ({
+            cobranza: r.guardarProgramacionEmision(s.cobranza, programacion),
+          })),
+        editarReglaRecargo: (regla) =>
+          set((s) => ({ cobranza: r.editarReglaRecargo(s.cobranza, regla) })),
         registrarSync: (evento) =>
           set((s) => ({ integraciones: r.registrarSync(s.integraciones, evento) })),
         registrarProspecto: (prospecto) =>
@@ -339,6 +419,19 @@ export const useAppStore = create<AppState>()(
               actor(),
               formatMoneda,
             );
+          }),
+        registrarApertura: (contrato, fecha) =>
+          set((s) => {
+            const usuarioId = s.session.usuarioId;
+            if (!usuarioId) return s;
+            if (!validarApertura(contrato, fecha, DEMO_TODAY).ok) return s;
+            return {
+              contratos: r.registrarApertura(s.contratos, contrato.id, {
+                fecha,
+                registradaPor: usuarioId,
+                registradaEl: DEMO_TODAY,
+              }),
+            };
           }),
         moverEtapaTerreno: (id, etapa) =>
           set((s) => ({ terrenos: r.moverEtapaTerreno(s.terrenos, id, etapa) })),
@@ -482,7 +575,7 @@ export const useAppStore = create<AppState>()(
           set((s) => ({
             obra: r.descartarProveedor(s.obra, licitacionId, proveedorId, motivo),
           })),
-        adjudicarLicitacion: (licitacionId, ganadorId, motivo) =>
+        adjudicarLicitacion: (licitacionId, ganadorId, motivo, fechas) =>
           set((s) => ({
             obra: r.adjudicarLicitacion(
               s.obra,
@@ -491,8 +584,46 @@ export const useAppStore = create<AppState>()(
               motivo,
               actor(),
               DEMO_TODAY,
+              s.proveedores.padron.find((p) => p.id === ganadorId),
+              fechas,
             ),
           })),
+        definirCatalogo: (licitacionId, conceptos) =>
+          set((s) => ({ obra: r.definirCatalogo(s.obra, licitacionId, conceptos) })),
+        enviarInvitaciones: (licitacionId, proveedorIds, canal, hora = HORA_DEMO) =>
+          set((s) => ({
+            obra: r.enviarInvitaciones(
+              s.obra,
+              licitacionId,
+              proveedorIds,
+              canal,
+              DEMO_TODAY,
+              hora,
+            ),
+          })),
+        responderLicitacion: (licitacionId, proveedorId, precios) =>
+          set((s) => {
+            const usuario = usuarioPorId(s.session.usuarioId);
+            if (!usuario) return {};
+            const esContratista = usuario.rol === "CONTRATISTA";
+            if (esContratista && usuario.proveedorId !== proveedorId) return {};
+            return {
+              obra: r.responderLicitacion(
+                s.obra,
+                licitacionId,
+                proveedorId,
+                precios,
+                esContratista ? "CONTRATISTA" : "PMO",
+                DEMO_TODAY,
+              ),
+            };
+          }),
+        cerrarRonda: (licitacionId) =>
+          set((s) => ({ obra: r.cerrarRonda(s.obra, licitacionId) })),
+        agregarProveedor: (proveedor) =>
+          set((s) => ({ proveedores: r.agregarProveedor(s.proveedores, proveedor) })),
+        editarProveedor: (proveedor) =>
+          set((s) => ({ proveedores: r.editarProveedor(s.proveedores, proveedor) })),
         establecerReglaDefault: (plazaId, regla) =>
           set((s) => ({
             reglasDefault: r.establecerReglaDefault(s.reglasDefault, plazaId, regla),
@@ -522,6 +653,7 @@ export const useAppStore = create<AppState>()(
         terrenos,
         obra,
         mantenimientos,
+        proveedores,
         reglasDefault,
         metas,
       }): DatosDemo => ({
@@ -536,6 +668,7 @@ export const useAppStore = create<AppState>()(
         terrenos,
         obra,
         mantenimientos,
+        proveedores,
         reglasDefault,
         metas,
       }),

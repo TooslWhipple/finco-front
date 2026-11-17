@@ -4,12 +4,16 @@ import { useMemo } from "react";
 import {
   aplicarResumenObra,
   DEMO_TODAY,
+  facturasDelCorte,
   filtrarPorUbicacion,
+  mezclarFacturas,
   filtrarPorVendedor,
+  licitacionesDeProveedor,
   resumenObra,
   type Contrato,
   type EventoSync,
   type Factura,
+  type FuentesLocatario,
   type Integracion,
   type Local,
   type Plaza,
@@ -19,6 +23,7 @@ import { usuarioPorId } from "@/config/usuarios";
 import { useAppStore } from "@/store";
 import {
   aplicarAjuste,
+  aplicarAperturas,
   aplicarMeta,
   aplicarReglaDefault,
   aplicarReglaHeredada,
@@ -125,13 +130,16 @@ export function useLocatarios() {
   return useConsulta((r) => r.locales.listarLocatarios());
 }
 
-/** Contratos del repositorio con las terminaciones hechas en la demo. */
+/** Contratos del repositorio con las terminaciones y aperturas hechas en la demo. */
 export function useContratos() {
   const base = useConsulta((r) => r.locales.listarContratos());
   const terminaciones = useAppStore((s) => s.contratos.terminaciones);
+  const aperturas = useAppStore((s) => s.contratos.aperturas);
   const datos = useMemo(
-    () => base.datos && aplicarTerminaciones(base.datos, terminaciones),
-    [base.datos, terminaciones],
+    () =>
+      base.datos &&
+      aplicarAperturas(aplicarTerminaciones(base.datos, terminaciones), aperturas),
+    [base.datos, terminaciones, aperturas],
   );
   return { datos, cargando: base.cargando };
 }
@@ -171,14 +179,37 @@ export function useProspectos() {
   return { datos, cargando: false };
 }
 
-/** Contratos del seed más los que nacieron de cotizaciones en la demo (en cualquier estado). */
+/**
+ * Las tres fuentes de las que `nombreLocatario` resuelve el nombre de un
+ * `locatarioId`: locatarios del repositorio, prospectos y cotizaciones visibles.
+ */
+export function useFuentesLocatario(): FuentesLocatario {
+  const { datos: locatarios } = useLocatarios();
+  const { datos: prospectos } = useProspectos();
+  const cotizaciones = useCotizaciones();
+  return useMemo(
+    () => ({ locatarios: locatarios ?? [], prospectos, cotizaciones }),
+    [locatarios, prospectos, cotizaciones],
+  );
+}
+
+/**
+ * Contratos del seed más los que nacieron de cotizaciones en la demo (en cualquier
+ * estado), con las terminaciones y aperturas hechas en la demo.
+ */
 export function useContratosVivos() {
   const base = useConsulta((r) => r.contratos.listar());
   const nuevos = useAppStore((s) => s.contratos.nuevos);
   const terminaciones = useAppStore((s) => s.contratos.terminaciones);
+  const aperturas = useAppStore((s) => s.contratos.aperturas);
   const datos = useMemo<Contrato[] | undefined>(
-    () => base.datos && aplicarTerminaciones([...base.datos, ...nuevos], terminaciones),
-    [base.datos, nuevos, terminaciones],
+    () =>
+      base.datos &&
+      aplicarAperturas(
+        aplicarTerminaciones([...base.datos, ...nuevos], terminaciones),
+        aperturas,
+      ),
+    [base.datos, nuevos, terminaciones, aperturas],
   );
   return { datos, cargando: base.cargando };
 }
@@ -203,6 +234,11 @@ export function useTerrenos() {
     [terrenos, obra],
   );
   return { datos, cargando: false };
+}
+
+/** Contratos de obra de todos los proyectos (la ficha del proveedor los cruza por `proveedorId`). */
+export function useTodosLosContratosObra() {
+  return useAppStore((s) => s.obra.contratos);
 }
 
 /** Contratos de obra de un proyecto (parten del seed). */
@@ -249,6 +285,20 @@ export function useEstimacionesObra(terrenoId: string) {
           b.registradaEn.localeCompare(a.registradaEn) || b.id.localeCompare(a.id),
       );
   }, [contratos, todas]);
+}
+
+/** Licitaciones de todos los proyectos (la ficha del proveedor las cruza por invitado y ganador). */
+export function useTodasLasLicitaciones() {
+  return useAppStore((s) => s.obra.licitaciones);
+}
+
+/** Licitaciones en curso a las que invitaron al proveedor del contratista (su portal). */
+export function useMisLicitaciones(proveedorId: string | undefined) {
+  const todas = useTodasLasLicitaciones();
+  return useMemo(
+    () => (proveedorId ? licitacionesDeProveedor(todas, proveedorId) : []),
+    [todas, proveedorId],
+  );
 }
 
 /** Licitaciones de obra de un proyecto (parten del seed). */
@@ -299,8 +349,9 @@ export function useFacturasSat() {
   return useAppStore((s) => s.mantenimientos.facturasSat);
 }
 
+/** Padrón único de proveedores (mantenimiento y obra; parte del seed, editable en la demo). */
 export function useProveedores() {
-  return useConsulta((r) => r.mantenimientos.listarProveedores());
+  return useAppStore((s) => s.proveedores.padron);
 }
 
 export function useExcepciones() {
@@ -311,19 +362,30 @@ export function useCambiosAnuales() {
   return useAppStore((s) => s.aprobaciones.cambiosAnuales);
 }
 
-/** Cuentas por cobrar del corte, con el seguimiento registrado en la demo. */
+/**
+ * Cuentas por cobrar del corte: la semilla más las facturas emitidas y los
+ * recargos de la demo, con los pagos y el seguimiento registrados en la demo.
+ */
 export function useFacturas(mes: string) {
   const base = useConsulta((r) => r.cobranza.listarCorte(mes), [mes]);
   const seguimientos = useAppStore((s) => s.cobranza.seguimientos);
+  const emitidas = useAppStore((s) => s.cobranza.emitidas);
+  const recargos = useAppStore((s) => s.cobranza.recargos);
+  const pagos = useAppStore((s) => s.cobranza.pagos);
   const datos = useMemo<Factura[] | undefined>(
     () =>
-      base.datos?.map((f) => {
+      base.datos &&
+      facturasDelCorte(
+        mezclarFacturas(base.datos, emitidas, recargos, pagos),
+        mes,
+        DEMO_TODAY,
+      ).map((f) => {
         const nuevos = seguimientos[f.id];
         if (!nuevos?.length) return f;
         const historial = [...(f.seguimiento ? [f.seguimiento] : []), ...nuevos];
         return { ...f, seguimiento: historial[historial.length - 1], historial };
       }),
-    [base.datos, seguimientos],
+    [base.datos, emitidas, recargos, pagos, mes, seguimientos],
   );
   return { datos, cargando: base.cargando };
 }

@@ -21,7 +21,7 @@ import {
   erroresCorte,
 } from "@/domain";
 import { crearSeed } from "./seed";
-import { PROVEEDORES_OBRA } from "./licitaciones";
+import { PROVEEDORES } from "./catalogo";
 import { ID_TERRENO_HEROE } from "./obra";
 
 const seed = crearSeed();
@@ -273,7 +273,10 @@ describe("estimaciones del seed", () => {
 describe("licitaciones del seed", () => {
   const { licitaciones } = seed;
   const delHeroe = licitaciones.filter((l) => l.terrenoId === ID_TERRENO_HEROE);
-  const proveedores = new Set(PROVEEDORES_OBRA.map((p) => p.id));
+  // Solo los contratistas de obra licitan: los de mantenimiento no deben colarse.
+  const proveedores = new Set(
+    PROVEEDORES.filter((p) => p.partidasObra.length > 0).map((p) => p.id),
+  );
 
   it("hay una adjudicada por contrato del héroe, con el monto del contrato, y una en curso", () => {
     const heroe = deTerreno(contratos, ID_TERRENO_HEROE);

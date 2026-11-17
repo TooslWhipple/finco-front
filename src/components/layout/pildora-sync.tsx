@@ -1,10 +1,15 @@
 "use client";
 
-import { useEstadoIntegracion } from "@/hooks";
+import { useEstadoIntegracion, useSesion } from "@/hooks";
 import { haceCuanto } from "@/lib/tiempo";
 
-/** Píldora global del estado de EnKontrol. */
+/** Píldora global del estado de EnKontrol; el contratista externo no la ve. */
 export function PildoraSync() {
+  const { rol } = useSesion();
+  return rol === "CONTRATISTA" ? null : <PildoraEnKontrol />;
+}
+
+function PildoraEnKontrol() {
   const { datos } = useEstadoIntegracion();
   return (
     <div

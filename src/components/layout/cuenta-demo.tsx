@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { INICIO_POR_ROL } from "@/config/permissions";
 import { ETIQUETA_ROL, USUARIOS_DEMO } from "@/config/usuarios";
 import type { Rol } from "@/domain";
 import { useSesion } from "@/hooks";
@@ -20,16 +21,22 @@ import { useAppStore } from "@/store";
 import { AvatarUsuario } from "./avatar-usuario";
 
 /**
- * Selector de rol: cambia de usuario en vivo y conserva la ruta actual: todas las
- * secciones se ven con cualquier rol, lo que cambia son las acciones.
+ * Selector de rol: cambia de usuario en vivo y conserva la ruta actual (si el rol
+ * no la ve, el guard de ruta muestra el candado). La excepción es el contratista,
+ * externo y con un solo módulo: al entrar o salir de ese rol se navega al inicio
+ * del rol nuevo (`INICIO_POR_ROL`).
  */
 export function SelectorRol() {
+  const router = useRouter();
   const { rol } = useSesion();
   const cambiarRol = useAppStore((s) => s.cambiarRol);
 
   const elegir = (nuevo: Rol) => {
     if (nuevo === rol) return;
     cambiarRol(nuevo);
+    if (nuevo === "CONTRATISTA" || rol === "CONTRATISTA") {
+      router.push(INICIO_POR_ROL[nuevo]);
+    }
   };
 
   return (

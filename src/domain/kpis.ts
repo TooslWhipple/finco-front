@@ -1,6 +1,7 @@
+import { contratoVigenteParaApertura } from "./apertura";
 import { diasEntre } from "./fechas";
-import { estatusCobro } from "./cobranza";
-import type { Contrato, Factura, Local } from "./tipos";
+import { conVencimientoDeRenta, estatusCobro, soloRentas } from "./cobranza";
+import type { Contrato, Factura, FechaISO, Local } from "./tipos";
 
 export const DIAS_POR_VENCER = 90;
 
@@ -22,29 +23,55 @@ export function contratosPorVencer(contratos: Contrato[], hoy: string): Contrato
   });
 }
 
+/** Saldo vencido: rentas y recargos sin pagar, con los recargos envejecidos por su renta. */
 export function carteraVencida(facturas: Factura[], hoy: string): number {
-  return facturas
+  return conVencimientoDeRenta(facturas)
     .filter((f) => estatusCobro(f, hoy) === "VENCIDA")
     .reduce((suma, f) => suma + f.monto, 0);
 }
 
-/** Fracción del monto facturado ya cobrado (0-1). */
+/** Fracción del monto facturado en rentas ya cobrado (0-1); los recargos no cuentan. */
 export function porcentajeCobrado(facturas: Factura[]): number {
-  const total = facturas.reduce((s, f) => s + f.monto, 0);
+  const total = soloRentas(facturas).reduce((s, f) => s + f.monto, 0);
   if (total === 0) return 0;
-  const cobrado = facturas.filter((f) => f.pagadaEl).reduce((s, f) => s + f.monto, 0);
-  return cobrado / total;
+  return montoCobrado(facturas) / total;
 }
 
-/** Monto ya cobrado de las facturas dadas. */
+/** Monto ya cobrado de las rentas dadas; los recargos no cuentan. */
 export function montoCobrado(facturas: Factura[]): number {
-  return facturas.filter((f) => f.pagadaEl).reduce((s, f) => s + f.monto, 0);
+  return soloRentas(facturas)
+    .filter((f) => f.pagadaEl)
+    .reduce((s, f) => s + f.monto, 0);
 }
 
 /** Locales por colocar: los disponibles más los de plazas nuevas en preventa. */
 export function localesPorColocar(locales: Local[]): number {
   return locales.filter((l) => l.estatus === "DISPONIBLE" || l.estatus === "PREVENTA")
     .length;
+}
+
+/**
+ * Locales rentados que el locatario aún no abre: `OCUPADO`, con al menos un contrato
+ * vigente (`contratoVigenteParaApertura`) y sin apertura en ninguno de sus vigentes.
+ * Un local renovado con apertura en alguno de sus vigentes ya cuenta como abierto.
+ */
+export function localesSinAbrir(
+  locales: readonly Local[],
+  contratos: readonly Contrato[],
+  hoy: FechaISO,
+): Local[] {
+  const vigentesPorLocal = new Map<string, Contrato[]>();
+  for (const c of contratos) {
+    if (!contratoVigenteParaApertura(c, hoy)) continue;
+    const lista = vigentesPorLocal.get(c.localId);
+    if (lista) lista.push(c);
+    else vigentesPorLocal.set(c.localId, [c]);
+  }
+  return locales.filter((l) => {
+    if (l.estatus !== "OCUPADO") return false;
+    const vigentes = vigentesPorLocal.get(l.id);
+    return vigentes !== undefined && vigentes.every((c) => !c.apertura);
+  });
 }
 
 /**

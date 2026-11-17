@@ -13,7 +13,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { CLASE_SELECT, Campo } from "@/features/cotizacion/campo";
 
-import { proveedoresActivos, type Licitacion, type ProveedorObra } from "@/domain";
+import { proveedoresActivos, type Licitacion, type Proveedor } from "@/domain";
 import { nombreProveedor } from "./agregados";
 import { validarDescarte } from "./esquemas";
 
@@ -21,7 +21,7 @@ interface DialogoDescarteProps {
   abierto: boolean;
   onCambioAbierto: (abierto: boolean) => void;
   licitacion: Licitacion;
-  proveedores: readonly ProveedorObra[];
+  proveedores: readonly Proveedor[];
   onDescartar: (proveedorId: string, motivo: string) => void;
 }
 

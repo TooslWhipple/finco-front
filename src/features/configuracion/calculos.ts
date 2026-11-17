@@ -32,6 +32,7 @@ export const ACCIONES_MATRIZ: readonly {
       { accion: "regla.editar", etiqueta: "Editar regla del local" },
       { accion: "actualizacionAnual.resolver", etiqueta: "Resolver actualización anual" },
       { accion: "local.liberar", etiqueta: "Liberar un local (terminar el contrato)" },
+      { accion: "local.registrarApertura", etiqueta: "Registrar la apertura del local" },
     ],
   },
   {
@@ -57,6 +58,10 @@ export const ACCIONES_MATRIZ: readonly {
         accion: "mantenimiento.sobregiroAutorizar",
         etiqueta: "Autorizar sobregiros de mantenimiento",
       },
+      {
+        accion: "proveedores.gestionar",
+        etiqueta: "Dar de alta y editar proveedores del padrón",
+      },
     ],
   },
   {
@@ -67,6 +72,10 @@ export const ACCIONES_MATRIZ: readonly {
       { accion: "obra.estimacionRegistrar", etiqueta: "Registrar estimación de pago" },
       { accion: "obra.estimacionAutorizar", etiqueta: "Autorizar estimación de pago" },
       { accion: "licitacion.gestionar", etiqueta: "Gestionar licitación" },
+      {
+        accion: "licitacion.responder",
+        etiqueta: "Responder una licitación desde el portal del contratista",
+      },
     ],
   },
   {

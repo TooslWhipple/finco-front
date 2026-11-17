@@ -21,6 +21,7 @@ import {
   requiereAutorizacion,
   resolverSobregiro,
   siguienteFolio,
+  sobregirosPendientes,
   solicitarSobregiro,
   transicionar,
   uuidCorto,
@@ -104,7 +105,7 @@ describe("invariantes", () => {
   });
 
   it("el proveedor debe atender la categoría", () => {
-    const p = { especialidades: ["PINTURA" as const] };
+    const p = { especialidadesMantenimiento: ["PINTURA" as const] };
     expect(proveedorAtiende(p, "PINTURA")).toBe(true);
     expect(proveedorAtiende(p, "CLIMA")).toBe(false);
     expect(proveedorAtiende(undefined, "PINTURA")).toBe(false);
@@ -112,7 +113,7 @@ describe("invariantes", () => {
 
   it("erroresMantenimiento junta los incumplimientos", () => {
     const ok = erroresMantenimiento(mnt(), {
-      proveedor: { especialidades: ["PINTURA"] },
+      proveedor: { especialidadesMantenimiento: ["PINTURA"] },
     });
     expect(ok).toEqual([]);
     const mal = erroresMantenimiento(
@@ -122,7 +123,7 @@ describe("invariantes", () => {
         cargoA: "LOCATARIO",
         estatus: "EN_PROCESO",
       }),
-      { proveedor: { especialidades: ["CLIMA"] } },
+      { proveedor: { especialidadesMantenimiento: ["CLIMA"] } },
     );
     expect(mal).toHaveLength(4);
   });
@@ -178,7 +179,9 @@ describe("transiciones", () => {
     });
     expect(fin?.evidencia).toEqual([FOTO]);
     expect(
-      erroresMantenimiento(fin!, { proveedor: { especialidades: ["PINTURA"] } }),
+      erroresMantenimiento(fin!, {
+        proveedor: { especialidadesMantenimiento: ["PINTURA"] },
+      }),
     ).toEqual([]);
   });
 
@@ -421,6 +424,25 @@ describe("sobregiro", () => {
       comentario: "Urgente",
       solicitadoPor: "Ana",
     });
+  });
+
+  it("sobregirosPendientes solo devuelve los que esperan a Dirección", () => {
+    const espera = pendiente();
+    const autorizado = resolverSobregiro(
+      { ...pendiente(), id: "mnt-0002" },
+      "AUTORIZADA",
+      { resueltoPor: "Dir", hoy: HOY },
+    )!;
+    const rechazado = resolverSobregiro({ ...pendiente(), id: "mnt-0003" }, "RECHAZADA", {
+      resueltoPor: "Dir",
+      hoy: HOY,
+      comentario: "No",
+    })!;
+    const sinSobregiro = mnt({ id: "mnt-0004" });
+    expect(sobregirosPendientes([espera, autorizado, rechazado, sinSobregiro])).toEqual([
+      espera,
+    ]);
+    expect(sobregirosPendientes([])).toEqual([]);
   });
 
   it("solo se resuelve lo pendiente", () => {

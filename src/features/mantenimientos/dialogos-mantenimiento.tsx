@@ -20,6 +20,7 @@ import {
   DEMO_TODAY,
   erroresMantenimiento,
   excedenteSobregiro,
+  proveedoresDeMantenimiento,
   requiereAutorizacion,
   ETIQUETA_CATEGORIA_MANTENIMIENTO,
   ETIQUETA_TIPO_MANTENIMIENTO,
@@ -171,6 +172,7 @@ export function DialogoCancelarMantenimiento({
 // --- nuevo ----------------------------------------------------------------
 
 const SIN_LOCAL = "";
+const SIN_PROVEEDORES = "No hay proveedores activos para esta categoría en la plaza";
 
 interface FormularioNuevoProps {
   plazas: readonly Plaza[];
@@ -203,14 +205,15 @@ function FormularioNuevo({
 
   const locales = useLocales(plazaId).datos;
   const local: Local | undefined = locales?.find((l) => l.id === localId);
-  const proveedoresDeCategoria = useMemo(
-    () => proveedores.filter((p) => p.especialidades.includes(categoria)),
-    [proveedores, categoria],
+  const proveedoresDisponibles = useMemo(
+    () => proveedoresDeMantenimiento(proveedores, categoria, plazaId),
+    [proveedores, categoria, plazaId],
   );
-  // El proveedor y el cargo se derivan: cambiar de categoría o de local los reacomoda.
-  const proveedorId = proveedoresDeCategoria.some((p) => p.id === proveedorElegido)
+  const sinProveedores = proveedoresDisponibles.length === 0;
+  // El proveedor y el cargo se derivan: cambiar de plaza, categoría o local los reacomoda.
+  const proveedorId = proveedoresDisponibles.some((p) => p.id === proveedorElegido)
     ? proveedorElegido
-    : (proveedoresDeCategoria[0]?.id ?? "");
+    : (proveedoresDisponibles[0]?.id ?? "");
   const puedeCobrarLocatario = local?.estatus === "OCUPADO";
   const cargoA: CargoMantenimiento = puedeCobrarLocatario ? cargoElegido : "PLAZA";
   const origenEfectivo: OrigenMantenimiento =
@@ -392,15 +395,17 @@ function FormularioNuevo({
         <Campo
           etiqueta="Proveedor"
           htmlFor="mnt-proveedor"
-          ayuda="Solo los que atienden la categoría elegida."
+          ayuda="Solo los activos que atienden la categoría en la plaza."
+          error={sinProveedores ? SIN_PROVEEDORES : undefined}
         >
           <select
             id="mnt-proveedor"
             value={proveedorId}
+            disabled={sinProveedores}
             onChange={(e) => setProveedorElegido(e.target.value)}
             className={CLASE_SELECT}
           >
-            {proveedoresDeCategoria.map((p) => (
+            {proveedoresDisponibles.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.nombre}
               </option>
@@ -470,7 +475,7 @@ function FormularioNuevo({
         </p>
       ) : null}
 
-      {intentado && errorDominio ? (
+      {intentado && errorDominio && !sinProveedores ? (
         <p role="alert" className="text-xs text-brand-danger">
           {errorDominio}
         </p>
