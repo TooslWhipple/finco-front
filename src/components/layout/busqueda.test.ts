@@ -10,19 +10,27 @@ import {
 import { MAX_POR_GRUPO, buscarGlobal, type FuentesBusqueda } from "./busqueda";
 
 const cotizacion = crearCotizacion({ id: "COT-2026-0418", prospectoId: "pro-007" });
+const prospecto = crearProspecto({
+  id: "pro-007",
+  nombre: "Café Aurora",
+  rfc: "CAU200101XYZ",
+});
+const farmacia = { id: "L-1", nombre: "Farmacia Central" };
 
 const fuentes: FuentesBusqueda = {
   plazas: [],
   locales: [crearLocal({ id: "A-09", codigo: "A-09" })],
-  locatarios: [{ id: "L-1", nombre: "Farmacia Central" }],
+  locatarios: [farmacia],
   contratos: [
     crearContrato({ id: "ctr-1", locatarioId: "L-1" }),
     contratoDesdeCotizacion(cotizacion),
   ],
-  prospectos: [
-    crearProspecto({ id: "pro-007", nombre: "Café Aurora", rfc: "CAU200101XYZ" }),
-  ],
-  cotizaciones: [cotizacion],
+  prospectos: [prospecto],
+  fuentesLocatario: {
+    locatarios: [farmacia],
+    prospectos: [prospecto],
+    cotizaciones: [cotizacion],
+  },
   terrenos: [crearTerreno({ nombre: "Reserva Norte" })],
 };
 
@@ -55,11 +63,16 @@ describe("buscarGlobal", () => {
       {
         ...fuentes,
         contratos: [contratoDesdeCotizacion(capturada)],
-        cotizaciones: [capturada],
+        fuentesLocatario: { ...fuentes.fuentesLocatario, cotizaciones: [capturada] },
       },
       "prospecto demo",
     ).contratos;
     expect(encontrado.folio).toBe("CTR-2026-0500");
+  });
+
+  it("nombra al locatario aunque el prospecto no sea visible para la sesión", () => {
+    const [encontrado] = buscarGlobal({ ...fuentes, prospectos: [] }, "aurora").contratos;
+    expect(encontrado.locatario).toBe("Café Aurora");
   });
 
   it("busca prospectos por razón social, RFC o giro y terrenos por nombre", () => {

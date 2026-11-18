@@ -24,17 +24,17 @@ import {
   ESTADOS_VISIBLES_CONTRATO,
   estadoVisibleContrato,
   localesSinAbrir,
+  nombreLocatario,
   type Contrato,
 } from "@/domain";
 import { VistaPreviaContrato } from "@/features/cotizacion/vista-previa-contrato";
 import {
   useCiudades,
   useContratosVivos,
+  useFuentesLocatario,
   useTodasLasCotizaciones,
   useLocales,
-  useLocatarios,
   usePlazas,
-  useProspectos,
   useSesion,
 } from "@/hooks";
 import { formatFecha, formatMoneda, formatNumero } from "@/lib/format";
@@ -61,9 +61,8 @@ export function Contratos({ contratoInicialId }: ContratosProps) {
   const contratos = useContratosVivos().datos;
   const plazas = usePlazas().datos;
   const locales = useLocales().datos;
-  const locatarios = useLocatarios().datos;
+  const fuentesLocatario = useFuentesLocatario();
   const ciudades = useCiudades().datos;
-  const prospectos = useProspectos().datos;
   const cotizaciones = useTodasLasCotizaciones();
   const enviarContratoAFirma = useAppStore((s) => s.enviarContratoAFirma);
   const registrarFirmaContrato = useAppStore((s) => s.registrarFirmaContrato);
@@ -86,19 +85,6 @@ export function Contratos({ contratoInicialId }: ContratosProps) {
     () => new Map((locales ?? []).map((l) => [l.id, l.plazaId])),
     [locales],
   );
-  // Un contrato en trámite aún no tiene locatario del catálogo: su "locatario" es el prospecto.
-  const nombres = useMemo(
-    () =>
-      new Map([
-        ...prospectos.map((p) => [p.id, p.nombre] as const),
-        ...(locatarios ?? []).map((l) => [l.id, l.nombre] as const),
-      ]),
-    [locatarios, prospectos],
-  );
-  const nombreDe = (c: Contrato) =>
-    nombres.get(c.locatarioId) ??
-    cotizaciones.find((q) => q.id === c.cotizacionId)?.prospecto.nombre ??
-    "Locatario";
 
   const visibles = useMemo(
     () => filtrarContratos(lista, filtro, plazaDeLocal, DEMO_TODAY),
@@ -132,7 +118,7 @@ export function Contratos({ contratoInicialId }: ContratosProps) {
       {
         id: "locatario",
         header: "Locatario",
-        accessorFn: (c) => nombres.get(c.locatarioId) ?? "Locatario",
+        accessorFn: (c) => nombreLocatario(c.locatarioId, fuentesLocatario),
       },
       {
         id: "local",
@@ -185,7 +171,7 @@ export function Contratos({ contratoInicialId }: ContratosProps) {
         cell: ({ row }) => <MoneyAmount valor={row.original.rentaMensual} />,
       },
     ],
-    [nombres, localesPorId, plazasPorId],
+    [fuentesLocatario, localesPorId, plazasPorId],
   );
 
   const conteoEstado = (estado: string) =>
@@ -298,7 +284,7 @@ export function Contratos({ contratoInicialId }: ContratosProps) {
               <DetalleContrato
                 contrato={seleccionado}
                 hoy={DEMO_TODAY}
-                locatario={nombreDe(seleccionado)}
+                locatario={nombreLocatario(seleccionado.locatarioId, fuentesLocatario)}
                 local={localSel}
                 plaza={plazaSel}
                 cotizacion={cotizacionSel}

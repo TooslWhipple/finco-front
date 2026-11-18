@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/command";
 import {
   useContratosVivos,
-  useCotizaciones,
+  useFuentesLocatario,
   useLocales,
   useLocatarios,
   usePlazas,
@@ -47,7 +47,7 @@ function ResultadosBusqueda({
   const locatarios = useLocatarios().datos;
   const contratos = useContratosVivos().datos;
   const prospectos = useProspectos().datos;
-  const cotizaciones = useCotizaciones();
+  const fuentesLocatario = useFuentesLocatario();
   const terrenos = useTerrenos().datos;
 
   const resultados = useMemo(
@@ -59,7 +59,7 @@ function ResultadosBusqueda({
           locatarios: locatarios ?? [],
           contratos: contratos ?? [],
           prospectos,
-          cotizaciones,
+          fuentesLocatario,
           terrenos,
         },
         consulta,
@@ -70,7 +70,7 @@ function ResultadosBusqueda({
       locatarios,
       contratos,
       prospectos,
-      cotizaciones,
+      fuentesLocatario,
       terrenos,
       consulta,
     ],
@@ -131,7 +131,7 @@ function ResultadosBusqueda({
               <span>{folio}</span>
               <span className="text-brand-text-muted">
                 {codigoLocal ? `Local ${codigoLocal} · ` : ""}
-                {locatario ? `${locatario} · ` : ""}
+                {`${locatario} · `}
                 {formatMoneda(contrato.rentaMensual)}
               </span>
             </CommandItem>

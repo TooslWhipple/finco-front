@@ -13,7 +13,11 @@ const datos: DatosReporte = {
   facturas: seed.facturas,
   prospectos: seed.prospectos,
   terrenos: seed.terrenos,
-  locatarios: seed.locatarios,
+  fuentesLocatario: {
+    locatarios: seed.locatarios,
+    prospectos: seed.prospectos,
+    cotizaciones: seed.cotizaciones,
+  },
   cotizaciones: seed.cotizaciones,
   excepciones: seed.excepciones,
   hoy: DEMO_TODAY,

@@ -1,11 +1,12 @@
-import type {
-  Contrato,
-  Cotizacion,
-  Local,
-  Locatario,
-  Plaza,
-  Prospecto,
-  Terreno,
+import {
+  nombreLocatario,
+  type Contrato,
+  type FuentesLocatario,
+  type Local,
+  type Locatario,
+  type Plaza,
+  type Prospecto,
+  type Terreno,
 } from "@/domain";
 
 /** Tope de resultados por grupo del buscador. */
@@ -17,8 +18,10 @@ export interface FuentesBusqueda {
   locatarios: readonly Locatario[];
   /** Contratos vivos: los del seed más los que nacieron de cotizaciones en la demo. */
   contratos: readonly Contrato[];
+  /** Prospectos visibles para la sesión: los que lista el grupo de prospectos. */
   prospectos: readonly Prospecto[];
-  cotizaciones: readonly Cotizacion[];
+  /** De dónde sale el nombre del locatario de cada contrato (`nombreLocatario`). */
+  fuentesLocatario: FuentesLocatario;
   terrenos: readonly Terreno[];
 }
 
@@ -32,7 +35,7 @@ export interface ContratoEncontrado {
   /** Folio que muestra /contratos (CTR-…); el id si el contrato no tiene folio. */
   folio: string;
   codigoLocal?: string;
-  locatario?: string;
+  locatario: string;
 }
 
 export interface ResultadosBusqueda {
@@ -61,14 +64,6 @@ export function buscarGlobal(
 
   const plazaPorId = new Map(fuentes.plazas.map((p) => [p.id, p.nombre]));
   const codigoPorLocal = new Map(fuentes.locales.map((l) => [l.id, l.codigo]));
-  // Un contrato en trámite aún no tiene locatario del catálogo: su "locatario" es el prospecto.
-  const nombres = new Map([
-    ...fuentes.prospectos.map((p) => [p.id, p.nombre] as const),
-    ...fuentes.locatarios.map((l) => [l.id, l.nombre] as const),
-  ]);
-  const nombreCotizacion = new Map(
-    fuentes.cotizaciones.map((c) => [c.id, c.prospecto.nombre]),
-  );
 
   const locales = fuentes.locales.map((local) => ({
     local,
@@ -78,9 +73,7 @@ export function buscarGlobal(
     contrato,
     folio: contrato.folio ?? contrato.id,
     codigoLocal: codigoPorLocal.get(contrato.localId),
-    locatario:
-      nombres.get(contrato.locatarioId) ??
-      (contrato.cotizacionId ? nombreCotizacion.get(contrato.cotizacionId) : undefined),
+    locatario: nombreLocatario(contrato.locatarioId, fuentes.fuentesLocatario),
   }));
 
   return {
@@ -89,7 +82,7 @@ export function buscarGlobal(
     locatarios: filtrar(fuentes.locatarios, (l) => l.nombre),
     contratos: filtrar(
       contratos,
-      (c) => `${c.folio} ${c.contrato.id} ${c.codigoLocal ?? ""} ${c.locatario ?? ""}`,
+      (c) => `${c.folio} ${c.contrato.id} ${c.codigoLocal ?? ""} ${c.locatario}`,
     ),
     prospectos: filtrar(fuentes.prospectos, (p) => `${p.nombre} ${p.rfc} ${p.giro}`),
     terrenos: filtrar(fuentes.terrenos, (t) => t.nombre),

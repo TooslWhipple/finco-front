@@ -6,12 +6,13 @@ import Link from "next/link";
 import { EmptyState } from "@/components/shared";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { MACHOTE_ARRENDAMIENTO } from "@/data/machote";
+import { nombreLocatario } from "@/domain";
 import {
   useContratosVivos,
+  useFuentesLocatario,
   useLocales,
   useLocatarios,
   usePlazas,
-  useProspectos,
   useTodasLasCotizaciones,
 } from "@/hooks";
 import { cn } from "@/lib/utils";
@@ -32,7 +33,7 @@ export function ContratoImprimible({ folio }: { folio: string }) {
   const locales = useLocales().datos;
   const plazas = usePlazas().datos;
   const locatarios = useLocatarios().datos;
-  const prospectos = useProspectos().datos;
+  const fuentesLocatario = useFuentesLocatario();
   const cotizaciones = useTodasLasCotizaciones();
 
   if (!contratos || !locales || !plazas || !locatarios) {
@@ -59,11 +60,7 @@ export function ContratoImprimible({ folio }: { folio: string }) {
   }
 
   const cotizacion = cotizaciones.find((q) => q.id === contrato.cotizacionId);
-  const locatario =
-    locatarios.find((l) => l.id === contrato.locatarioId)?.nombre ??
-    prospectos.find((p) => p.id === contrato.locatarioId)?.nombre ??
-    cotizacion?.prospecto.nombre ??
-    "Locatario";
+  const locatario = nombreLocatario(contrato.locatarioId, fuentesLocatario);
   const doc = renderContrato(
     MACHOTE_ARRENDAMIENTO,
     contrato,

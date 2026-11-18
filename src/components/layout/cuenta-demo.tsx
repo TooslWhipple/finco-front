@@ -15,27 +15,28 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { INICIO_POR_ROL } from "@/config/permissions";
 import { ETIQUETA_ROL, USUARIOS_DEMO } from "@/config/usuarios";
-import type { Rol } from "@/domain";
+import type { Usuario } from "@/domain";
 import { useSesion } from "@/hooks";
 import { useAppStore } from "@/store";
 import { AvatarUsuario } from "./avatar-usuario";
 
 /**
- * Selector de rol: cambia de usuario en vivo y conserva la ruta actual (si el rol
- * no la ve, el guard de ruta muestra el candado). La excepción es el contratista,
- * externo y con un solo módulo: al entrar o salir de ese rol se navega al inicio
- * del rol nuevo (`INICIO_POR_ROL`).
+ * Selector de rol: cambia de usuario en vivo (también entre dos del mismo rol,
+ * como los vendedores) y conserva la ruta actual (si el rol no la ve, el guard de
+ * ruta muestra el candado). La excepción es el contratista, externo y con un solo
+ * módulo: al entrar o salir de ese rol se navega al inicio del rol nuevo
+ * (`INICIO_POR_ROL`).
  */
 export function SelectorRol() {
   const router = useRouter();
-  const { rol } = useSesion();
-  const cambiarRol = useAppStore((s) => s.cambiarRol);
+  const { usuario, rol } = useSesion();
+  const cambiarUsuario = useAppStore((s) => s.cambiarUsuario);
 
-  const elegir = (nuevo: Rol) => {
-    if (nuevo === rol) return;
-    cambiarRol(nuevo);
-    if (nuevo === "CONTRATISTA" || rol === "CONTRATISTA") {
-      router.push(INICIO_POR_ROL[nuevo]);
+  const elegir = (nuevo: Usuario) => {
+    if (nuevo.id === usuario?.id) return;
+    cambiarUsuario(nuevo.id);
+    if (nuevo.rol === "CONTRATISTA" || rol === "CONTRATISTA") {
+      router.push(INICIO_POR_ROL[nuevo.rol]);
     }
   };
 
@@ -52,12 +53,12 @@ export function SelectorRol() {
         <DropdownMenuGroup>
           <DropdownMenuLabel>Cambiar de rol</DropdownMenuLabel>
           {USUARIOS_DEMO.map((u) => (
-            <DropdownMenuItem key={u.id} onClick={() => elegir(u.rol)}>
+            <DropdownMenuItem key={u.id} onClick={() => elegir(u)}>
               <span className="flex-1">
                 {ETIQUETA_ROL[u.rol]}
                 <span className="block text-xs text-muted-foreground">{u.nombre}</span>
               </span>
-              {u.rol === rol ? <Check aria-label="Rol actual" /> : null}
+              {u.id === usuario?.id ? <Check aria-label="Usuario actual" /> : null}
             </DropdownMenuItem>
           ))}
         </DropdownMenuGroup>
