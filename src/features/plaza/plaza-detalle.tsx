@@ -83,6 +83,11 @@ export function PlazaDetalle({ plazaId }: { plazaId: string }) {
   const router = useRouter();
   const params = useSearchParams();
   const { rol } = useSesion();
+  const veCobranza = can(rol, "cobranza.ver");
+  /** Sin la cobranza, el filtro no ofrece "Con atraso" (dependería de las facturas). */
+  const categoriasFiltro = veCobranza
+    ? CATEGORIAS
+    : CATEGORIAS.filter((c) => c !== "CON_ATRASO");
   const plaza = usePlaza(plazaId);
   const ciudades = useCiudades().datos;
   const plantas = usePlantas(plazaId).datos;
@@ -332,13 +337,15 @@ export function PlazaDetalle({ plazaId }: { plazaId: string }) {
               valor={resumen ? formatNumero(resumen.porVencer) : "—"}
               subtexto="próximos 90 días"
             />
-            <KpiCard
-              etiqueta="Con atraso"
-              valor={resumen ? formatNumero(resumen.conAtraso) : "—"}
-              subtexto={
-                resumen ? `${formatMoneda(resumen.montoVencido)} vencido` : undefined
-              }
-            />
+            {veCobranza ? (
+              <KpiCard
+                etiqueta="Con atraso"
+                valor={resumen ? formatNumero(resumen.conAtraso) : "—"}
+                subtexto={
+                  resumen ? `${formatMoneda(resumen.montoVencido)} vencido` : undefined
+                }
+              />
+            ) : null}
           </KpiRow>
 
           <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_21.5rem]">
@@ -366,7 +373,7 @@ export function PlazaDetalle({ plazaId }: { plazaId: string }) {
                   onChange={setEstatus}
                   opciones={[
                     { valor: TODOS, etiqueta: "Estatus" },
-                    ...CATEGORIAS.map((c) => ({
+                    ...categoriasFiltro.map((c) => ({
                       valor: c,
                       etiqueta: ETIQUETA_CATEGORIA[c],
                     })),

@@ -6,21 +6,28 @@ import {
   DEMO_TODAY,
   facturasDelCorte,
   filtrarPorUbicacion,
+  foliosFacturaDeLocal,
+  mesesFoliosFactura,
   mezclarFacturas,
   filtrarPorVendedor,
   licitacionesDeProveedor,
   resumenObra,
+  type AtribucionContratos,
+  type Comision,
   type Contrato,
   type EventoSync,
   type Factura,
+  type FolioFactura,
   type FuentesLocatario,
   type Integracion,
   type Local,
   type Plaza,
 } from "@/domain";
 import { plazasConTerrenos } from "@/data/terrenos";
+import { can, veTodoElEquipo } from "@/config/permissions";
 import { usuarioPorId } from "@/config/usuarios";
 import { useAppStore } from "@/store";
+import { useSesionStore } from "@/store/sesion";
 import {
   aplicarAjuste,
   aplicarAperturas,
@@ -32,11 +39,16 @@ import {
 import type { EstadoIntegracion } from "@/services";
 import { useConsulta } from "./use-consulta";
 
-/** Usuario y rol de la sesión (nulos sin sesión). */
+/**
+ * Usuario y rol que ve la pantalla (nulos sin sesión), si la cuenta puede
+ * suplantar y el usuario de la cuenta que se autenticó.
+ */
 export function useSesion() {
-  const usuarioId = useAppStore((s) => s.session.usuarioId);
+  const usuarioId = useSesionStore((s) => s.usuarioId);
+  const cuentaUsuarioId = useSesionStore((s) => s.cuentaUsuarioId);
+  const puedeSuplantar = useSesionStore((s) => s.puedeSuplantar);
   const usuario = usuarioPorId(usuarioId);
-  return { usuario, rol: usuario?.rol ?? null };
+  return { usuario, rol: usuario?.rol ?? null, puedeSuplantar, cuentaUsuarioId };
 }
 
 export function useCiudades() {
@@ -356,6 +368,76 @@ export function useProveedores() {
   return useAppStore((s) => s.proveedores.padron);
 }
 
+/** Catálogo de campañas comerciales (parte del seed, editable en la demo). */
+export function useCampanas() {
+  return useAppStore((s) => s.campanas.campanas);
+}
+
+/** Casos de servicio a clientes (parte del seed, editables en la demo). */
+export function useCasos() {
+  return useAppStore((s) => s.casos.casos);
+}
+
+/**
+ * Comisiones visibles para la sesión: quien ve todo el equipo ve todas; el
+ * resto, solo las que cobra. Sin sesión no hay ninguna.
+ */
+export function useComisiones(): Comision[] {
+  const todas = useAppStore((s) => s.comisiones.comisiones);
+  const { usuario } = useSesion();
+  return useMemo(() => {
+    if (!usuario) return [];
+    if (veTodoElEquipo(usuario.rol)) return todas;
+    return todas.filter((c) => c.usuarioId === usuario.id);
+  }, [todas, usuario]);
+}
+
+/** Esquema de comisiones vigente (el que aplicará a la próxima firma). */
+export function useEsquemaComisiones() {
+  return useAppStore((s) => s.comisiones.esquema);
+}
+
+const MESES_FOLIOS = mesesFoliosFactura(DEMO_TODAY);
+
+/**
+ * Folios (`id`, `folio` y `mes`, sin importes) de las facturas del local de
+ * los tres últimos meses, para ligar una aclaración. No depende de
+ * `cobranza.ver`: quien atiende al locatario ve el folio, nunca el monto. Los
+ * cortes se deduplican porque el de un mes repite las rentas vencidas de
+ * meses anteriores; las emitidas en la demo se suman sin recargos ni pagos
+ * (no llevan folio o no cambian el folio).
+ */
+export function useFoliosFacturaLocal(localId: string): {
+  datos: FolioFactura[] | undefined;
+  cargando: boolean;
+} {
+  const cortes = useConsulta((r) =>
+    Promise.all(MESES_FOLIOS.map((mes) => r.cobranza.listarCorte(mes))),
+  );
+  const emitidas = useAppStore((s) => s.cobranza.emitidas);
+  const datos = useMemo<FolioFactura[] | undefined>(() => {
+    if (!cortes.datos) return undefined;
+    const unicas = [...new Map(cortes.datos.flat().map((f) => [f.id, f])).values()];
+    return foliosFacturaDeLocal(
+      mezclarFacturas(unicas, emitidas, [], {}),
+      localId,
+      DEMO_TODAY,
+    );
+  }, [cortes.datos, emitidas, localId]);
+  return { datos, cargando: cortes.cargando };
+}
+
+/** Referencia estable mientras la atribución carga. */
+const SIN_ATRIBUCION: AtribucionContratos = {};
+
+/**
+ * Atribución demo (vendedor y campaña) de los contratos históricos sin
+ * cotización; dato de solo lectura del repositorio de contratos.
+ */
+export function useAtribucionContratos(): AtribucionContratos {
+  return useConsulta((r) => r.contratos.atribucionContratos()).datos ?? SIN_ATRIBUCION;
+}
+
 export function useExcepciones() {
   return useAppStore((s) => s.aprobaciones.excepciones);
 }
@@ -364,11 +446,21 @@ export function useCambiosAnuales() {
   return useAppStore((s) => s.aprobaciones.cambiosAnuales);
 }
 
+/** Resultado estable de `useFacturas` para quien no ve la cobranza. */
+const SIN_FACTURAS: Factura[] = [];
+const SIN_FACTURAS_CONSULTA = { datos: SIN_FACTURAS, cargando: false };
+
 /**
  * Cuentas por cobrar del corte: la semilla más las facturas emitidas y los
  * recargos de la demo, con los pagos y el seguimiento registrados en la demo.
+ * Sin `cobranza.ver` devuelve una lista vacía estable (los hooks se llaman
+ * igual, para no cambiar su orden).
  */
-export function useFacturas(mes: string) {
+export function useFacturas(mes: string): {
+  datos: Factura[] | undefined;
+  cargando: boolean;
+} {
+  const { rol } = useSesion();
   const base = useConsulta((r) => r.cobranza.listarCorte(mes), [mes]);
   const seguimientos = useAppStore((s) => s.cobranza.seguimientos);
   const emitidas = useAppStore((s) => s.cobranza.emitidas);
@@ -389,6 +481,7 @@ export function useFacturas(mes: string) {
       }),
     [base.datos, emitidas, recargos, pagos, mes, seguimientos],
   );
+  if (!can(rol, "cobranza.ver")) return SIN_FACTURAS_CONSULTA;
   return { datos, cargando: base.cargando };
 }
 

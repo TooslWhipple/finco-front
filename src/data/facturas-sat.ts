@@ -1,6 +1,7 @@
 import {
   DEMO_TODAY,
   ETIQUETA_CATEGORIA_MANTENIMIENTO,
+  redondearCentavos,
   sumarDias,
   type FacturaSat,
   type FechaISO,
@@ -32,8 +33,6 @@ function uuidFicticio(rng: Prng): string {
   return `${hex(rng, 8)}-${hex(rng, 4)}-4${hex(rng, 3)}-${variante}${hex(rng, 3)}-${hex(rng, 12)}`.toUpperCase();
 }
 
-const aCentavos = (n: number) => Math.round(n * 100) / 100;
-
 function factura(
   rng: Prng,
   consecutivo: number,
@@ -43,7 +42,7 @@ function factura(
   ligada: boolean,
 ): FacturaSat {
   const proveedor = PROVEEDORES.find((p) => p.id === m.proveedorId);
-  const subtotal = aCentavos(total / TASA_IVA);
+  const subtotal = redondearCentavos(total / TASA_IVA);
   const base: FechaISO = m.fechaFin ?? m.fechaInicio ?? m.fechaProgramada;
   const fecha = sumarDias(base, rng.entero(0, 2));
   return {
@@ -53,7 +52,7 @@ function factura(
     emisor: proveedor?.nombre ?? m.proveedorId,
     fecha: fecha > DEMO_TODAY ? DEMO_TODAY : fecha,
     subtotal,
-    iva: aCentavos(total - subtotal),
+    iva: redondearCentavos(total - subtotal),
     total,
     concepto,
     plazaId: m.plazaId,
@@ -66,7 +65,7 @@ const concepto = (m: Mantenimiento) =>
 
 /** Total de una factura libre: cerca del costo del trabajo, sin igualarlo. */
 const totalCercano = (rng: Prng, m: Mantenimiento) =>
-  aCentavos((m.costoReal ?? m.costoEstimado) * (0.97 + rng.siguiente() * 0.06));
+  redondearCentavos((m.costoReal ?? m.costoEstimado) * (0.97 + rng.siguiente() * 0.06));
 
 /**
  * ~15 CFDI recibidos simulados. Las ligadas cuadran con el costo real del trabajo

@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { MACHOTE_ARRENDAMIENTO } from "@/data/machote";
 import { contratoDesdeCotizacion } from "@/domain";
-import type { Ciudad, Cotizacion, Local, Plaza } from "@/domain";
+import type { Ciudad, Cotizacion, Local, Plaza, Prospecto } from "@/domain";
 import { rutaContratoImprimible } from "@/features/contratos/contrato-imprimible";
 import { renderContrato } from "@/features/contratos/render-contrato";
 import { buttonVariants } from "@/components/ui/button";
@@ -17,6 +17,8 @@ interface VistaPreviaContratoProps {
   folioContrato: string;
   /** Con el contrato ya generado, se ofrece abrir el documento imprimible. */
   contratoGenerado?: boolean;
+  /** Prospecto ligado a la cotización: aporta el RFC real al contrato. */
+  prospecto?: Prospecto;
 }
 
 /** Hoja del contrato siempre visible, redactada con el machote y los datos de la cotización. */
@@ -27,6 +29,7 @@ export function VistaPreviaContrato({
   ciudad,
   folioContrato,
   contratoGenerado = false,
+  prospecto,
 }: VistaPreviaContratoProps) {
   const doc = renderContrato(
     MACHOTE_ARRENDAMIENTO,
@@ -35,6 +38,7 @@ export function VistaPreviaContrato({
     local,
     plaza,
     cotizacion.prospecto.nombre,
+    prospecto,
   );
   return (
     <aside

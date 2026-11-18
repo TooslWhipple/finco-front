@@ -1,5 +1,6 @@
-import { ETIQUETA_SEMAFORO_TERRENO, semaforoTerreno } from "@/domain";
-import { formatNumero, formatPorcentaje } from "@/lib/format";
+import { can, type Accion } from "@/config/permissions";
+import { ETIQUETA_SEMAFORO_TERRENO, semaforoTerreno, type Rol } from "@/domain";
+import { formatLista, formatNumero, formatPorcentaje } from "@/lib/format";
 import {
   MARGEN_AJUSTADO,
   reporteCobranza,
@@ -19,9 +20,13 @@ export interface RespuestaAsistente {
 export interface PreguntaAsistente {
   id: string;
   texto: string;
+  /** Tema con el que el asistente anuncia lo que sabe contestar (en minúsculas). */
+  tema: string;
   /** Palabras (sin acentos, en minúsculas) con las que una pregunta libre cae aquí. */
   claves: readonly string[];
   responder: (datos: DatosReporte) => RespuestaAsistente;
+  /** Acción que debe tener el rol para ver la pregunta; sin ella la ven todos. */
+  requiere?: Accion;
 }
 
 const MAX_PUNTOS = 6;
@@ -103,36 +108,44 @@ export const PREGUNTAS_ASISTENTE: readonly PreguntaAsistente[] = [
   {
     id: "ocupacion-baja",
     texto: "¿Qué plaza tiene la ocupación más baja?",
+    tema: "ocupación",
     claves: ["ocupacion", "ocupad", "vacia", "vacante"],
     responder: plazaMenosOcupada,
   },
   {
     id: "cartera-vencida",
     texto: "¿Cuánta cartera vencida tengo y de qué antigüedad?",
+    tema: "cobranza",
     claves: ["cartera", "cobranza", "cobrar", "moros", "saldo", "deuda", "adeudo"],
     responder: carteraVencida,
+    requiere: "cobranza.ver",
   },
   {
     id: "contratos-por-vencer",
     texto: "¿Cuántos contratos vencen pronto?",
+    tema: "contratos",
     claves: ["contrato", "vencen", "vencimiento", "renovar", "renovacion"],
     responder: contratosPorVencer,
   },
   {
     id: "embudo",
     texto: "¿Cómo va el embudo de prospectos?",
+    tema: "prospectos",
     claves: ["embudo", "prospecto", "pipeline", "conversion", "cierre"],
     responder: embudo,
   },
   {
     id: "proyectos-atrasados",
     texto: "¿Qué proyectos van atrasados?",
+    tema: "proyectos",
     claves: ["proyecto", "terreno", "obra", "construccion", "retraso", "atrasad"],
     responder: proyectosAtrasados,
+    requiere: "terrenos.ver",
   },
   {
     id: "margen-minimo",
     texto: "¿Dónde me falta margen sobre el precio mínimo?",
+    tema: "precios",
     claves: ["precio", "margen", "minimo", "renta", "tarifa"],
     responder: margenAjustado,
   },
@@ -145,12 +158,28 @@ function normalizar(texto: string): string {
     .toLowerCase();
 }
 
-/** Pregunta del catálogo que mejor coincide con el texto libre; `null` si ninguna. */
-export function buscarPregunta(texto: string): PreguntaAsistente | null {
+/** Preguntas del catálogo que el rol puede hacer (las que no requieren nada, o su acción). */
+export function preguntasPara(rol: Rol | null): readonly PreguntaAsistente[] {
+  return PREGUNTAS_ASISTENTE.filter((p) => !p.requiere || can(rol, p.requiere));
+}
+
+/** Temas de las preguntas, enumerados en prosa: "ocupación, contratos y precios". */
+export function temasDe(preguntas: readonly PreguntaAsistente[]): string {
+  return formatLista(preguntas.map((p) => p.tema));
+}
+
+/**
+ * Pregunta de `preguntas` que mejor coincide con el texto libre; `null` si
+ * ninguna. Solo busca en la lista dada, así no contesta lo que el rol no ve.
+ */
+export function buscarPregunta(
+  texto: string,
+  preguntas: readonly PreguntaAsistente[],
+): PreguntaAsistente | null {
   const limpio = normalizar(texto);
   let mejor: PreguntaAsistente | null = null;
   let puntaje = 0;
-  for (const pregunta of PREGUNTAS_ASISTENTE) {
+  for (const pregunta of preguntas) {
     const aciertos = pregunta.claves.filter((c) => limpio.includes(c)).length;
     if (aciertos > puntaje) {
       mejor = pregunta;

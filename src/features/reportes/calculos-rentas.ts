@@ -2,6 +2,7 @@ import {
   RANGOS_RENTA,
   cumplimientoPlan,
   diasEntre,
+  mesesDeContrato,
   nombreLocatario,
   rentaVsMinimo,
   rentasDeLocales,
@@ -31,8 +32,6 @@ const TONO_RANGO: Record<RangoRenta, TonoBarra> = {
   MAS_10: "verde",
 };
 
-const DIAS_POR_MES = 30.4375;
-
 const ETIQUETA_ESTADO: Record<ExcepcionPrecio["estado"], string> = {
   PENDIENTE: "Por autorizar",
   AUTORIZADA_DIRECCION: "Por aplicar",
@@ -49,11 +48,6 @@ export function contratosVigentes(datos: DatosReporte): Map<string, Contrato> {
     }
   }
   return porLocal;
-}
-
-/** Meses de un contrato, redondeados. */
-function mesesDe(contrato: Pick<Contrato, "inicio" | "fin">): number {
-  return Math.round(diasEntre(contrato.inicio, contrato.fin) / DIAS_POR_MES);
 }
 
 /** "Rentas vs mínimo por local": cuánto se rentó arriba (o abajo) del mínimo autorizado. */
@@ -132,7 +126,7 @@ function filaExcepcion(
   const locatario = contrato
     ? nombreLocatario(contrato.locatarioId, datos.fuentesLocatario)
     : undefined;
-  const plazo = cotizacion?.plazoMeses ?? (contrato ? mesesDe(contrato) : 0);
+  const plazo = cotizacion?.plazoMeses ?? (contrato ? mesesDeContrato(contrato) : 0);
   const descuento = e.precioMinimo - e.rentaSolicitada;
   return {
     plazaId: plaza?.id ?? "",

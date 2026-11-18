@@ -1,9 +1,9 @@
-import { ID_TERRENO_HEROE } from "@/data/obra";
 import { ROLES_VEN_EQUIPO, type Rol } from "@/domain";
 
 export type Accion =
   | "cotizaciones.crear"
   | "comercial.verEquipo"
+  | "campanas.gestionar"
   | "contrato.generar"
   | "excepcion.solicitar"
   | "excepcion.autorizar"
@@ -20,11 +20,16 @@ export type Accion =
   | "actualizacionAnual.resolver"
   | "local.liberar"
   | "local.registrarApertura"
+  | "cobranza.ver"
   | "cobranza.gestionar"
   | "cobranza.avisosProgramar"
   | "integraciones.sincronizar"
   | "prospectos.gestionar"
   | "contratos.gestionar"
+  | "casos.gestionar"
+  | "comisiones.pagar"
+  | "comisiones.esquemaEditar"
+  | "terrenos.ver"
   | "terrenos.gestionar"
   | "mantenimientos.gestionar"
   | "mantenimiento.presupuestoEditar"
@@ -35,6 +40,7 @@ export type Accion =
 const TODAS: readonly Accion[] = [
   "cotizaciones.crear",
   "comercial.verEquipo",
+  "campanas.gestionar",
   "contrato.generar",
   "excepcion.solicitar",
   "excepcion.autorizar",
@@ -51,11 +57,16 @@ const TODAS: readonly Accion[] = [
   "actualizacionAnual.resolver",
   "local.liberar",
   "local.registrarApertura",
+  "cobranza.ver",
   "cobranza.gestionar",
   "cobranza.avisosProgramar",
   "integraciones.sincronizar",
   "prospectos.gestionar",
   "contratos.gestionar",
+  "casos.gestionar",
+  "comisiones.pagar",
+  "comisiones.esquemaEditar",
+  "terrenos.ver",
   "terrenos.gestionar",
   "mantenimientos.gestionar",
   "mantenimiento.presupuestoEditar",
@@ -78,12 +89,20 @@ export const PERMISOS: Record<Rol, readonly Accion[]> = {
   DIRECCION: [
     "excepcion.autorizar",
     "comercial.verEquipo",
+    "campanas.gestionar",
+    "casos.gestionar",
+    "comisiones.pagar",
+    "comisiones.esquemaEditar",
     "mantenimiento.sobregiroAutorizar",
+    "cobranza.ver",
+    "terrenos.ver",
   ],
   VENTAS: ACCIONES_VENTAS,
-  GERENTE_COMERCIAL: [...ACCIONES_VENTAS, "comercial.verEquipo"],
+  GERENTE_COMERCIAL: [...ACCIONES_VENTAS, "comercial.verEquipo", "campanas.gestionar"],
   SUPERADMIN: TODAS,
   COBRANZA: [
+    "cobranza.ver",
+    "terrenos.ver",
     "local.liberar",
     "local.registrarApertura",
     "cobranza.gestionar",
@@ -94,6 +113,8 @@ export const PERMISOS: Record<Rol, readonly Accion[]> = {
     "excepcion.aplicar",
     "precioMinimo.editar",
     "regla.editar",
+    "cobranza.ver",
+    "terrenos.ver",
     "terrenos.gestionar",
     "metaIngresos.editar",
     "obra.corteValidar",
@@ -105,8 +126,9 @@ export const PERMISOS: Record<Rol, readonly Accion[]> = {
     "mantenimiento.presupuestoEditar",
     "proveedores.gestionar",
   ],
-  SUPERVISOR_OBRA: ["obra.corteCapturar", "obra.estimacionRegistrar"],
+  SUPERVISOR_OBRA: ["terrenos.ver", "obra.corteCapturar", "obra.estimacionRegistrar"],
   CONTRATISTA: ["licitacion.responder"],
+  ATENCION_CLIENTES: ["casos.gestionar"],
 };
 
 export function can(rol: Rol | null | undefined, accion: Accion): boolean {
@@ -118,14 +140,5 @@ export function veTodoElEquipo(rol: Rol): boolean {
   return ROLES_VEN_EQUIPO.includes(rol);
 }
 
-/** Pantalla de inicio de cada rol. */
-export const INICIO_POR_ROL: Record<Rol, string> = {
-  DIRECCION: "/",
-  VENTAS: "/disponibilidad",
-  GERENTE_COMERCIAL: "/resumen-comercial",
-  SUPERADMIN: "/precios-y-reglas",
-  COBRANZA: "/cobranza",
-  PMO: "/terrenos-y-proyectos",
-  SUPERVISOR_OBRA: `/terrenos-y-proyectos/${ID_TERRENO_HEROE}`,
-  CONTRATISTA: "/mis-licitaciones",
-};
+/** Pantalla de inicio de cada rol (definida junto a las reglas de ruta). */
+export { INICIO_POR_ROL } from "./acceso-rutas";

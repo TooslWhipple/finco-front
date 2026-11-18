@@ -77,7 +77,10 @@ function crearProspectosMock(seed: Seed): ProspectosRepository {
 }
 
 function crearContratosMock(seed: Seed): ContratosRepository {
-  return { listar: async () => [...seed.contratos] };
+  return {
+    listar: async () => [...seed.contratos],
+    atribucionContratos: async () => ({ ...seed.atribucionContratos }),
+  };
 }
 
 function crearTerrenosMock(seed: Seed): TerrenosRepository {

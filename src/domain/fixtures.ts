@@ -92,8 +92,15 @@ export function crearProspecto(parcial: Partial<Prospecto> = {}): Prospecto {
   return {
     id: "pro-001",
     nombre: "Prospecto Demo",
-    documentosCompletos: true,
     rfc: "PDE010101AAA",
+    tipoPersona: "MORAL",
+    documentos: {
+      IDENTIFICACION: "2026-10-01",
+      CONSTANCIA_FISCAL: "2026-10-01",
+      COMPROBANTE_DOMICILIO: "2026-10-01",
+      ACTA_CONSTITUTIVA: "2026-10-01",
+      PODER_REPRESENTANTE: "2026-10-01",
+    },
     giro: "Cafetería",
     contacto: { nombre: "Ana Demo", telefono: "667 000 0000", correo: "ana@demo.mx" },
     origen: "REFERIDO",

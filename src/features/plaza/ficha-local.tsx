@@ -82,6 +82,7 @@ export function FichaLocal({
     >
       <GaleriaFotos
         variante="portada"
+        prioritaria
         fotos={fotosDeLocal(local)}
         titulo={`Local ${local.codigo}`}
         className="mb-3"

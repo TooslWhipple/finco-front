@@ -97,6 +97,10 @@ export function Contratos({ contratoInicialId }: ContratosProps) {
     : undefined;
   const localSel = seleccionado ? localesPorId.get(seleccionado.localId) : undefined;
   const plazaSel = localSel ? plazasPorId.get(localSel.plazaId) : undefined;
+  // El contrato nacido de un prospecto lleva su id como locatario.
+  const prospectoSel = seleccionado
+    ? fuentesLocatario.prospectos.find((p) => p.id === seleccionado.locatarioId)
+    : undefined;
   const sinAbrirSel = localSel
     ? localesSinAbrir([localSel], lista, DEMO_TODAY).length > 0
     : false;
@@ -288,6 +292,7 @@ export function Contratos({ contratoInicialId }: ContratosProps) {
                 local={localSel}
                 plaza={plazaSel}
                 cotizacion={cotizacionSel}
+                prospecto={prospectoSel}
                 sinAbrir={sinAbrirSel}
                 puedeGestionar={puedeGestionar}
                 onEnviarAFirma={enviarContratoAFirma}
@@ -302,6 +307,7 @@ export function Contratos({ contratoInicialId }: ContratosProps) {
                   ciudad={ciudadSel}
                   folioContrato={seleccionado.folio ?? seleccionado.id}
                   contratoGenerado
+                  prospecto={prospectoSel}
                 />
               ) : null}
             </div>

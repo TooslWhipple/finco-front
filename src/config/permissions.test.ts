@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ID_TERRENO_HEROE } from "@/data/obra";
+import { rutaPermitida } from "./acceso-rutas";
 import { can, INICIO_POR_ROL, PERMISOS, veTodoElEquipo } from "./permissions";
 import { USUARIOS_DEMO, usuarioDeRol } from "./usuarios";
 
@@ -164,11 +165,74 @@ describe("can", () => {
     expect(can("GERENTE_COMERCIAL", "excepcion.autorizar")).toBe(false);
   });
 
+  it("gestionar campañas es de Gerente comercial, Dirección y Superadmin", () => {
+    for (const rol of ["GERENTE_COMERCIAL", "DIRECCION", "SUPERADMIN"] as const)
+      expect(can(rol, "campanas.gestionar"), rol).toBe(true);
+    for (const rol of [
+      "VENTAS",
+      "COBRANZA",
+      "PMO",
+      "SUPERVISOR_OBRA",
+      "CONTRATISTA",
+    ] as const)
+      expect(can(rol, "campanas.gestionar"), rol).toBe(false);
+  });
+
   it("ver al equipo es de Gerente comercial, Dirección y Superadmin", () => {
     for (const rol of ["GERENTE_COMERCIAL", "DIRECCION", "SUPERADMIN"] as const)
       expect(can(rol, "comercial.verEquipo")).toBe(true);
     for (const rol of ["VENTAS", "COBRANZA", "PMO", "SUPERVISOR_OBRA"] as const)
       expect(can(rol, "comercial.verEquipo")).toBe(false);
+  });
+
+  it("ver cobranza y ver obra no son de los roles comerciales", () => {
+    for (const rol of ["GERENTE_COMERCIAL", "VENTAS"] as const) {
+      expect(can(rol, "cobranza.ver")).toBe(false);
+      expect(can(rol, "terrenos.ver")).toBe(false);
+    }
+    for (const rol of ["DIRECCION", "SUPERADMIN"] as const) {
+      expect(can(rol, "cobranza.ver")).toBe(true);
+      expect(can(rol, "terrenos.ver")).toBe(true);
+    }
+    for (const rol of ["COBRANZA", "PMO"] as const)
+      expect(can(rol, "cobranza.ver")).toBe(true);
+    for (const rol of ["PMO", "SUPERVISOR_OBRA", "COBRANZA"] as const)
+      expect(can(rol, "terrenos.ver")).toBe(true);
+    expect(can("SUPERVISOR_OBRA", "cobranza.ver")).toBe(false);
+    expect(can("CONTRATISTA", "cobranza.ver")).toBe(false);
+    expect(can("CONTRATISTA", "terrenos.ver")).toBe(false);
+  });
+
+  it("gestionar casos de servicio es de Atención a clientes, Dirección y Superadmin", () => {
+    for (const rol of ["ATENCION_CLIENTES", "DIRECCION", "SUPERADMIN"] as const)
+      expect(can(rol, "casos.gestionar"), rol).toBe(true);
+    for (const rol of [
+      "GERENTE_COMERCIAL",
+      "PMO",
+      "VENTAS",
+      "COBRANZA",
+      "SUPERVISOR_OBRA",
+      "CONTRATISTA",
+    ] as const)
+      expect(can(rol, "casos.gestionar"), rol).toBe(false);
+    expect(can("ATENCION_CLIENTES", "cobranza.ver")).toBe(false);
+  });
+
+  it("pagar comisiones y editar su esquema es de Dirección y Superadmin", () => {
+    for (const accion of ["comisiones.pagar", "comisiones.esquemaEditar"] as const) {
+      for (const rol of ["DIRECCION", "SUPERADMIN"] as const)
+        expect(can(rol, accion), `${rol} ${accion}`).toBe(true);
+      for (const rol of [
+        "GERENTE_COMERCIAL",
+        "VENTAS",
+        "PMO",
+        "COBRANZA",
+        "SUPERVISOR_OBRA",
+        "CONTRATISTA",
+        "ATENCION_CLIENTES",
+      ] as const)
+        expect(can(rol, accion), `${rol} ${accion}`).toBe(false);
+    }
   });
 
   it("sin rol no hay permisos", () => {
@@ -203,6 +267,13 @@ describe("INICIO_POR_ROL", () => {
     expect(INICIO_POR_ROL.CONTRATISTA).toBe("/mis-licitaciones");
   });
 
+  it("Atención a clientes aterriza en Servicio a clientes, una ruta que puede abrir", () => {
+    expect(INICIO_POR_ROL.ATENCION_CLIENTES).toBe("/servicio-clientes");
+    expect(rutaPermitida("ATENCION_CLIENTES", INICIO_POR_ROL.ATENCION_CLIENTES)).toBe(
+      true,
+    );
+  });
+
   it("PMO y Supervisor de obra aterrizan en Terrenos y proyectos", () => {
     expect(INICIO_POR_ROL.PMO).toBe("/terrenos-y-proyectos");
     expect(INICIO_POR_ROL.SUPERVISOR_OBRA).toBe(
@@ -213,19 +284,52 @@ describe("INICIO_POR_ROL", () => {
 
 describe("usuarios demo", () => {
   it("hay al menos uno por rol", () => {
-    expect(USUARIOS_DEMO).toHaveLength(9);
+    expect(USUARIOS_DEMO).toHaveLength(13);
     expect(USUARIOS_DEMO.filter((u) => u.rol === "VENTAS").map((u) => u.nombre)).toEqual([
       "Sofía Medina",
       "Luis Cárdenas",
     ]);
     expect(usuarioDeRol("GERENTE_COMERCIAL").nombre).toBe("Jorge Ramírez");
+    expect(usuarioDeRol("SUPERADMIN").nombre).toBe("Laura Fuentes");
     expect(usuarioDeRol("PMO").nombre).toBe("Ricardo Salas");
     expect(usuarioDeRol("SUPERVISOR_OBRA").nombre).toBe("Héctor Ramos");
     expect(usuarioDeRol("VENTAS").nombre).toBe("Sofía Medina");
+    expect(usuarioDeRol("ATENCION_CLIENTES").nombre).toBe("Andrea Robles");
     expect(usuarioDeRol("CONTRATISTA")).toMatchObject({
       id: "usr-contratista",
       proveedorId: "prv-obra-07",
     });
+  });
+
+  it("las cuentas reales de Rasek y Sergio van al final, seguidas de Andrea y Benjamin", () => {
+    expect(USUARIOS_DEMO.slice(-4, -2)).toEqual([
+      {
+        id: "usr-rasek",
+        nombre: "Rasek Higuera Canett",
+        rol: "GERENTE_COMERCIAL",
+        cargo: "Director comercial",
+      },
+      {
+        id: "usr-sergio",
+        nombre: "Sergio Daniel Villela Aragon",
+        rol: "SUPERADMIN",
+        cargo: "Coordinación del proyecto",
+      },
+    ]);
+    expect(USUARIOS_DEMO.slice(-2)).toEqual([
+      {
+        id: "usr-atencion",
+        nombre: "Andrea Robles",
+        rol: "ATENCION_CLIENTES",
+        cargo: "Atención a clientes",
+      },
+      {
+        id: "usr-benjamin",
+        nombre: "Benjamin",
+        rol: "GERENTE_COMERCIAL",
+        cargo: "Gerente comercial",
+      },
+    ]);
   });
 
   it("todo usuario Contratista representa a un proveedor del padrón", () => {

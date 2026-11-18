@@ -6,6 +6,7 @@ import {
   contratosSinCaptura,
   DEMO_TODAY,
   DIAS_MOROSO_DESTACADO,
+  estadoMeta,
   estatusCobro,
   estimacionesPorAutorizar,
   semaforoTerreno,
@@ -16,7 +17,7 @@ import {
   type Terreno,
 } from "@/domain";
 import type { IdBadge } from "@/config/navigation";
-import { MES_DEMO } from "@/lib/tiempo";
+import { AHORA_DEMO, MES_DEMO } from "@/lib/tiempo";
 import { useAppStore } from "@/store";
 import {
   contarCambiosPendientes,
@@ -24,7 +25,7 @@ import {
   contarPorAutorizar,
   type ObraState,
 } from "@/store/reducers";
-import { useCotizaciones, useFacturas, useTerrenos } from "./datos";
+import { useCasos, useCotizaciones, useFacturas, useTerrenos } from "./datos";
 
 /** Contadores de los badges del sidebar, calculados de los datos vivos. */
 export function useBadges(): Record<IdBadge, number> {
@@ -151,6 +152,7 @@ function avisosDeObra(
     case "GERENTE_COMERCIAL":
     case "COBRANZA":
     case "CONTRATISTA":
+    case "ATENCION_CLIENTES":
       return [];
   }
 }
@@ -217,6 +219,7 @@ export function useNotificaciones(rol: Rol | null): Notificacion[] {
   const terrenos = useTerrenos().datos;
   const badges = useBadges();
   const facturas = useFacturas(MES_DEMO).datos;
+  const casos = useCasos();
   const morososDe30 = useMemo(
     () =>
       clientesMorosos(facturas ?? [], DEMO_TODAY).filter(
@@ -317,6 +320,23 @@ export function useNotificaciones(rol: Rol | null): Notificacion[] {
         ];
       case "CONTRATISTA":
         return [];
+      case "ATENCION_CLIENTES": {
+        const sinRespuesta = casos.filter(
+          (c) =>
+            c.primeraRespuestaEl === undefined &&
+            estadoMeta(c, AHORA_DEMO) === "FUERA_DE_TIEMPO",
+        ).length;
+        return sinRespuesta === 0
+          ? []
+          : [
+              {
+                id: "casos-fuera-de-tiempo",
+                titulo: `${sinRespuesta} ${sinRespuesta === 1 ? "caso sin respuesta fuera de tiempo" : "casos sin respuesta fuera de tiempo"}`,
+                detalle: "Pasó la meta de primera respuesta: responde al locatario.",
+                ruta: "/servicio-clientes",
+              },
+            ];
+      }
     }
   }, [
     rol,
@@ -327,5 +347,6 @@ export function useNotificaciones(rol: Rol | null): Notificacion[] {
     terrenos,
     badges.cobranza,
     morososDe30,
+    casos,
   ]);
 }

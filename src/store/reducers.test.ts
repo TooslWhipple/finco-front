@@ -12,6 +12,7 @@ import {
   proveedoresActivos,
   sumarDias,
   DEMO_TODAY,
+  ESQUEMA_INICIAL,
   PROGRAMACION_EMISION_INICIAL,
   REGLA_RECARGO_INICIAL,
 } from "@/domain";
@@ -19,8 +20,10 @@ import type { Cotizacion, ExcepcionPrecio, ReglaActualizacion } from "@/domain";
 import type { PrecioConcepto } from "@/domain";
 import {
   crearContrato,
+  crearCotizacion,
   crearFactura,
   crearLicitacion,
+  crearProspecto,
   crearProveedor,
 } from "@/domain/fixtures";
 import * as r from "./reducers";
@@ -466,6 +469,134 @@ describe("prospectos", () => {
   });
 });
 
+describe("ganado automático", () => {
+  const vivo = crearProspecto({ id: "pro-200", etapa: "NEGOCIACION" });
+  const perdido = crearProspecto({ id: "pro-201", etapa: "PERDIDO" });
+  const ganado = crearProspecto({ id: "pro-202", etapa: "GANADO" });
+  const base = (): r.ProspectosState => ({ prospectos: [vivo, perdido, ganado] });
+
+  it("pasa a GANADO a un prospecto vivo con la actividad del folio", () => {
+    const est = r.ganarProspectoPorContrato(base(), vivo.id, "CTR-2026-0001", HOY);
+    const p = est.prospectos.find((x) => x.id === vivo.id)!;
+    expect(p.etapa).toBe("GANADO");
+    expect(p.actividad.at(-1)).toMatchObject({
+      titulo: "Contrato CTR-2026-0001 generado",
+      fecha: HOY,
+    });
+  });
+
+  it("deja intactos a los ganados y perdidos", () => {
+    for (const cerrado of [perdido, ganado]) {
+      const est = r.ganarProspectoPorContrato(base(), cerrado.id, "CTR-X", HOY);
+      expect(est.prospectos).toEqual(base().prospectos);
+    }
+  });
+});
+
+describe("expediente del prospecto", () => {
+  const moral = crearProspecto({
+    id: "pro-100",
+    etapa: "NEGOCIACION",
+    tipoPersona: "MORAL",
+    documentos: {
+      IDENTIFICACION: "2026-10-01",
+      CONSTANCIA_FISCAL: "2026-10-01",
+      COMPROBANTE_DOMICILIO: "2026-10-01",
+      PODER_REPRESENTANTE: "2026-10-01",
+    },
+  });
+  const ganado = crearProspecto({ id: "pro-101", etapa: "GANADO", documentos: {} });
+  const base = (): r.ProspectosState => ({ prospectos: [moral, ganado] });
+  const de = (est: r.ProspectosState, id: string) =>
+    est.prospectos.find((p) => p.id === id)!;
+
+  it("registrar con true fija la fecha de hoy y no anota actividad", () => {
+    const est = r.registrarDocumentoProspecto(
+      base(),
+      moral.id,
+      "ACTA_CONSTITUTIVA",
+      true,
+      DEMO_TODAY,
+    );
+    expect(de(est, moral.id).documentos.ACTA_CONSTITUTIVA).toBe(DEMO_TODAY);
+    expect(de(est, moral.id).actividad).toEqual(moral.actividad);
+  });
+
+  it("registrar con false borra la clave", () => {
+    const est = r.registrarDocumentoProspecto(
+      base(),
+      moral.id,
+      "IDENTIFICACION",
+      false,
+      DEMO_TODAY,
+    );
+    expect(Object.hasOwn(de(est, moral.id).documentos, "IDENTIFICACION")).toBe(false);
+  });
+
+  it("un prospecto cerrado queda igual", () => {
+    const est = r.registrarDocumentoProspecto(
+      base(),
+      ganado.id,
+      "IDENTIFICACION",
+      true,
+      DEMO_TODAY,
+    );
+    expect(de(est, ganado.id)).toEqual(ganado);
+  });
+
+  it("recalcula las cotizaciones ligadas abiertas y no las que ya generaron contrato", () => {
+    const instantanea = { nombre: moral.nombre, documentosCompletos: false };
+    const cotizaciones: r.CotizacionesState = {
+      cotizaciones: [
+        crearCotizacion({
+          id: "COT-B",
+          prospectoId: moral.id,
+          estado: "BORRADOR",
+          prospecto: instantanea,
+        }),
+        crearCotizacion({
+          id: "COT-E",
+          prospectoId: moral.id,
+          estado: "ENVIADA",
+          prospecto: instantanea,
+        }),
+        crearCotizacion({
+          id: "COT-G",
+          prospectoId: moral.id,
+          estado: "CONTRATO_GENERADO",
+          prospecto: instantanea,
+        }),
+        crearCotizacion({
+          id: "COT-OTRO",
+          prospectoId: "pro-otro",
+          estado: "BORRADOR",
+          prospecto: instantanea,
+        }),
+      ],
+    };
+    const completo = de(
+      r.registrarDocumentoProspecto(
+        base(),
+        moral.id,
+        "ACTA_CONSTITUTIVA",
+        true,
+        DEMO_TODAY,
+      ),
+      moral.id,
+    );
+    const est = r.recalcularExpedienteCotizaciones(cotizaciones, completo);
+    const completa = Object.fromEntries(
+      est.cotizaciones.map((c) => [c.id, c.prospecto.documentosCompletos]),
+    );
+    expect(completa).toEqual({
+      "COT-B": true,
+      "COT-E": true,
+      "COT-G": false,
+      "COT-OTRO": false,
+    });
+  });
+});
+
 describe("contratos", () => {
   const borrador = contratoDesdeCotizacion(cotA09);
 
@@ -591,6 +722,183 @@ describe("padrón de proveedores", () => {
     );
     expect(r.editarProveedor(est, { ...primero, id: "prv-999" })).toBe(est);
     expect(r.editarProveedor(est, { ...primero, rfc: segundo.rfc })).toBe(est);
+  });
+});
+
+describe("campañas comerciales", () => {
+  const base = (): r.CampanasState => ({ campanas: seed.campanas });
+  const alta = {
+    id: "cmp-07",
+    nombre: "Facebook Ads · Prueba",
+    canal: "REDES" as const,
+    inicio: "2026-11-01",
+    inversion: 15_000,
+  };
+
+  it("agregarCampana persiste el alta y rechaza un id repetido", () => {
+    const est = r.agregarCampana(base(), alta);
+    expect(est.campanas).toHaveLength(seed.campanas.length + 1);
+    expect(est.campanas.at(-1)).toEqual(alta);
+    expect(r.agregarCampana(est, { ...alta, nombre: "Otra" })).toBe(est);
+  });
+
+  it("editarCampana cambia la inversión e ignora un id inexistente", () => {
+    const [primera] = seed.campanas;
+    const est = r.editarCampana(base(), { ...primera, inversion: 1 });
+    expect(est.campanas[0]).toEqual({ ...primera, inversion: 1 });
+    expect(est.campanas).toHaveLength(seed.campanas.length);
+    expect(r.editarCampana(est, { ...primera, id: "cmp-99" })).toBe(est);
+  });
+});
+
+describe("casos de servicio", () => {
+  const AHORA = "2026-11-03T15:56:00";
+  const andrea = { id: "usr-atencion", nombre: "Andrea Robles" };
+  const nuevo: r.NuevoCaso = {
+    plazaId: "plz-alborada",
+    localId: "plz-alborada-A-01",
+    locatarioId: "loc-0001",
+    tipo: "FUGA",
+    prioridad: "ALTA",
+    canal: "TELEFONO",
+    descripcion: "Fuga en el baño",
+    facturaId: "fac-0001",
+  };
+
+  it("registrar da el siguiente id y folio del año, nace recibido y sin factura si no es aclaración", () => {
+    const antes: r.CasosState = { casos: seed.casos };
+    const despues = r.registrarCaso(antes, nuevo, AHORA, "Andrea Robles");
+    const creado = despues.casos.at(-1)!;
+    expect(creado).toMatchObject({ estatus: "RECIBIDO", abiertoEl: AHORA });
+    expect(creado.facturaId).toBeUndefined();
+    expect(creado.bitacora).toHaveLength(1);
+    expect(new Set(despues.casos.map((c) => c.id)).size).toBe(despues.casos.length);
+    expect(new Set(despues.casos.map((c) => c.folio)).size).toBe(despues.casos.length);
+    const aclaracion = r.registrarCaso(
+      antes,
+      { ...nuevo, tipo: "ACLARACION_FACTURA" },
+      AHORA,
+      "Andrea Robles",
+    );
+    expect(aclaracion.casos.at(-1)?.facturaId).toBe("fac-0001");
+  });
+
+  it("comentar no cuenta como respuesta; un caso cerrado ya no se responde", () => {
+    const registrado = r.registrarCaso({ casos: [] }, nuevo, AHORA, "Andrea Robles");
+    const id = registrado.casos[0].id;
+    const comentado = r.comentarCaso(
+      registrado,
+      id,
+      "Nota interna",
+      AHORA,
+      "Andrea Robles",
+    );
+    expect(comentado.casos[0]).toMatchObject({ estatus: "RECIBIDO", bitacora: [{}, {}] });
+    expect(comentado.casos[0].primeraRespuestaEl).toBeUndefined();
+    const cerrado: r.CasosState = {
+      casos: [{ ...registrado.casos[0], estatus: "CERRADO", calificacion: 5 }],
+    };
+    expect(r.responderCaso(cerrado, id, "Hola", AHORA, andrea)).toBe(cerrado);
+  });
+
+  it("transicionar valida el ciclo y la calificación", () => {
+    const e = r.responderCaso(
+      r.registrarCaso({ casos: [] }, nuevo, "2026-11-03T08:00:00", "Andrea Robles"),
+      "cas-0001",
+      "Vamos para allá",
+      "2026-11-03T09:00:00",
+      andrea,
+    );
+    expect(r.transicionarCaso(e, "cas-0001", "CERRADO", AHORA, "Andrea Robles", 5)).toBe(
+      e,
+    );
+    const resuelto = r.transicionarCaso(
+      e,
+      "cas-0001",
+      "RESUELTO",
+      AHORA,
+      "Andrea Robles",
+    );
+    expect(
+      r.transicionarCaso(resuelto, "cas-0001", "CERRADO", AHORA, "Andrea Robles"),
+    ).toBe(resuelto);
+    const cerrado = r.transicionarCaso(
+      resuelto,
+      "cas-0001",
+      "CERRADO",
+      AHORA,
+      "Andrea Robles",
+      4,
+    );
+    expect(cerrado.casos[0]).toMatchObject({ estatus: "CERRADO", calificacion: 4 });
+  });
+});
+
+describe("comisiones", () => {
+  const vacio: r.ComisionesState = { esquema: ESQUEMA_INICIAL, comisiones: [] };
+  const cotizacion = crearCotizacion({ plazoMeses: 24, mesesGracia: 2 });
+  const contrato = crearContrato({ id: "ctr-COT-2026-0418", rentaMensual: 20_000 });
+  const excepcion = (estado: ExcepcionPrecio["estado"]): ExcepcionPrecio => ({
+    id: "exc-1",
+    cotizacionId: cotizacion.id,
+    localId: cotizacion.localId,
+    rentaSolicitada: 18_000,
+    precioMinimo: 20_000,
+    estado,
+    solicitadaPor: "usr-sofia",
+  });
+  const firmado = r.registrarComisionesDeFirma(
+    vacio,
+    contrato,
+    cotizacion,
+    [],
+    true,
+    "2026-11-03T16:00:00",
+  );
+
+  it("la firma genera asesor, bono y mando medio con plazo y gracia de la cotización", () => {
+    expect(firmado.comisiones.map((c) => [c.concepto, c.usuarioId, c.monto])).toEqual([
+      ["ASESOR", "usr-sofia", 8_000],
+      ["BONO_SIN_EXCEPCION", "usr-sofia", 2_000],
+      ["MANDO_MEDIO", "usr-jorge", 2_000],
+    ]);
+    expect(firmado.comisiones[0]).toMatchObject({ base: 200_000, generadaEl: "2026-11-03" });
+  });
+
+  it("la excepción APLICADA de la cotización quita el bono; un vendedor fuera del equipo no comisiona", () => {
+    const conExcepcion = r.registrarComisionesDeFirma(
+      vacio,
+      contrato,
+      cotizacion,
+      [excepcion("APLICADA")],
+      true,
+      "2026-11-03T16:00:00",
+    );
+    expect(conExcepcion.comisiones.map((c) => c.concepto)).toEqual(["ASESOR", "MANDO_MEDIO"]);
+    expect(
+      r.registrarComisionesDeFirma(vacio, contrato, cotizacion, [], false, "2026-11-03T16:00:00"),
+    ).toBe(vacio);
+  });
+
+  it("los ids que ya existen se ignoran", () => {
+    expect(
+      r.registrarComisionesDeFirma(firmado, contrato, cotizacion, [], true, "2026-11-04T10:00:00"),
+    ).toBe(firmado);
+  });
+
+  it("marcarComisionPagada con un id inexistente o ya pagada no cambia nada", () => {
+    const id = firmado.comisiones[0].id;
+    expect(r.marcarComisionPagada(firmado, "com-no-existe", DEMO_TODAY)).toBe(firmado);
+    const pagado = r.marcarComisionPagada(firmado, id, "2026-11-10");
+    expect(pagado.comisiones[0].pagadaEl).toBe("2026-11-10");
+    expect(pagado.comisiones.slice(1)).toEqual(firmado.comisiones.slice(1));
+    expect(r.marcarComisionPagada(pagado, id, DEMO_TODAY)).toBe(pagado);
+  });
+
+  it("editar el esquema no toca las comisiones generadas", () => {
+    const editado = r.editarEsquemaComisiones(firmado, { ...ESQUEMA_INICIAL, asesorPct: 5 });
+    expect(editado.esquema.asesorPct).toBe(5);
+    expect(editado.comisiones).toBe(firmado.comisiones);
   });
 });
 

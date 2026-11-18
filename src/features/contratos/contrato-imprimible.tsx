@@ -61,6 +61,10 @@ export function ContratoImprimible({ folio }: { folio: string }) {
 
   const cotizacion = cotizaciones.find((q) => q.id === contrato.cotizacionId);
   const locatario = nombreLocatario(contrato.locatarioId, fuentesLocatario);
+  // El contrato nacido de un prospecto lleva su id como locatario.
+  const prospecto = fuentesLocatario.prospectos.find(
+    (p) => p.id === contrato.locatarioId,
+  );
   const doc = renderContrato(
     MACHOTE_ARRENDAMIENTO,
     contrato,
@@ -68,7 +72,9 @@ export function ContratoImprimible({ folio }: { folio: string }) {
     local,
     plaza,
     locatario,
+    prospecto,
   );
+  const arrendatario = doc.arrendatario;
 
   return (
     <div className="mx-auto max-w-[8.5in] space-y-4 print:max-w-none print:space-y-0">
@@ -107,6 +113,47 @@ export function ContratoImprimible({ folio }: { folio: string }) {
           {doc.titulo}
         </h1>
         <p className="mb-6 text-justify">{doc.proemio}</p>
+        {arrendatario ? (
+          <section
+            aria-label="Datos del arrendatario"
+            className="mb-6 break-inside-avoid rounded-md border border-black/20 px-4 py-3"
+          >
+            <h2 className="mb-2 font-bold">Datos del arrendatario</h2>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-1">
+              <div>
+                <dt className="inline font-semibold">RFC: </dt>
+                <dd className="inline">{arrendatario.rfc}</dd>
+              </div>
+              <div>
+                <dt className="inline font-semibold">Tipo de persona: </dt>
+                <dd className="inline">{arrendatario.tipoPersona}</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="inline font-semibold">Contacto: </dt>
+                <dd className="inline">
+                  {arrendatario.contacto.nombre} · {arrendatario.contacto.telefono} ·{" "}
+                  {arrendatario.contacto.correo}
+                </dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="font-semibold">Documentos entregados:</dt>
+                <dd>
+                  {arrendatario.documentos.length === 0 ? (
+                    "Ninguno."
+                  ) : (
+                    <ul className="list-disc pl-5">
+                      {arrendatario.documentos.map((d) => (
+                        <li key={d.tipo}>
+                          {d.etiqueta}, entregado el {d.entregadoEl}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </dd>
+              </div>
+            </dl>
+          </section>
+        ) : null}
         <div className="space-y-4">
           {doc.clausulas.map((c) => (
             <section key={c.ordinal} className="break-inside-avoid">

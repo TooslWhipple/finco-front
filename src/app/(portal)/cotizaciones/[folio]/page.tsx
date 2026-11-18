@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { crearSeed } from "@/data/seed";
 import { CotizacionDetalle } from "@/features/cotizacion/cotizacion-detalle";
 
@@ -12,9 +13,18 @@ export function generateStaticParams() {
   return FOLIOS_SEED.map((folio) => ({ folio }));
 }
 
-export default async function PaginaCotizacion({
-  params,
-}: PageProps<"/cotizaciones/[folio]">) {
+type Props = PageProps<"/cotizaciones/[folio]">;
+
+async function CotizacionDeLaUrl({ params }: Pick<Props, "params">) {
   const { folio } = await params;
   return <CotizacionDetalle folio={folio} />;
+}
+
+export default function PaginaCotizacion({ params }: Props) {
+  // `params` (el folio) exige una frontera de Suspense.
+  return (
+    <Suspense fallback={<p className="text-sm text-brand-text-muted">Cargando…</p>}>
+      <CotizacionDeLaUrl params={params} />
+    </Suspense>
+  );
 }

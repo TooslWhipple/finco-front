@@ -1,4 +1,4 @@
-import { diasEntre } from "./fechas";
+import { diasEntre, sumarMeses } from "./fechas";
 import type { Factura, EstatusCobro, FechaISO } from "./tipos";
 
 export function estatusCobro(factura: Factura, hoy: string): EstatusCobro {
@@ -143,4 +143,45 @@ export function clientesMorosos(
     if (moroso && !f.pagadaEl) moroso.saldo += f.monto;
   }
   return [...porLocatario.values()].sort((a, b) => b.dias - a.dias || b.saldo - a.saldo);
+}
+
+/** Folio de una factura sin importes: lo que ve quien no tiene permiso de cobranza. */
+export interface FolioFactura {
+  id: string;
+  folio: string;
+  /** Mes facturado, `YYYY-MM`. */
+  mes: string;
+}
+
+/** Meses atrás (además del de `hoy`) en que se buscan las facturas de un local. */
+const MESES_FOLIOS_ANTERIORES = 2;
+
+/** Meses (`YYYY-MM`) en que se buscan los folios: el de `hoy` y los dos anteriores, del más reciente al más antiguo. */
+export function mesesFoliosFactura(hoy: FechaISO): string[] {
+  const primero = `${hoy.slice(0, 7)}-01`;
+  return Array.from({ length: MESES_FOLIOS_ANTERIORES + 1 }, (_, i) =>
+    sumarMeses(primero, -i).slice(0, 7),
+  );
+}
+
+/**
+ * Folios de las facturas del local con folio y mes dentro de
+ * `mesesFoliosFactura(hoy)`, del más reciente al más antiguo. Solo devuelve
+ * `id`, `folio` y `mes`: nunca el monto.
+ */
+export function foliosFacturaDeLocal(
+  facturas: readonly Factura[],
+  localId: string,
+  hoy: FechaISO,
+): FolioFactura[] {
+  const meses = mesesFoliosFactura(hoy);
+  const hasta = meses[0];
+  const desde = meses[meses.length - 1];
+  return facturas
+    .flatMap((f) =>
+      f.localId === localId && f.folio && f.mes >= desde && f.mes <= hasta
+        ? [{ id: f.id, folio: f.folio, mes: f.mes }]
+        : [],
+    )
+    .sort((a, b) => b.mes.localeCompare(a.mes) || a.folio.localeCompare(b.folio));
 }

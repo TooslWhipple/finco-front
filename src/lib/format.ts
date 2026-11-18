@@ -98,11 +98,28 @@ export function formatMonedaMillones(valor: number): string {
   return `$${millones.format(valor / 1_000_000)} M`;
 }
 
+const lista = new Intl.ListFormat(LOCALE, { style: "long", type: "conjunction" });
+
+/** Enumera en prosa: ["ocupación", "contratos", "precios"] -> "ocupación, contratos y precios". */
+export function formatLista(items: readonly string[]): string {
+  return lista.format(items);
+}
+
 /** Mes y año: "ene 2027". */
 export function formatMesAnio(valor: Date | string): string {
   return aFecha(valor)
     .toLocaleDateString(LOCALE, { month: "short", year: "numeric" })
     .replace(/\./g, "");
+}
+
+/** Fecha y hora de un ISO con hora sin zona (YYYY-MM-DDTHH:mm): "3 nov 2026 · 15:56". */
+export function formatMomento(iso: string): string {
+  return `${formatFecha(iso.slice(0, 10))} · ${iso.slice(11, 16)}`;
+}
+
+/** Horas con un decimal: "14.6 h". */
+export function formatHoras(horas: number): string {
+  return `${formatNumero(Math.round(horas * 10) / 10)} h`;
 }
 
 const UNIDADES = [

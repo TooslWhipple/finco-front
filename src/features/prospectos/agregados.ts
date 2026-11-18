@@ -31,8 +31,8 @@ export const FILTRO_INICIAL: FiltroProspectos = {
 /**
  * KPIs del embudo, todos por etapa para que avanzar o cerrar un prospecto se
  * refleje en ellos: contactar baja "sin contactar", la visita sube "por
- * cotizar", cotizar mueve "en cotización" y ganar o perder mueve "activos" y
- * la tasa de cierre.
+ * cotizar", cotizar mueve "en cotización", negociar lo pasa a "en
+ * negociación" y ganar o perder mueve "activos" y la tasa de cierre.
  */
 export interface KpisProspectos {
   /** Aún sin ganar ni perder. */
@@ -41,6 +41,8 @@ export interface KpisProspectos {
   sinContactar: number;
   /** En `COTIZADO`: con cotización enviada, pendientes de cierre. */
   enCotizacion: number;
+  /** En `NEGOCIACION`: renegociando la oferta antes del cierre. */
+  enNegociacion: number;
   /** En `VISITA`: ya visitaron el local y lo siguiente es cotizarles. */
   porCotizar: number;
   /** Ganados entre los ya cerrados (ganados + perdidos); `null` si aún no cierra ninguno. */
@@ -80,6 +82,7 @@ export function kpisProspectos(
     activos: prospectos.filter(prospectoActivo).length,
     sinContactar: enEtapa("NUEVO"),
     enCotizacion: enEtapa("COTIZADO"),
+    enNegociacion: enEtapa("NEGOCIACION"),
     porCotizar: enEtapa("VISITA"),
     frios: prospectos.filter(
       (p) => temperaturaProspecto(diasSinContacto(p, hoy)) === "FRIO",
@@ -103,4 +106,9 @@ export function textoDiasSinContacto(dias: number | null): string {
   if (dias === null) return "—";
   if (dias === 0) return "Hoy";
   return `Hace ${dias} ${dias === 1 ? "día" : "días"}`;
+}
+
+/** "Falta 1 documento" o "Faltan N documentos" del expediente. */
+export function textoFaltantes(cantidad: number): string {
+  return cantidad === 1 ? "Falta 1 documento" : `Faltan ${cantidad} documentos`;
 }

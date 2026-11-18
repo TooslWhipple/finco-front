@@ -46,6 +46,8 @@ const datos: DatosReporte = {
   },
   cotizaciones: seed.cotizaciones,
   excepciones: seed.excepciones,
+  campanas: seed.campanas,
+  atribucionContratos: seed.atribucionContratos,
   hoy: DEMO_TODAY,
 };
 
@@ -64,6 +66,13 @@ describe("catálogo", () => {
 
   it("los ids son únicos", () => {
     expect(new Set(REPORTES.map((r) => r.id)).size).toBe(REPORTES.length);
+  });
+});
+
+describe("reportes con permiso", () => {
+  it("la cobranza requiere cobranza.ver y el avance de terrenos, terrenos.ver", () => {
+    expect(REPORTES.find((r) => r.id === "COBRANZA")?.requiere).toBe("cobranza.ver");
+    expect(REPORTES.find((r) => r.id === "TERRENOS")?.requiere).toBe("terrenos.ver");
   });
 });
 
@@ -357,6 +366,53 @@ describe("reportes", () => {
     for (const reporte of REPORTES) {
       expect(() => reporte.calcular(vacio)).not.toThrow();
     }
+  });
+});
+
+describe("Campañas", () => {
+  const definicion = REPORTES.find((r) => r.id === "CAMPANAS")!;
+
+  it("solo lo ve quien puede ver al equipo", () => {
+    expect(definicion.requiere).toBe("comercial.verEquipo");
+  });
+
+  it("trae una fila por campaña, con conversión como fracción", () => {
+    const r = definicion.calcular(datos);
+    expect(r.tabla.filas).toHaveLength(seed.campanas.length);
+    expect(r.resumen).toContain("Los contratos históricos se atribuyen con datos demo");
+    const conProspectos = r.tabla.filas.find((f) => Number(f.prospectos) > 0)!;
+    expect(typeof conProspectos.conversion).toBe("number");
+    expect(Number(conProspectos.conversion)).toBeLessThanOrEqual(1);
+  });
+
+  it("pone — en costo por contrato sin contratos y en conversión sin prospectos", () => {
+    const r = definicion.calcular(datos);
+    const sinNada = r.tabla.filas.find((f) => f.prospectos === 0 && f.contratos === 0)!;
+    expect(sinNada).toMatchObject({
+      conversion: "—",
+      costoProspecto: "—",
+      costoContrato: "—",
+    });
+    expect(tablaACsv(r.tabla)).toContain("—");
+  });
+
+  it("acotar por plaza conserva el catálogo completo de campañas", () => {
+    const acotados = acotarDatos(datos, { ciudadId: "TODOS", plazaId: "plz-alborada" });
+    expect(acotados.campanas).toBe(datos.campanas);
+    expect(acotados.atribucionContratos).toBe(datos.atribucionContratos);
+  });
+
+  it("con datos vacíos no lanza", () => {
+    const vacio: DatosReporte = {
+      ...datos,
+      contratos: [],
+      prospectos: [],
+      cotizaciones: [],
+      campanas: [],
+      atribucionContratos: {},
+    };
+    expect(() => definicion.calcular(vacio)).not.toThrow();
+    expect(definicion.calcular(vacio).tabla.filas).toEqual([]);
   });
 });
 

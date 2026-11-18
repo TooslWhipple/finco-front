@@ -30,15 +30,23 @@ import {
   useSesion,
   useTerrenos,
 } from "@/hooks";
-import { formatMoneda } from "@/lib/format";
-import { buscarGlobal } from "./busqueda";
+import type { Rol } from "@/domain";
+import { formatLista, formatMoneda } from "@/lib/format";
+import {
+  buscarGlobal,
+  grupoVisible,
+  RUTA_GRUPO,
+  type ResultadosBusqueda as Resultados,
+} from "./busqueda";
 
 /** Contenido del buscador; solo se monta con el diálogo abierto para no cargar ~2,000 filas de más. */
 function ResultadosBusqueda({
   consulta,
+  rol,
   cerrar,
 }: {
   consulta: string;
+  rol: Rol;
   cerrar: () => void;
 }) {
   const router = useRouter();
@@ -63,6 +71,7 @@ function ResultadosBusqueda({
           terrenos,
         },
         consulta,
+        rol,
       ),
     [
       plazas,
@@ -73,6 +82,7 @@ function ResultadosBusqueda({
       fuentesLocatario,
       terrenos,
       consulta,
+      rol,
     ],
   );
 
@@ -87,7 +97,11 @@ function ResultadosBusqueda({
       {resultados.plazas.length > 0 ? (
         <CommandGroup heading="Plazas">
           {resultados.plazas.map((p) => (
-            <CommandItem key={p.id} value={p.id} onSelect={() => ir(`/plazas/${p.id}`)}>
+            <CommandItem
+              key={p.id}
+              value={p.id}
+              onSelect={() => ir(`${RUTA_GRUPO.plazas}/${p.id}`)}
+            >
               <Building2 aria-hidden />
               {p.nombre}
             </CommandItem>
@@ -100,7 +114,9 @@ function ResultadosBusqueda({
             <CommandItem
               key={local.id}
               value={local.id}
-              onSelect={() => ir(`/plazas/${local.plazaId}/locales/${local.id}`)}
+              onSelect={() =>
+                ir(`${RUTA_GRUPO.locales}/${local.plazaId}/locales/${local.id}`)
+              }
             >
               <Store aria-hidden />
               <span>Local {local.codigo}</span>
@@ -112,7 +128,11 @@ function ResultadosBusqueda({
       {resultados.locatarios.length > 0 ? (
         <CommandGroup heading="Locatarios">
           {resultados.locatarios.map((l) => (
-            <CommandItem key={l.id} value={l.id} onSelect={() => ir("/contratos")}>
+            <CommandItem
+              key={l.id}
+              value={l.id}
+              onSelect={() => ir(RUTA_GRUPO.locatarios)}
+            >
               <User aria-hidden />
               {l.nombre}
             </CommandItem>
@@ -125,7 +145,7 @@ function ResultadosBusqueda({
             <CommandItem
               key={contrato.id}
               value={contrato.id}
-              onSelect={() => ir(`/contratos?contrato=${contrato.id}`)}
+              onSelect={() => ir(`${RUTA_GRUPO.contratos}?contrato=${contrato.id}`)}
             >
               <FileSignature aria-hidden />
               <span>{folio}</span>
@@ -144,7 +164,7 @@ function ResultadosBusqueda({
             <CommandItem
               key={p.id}
               value={p.id}
-              onSelect={() => ir(`/prospectos?prospecto=${p.id}`)}
+              onSelect={() => ir(`${RUTA_GRUPO.prospectos}?prospecto=${p.id}`)}
             >
               <Users aria-hidden />
               <span>{p.nombre}</span>
@@ -159,7 +179,7 @@ function ResultadosBusqueda({
             <CommandItem
               key={t.id}
               value={t.id}
-              onSelect={() => ir(`/terrenos-y-proyectos?terreno=${t.id}`)}
+              onSelect={() => ir(`${RUTA_GRUPO.terrenos}?terreno=${t.id}`)}
             >
               <Layers aria-hidden />
               {t.nombre}
@@ -171,16 +191,35 @@ function ResultadosBusqueda({
   );
 }
 
+/** Nombre de cada grupo en la descripción del diálogo, en el orden en que se pintan. */
+const NOMBRE_GRUPO: Record<keyof Resultados, string> = {
+  plazas: "plazas",
+  locales: "locales",
+  locatarios: "locatarios",
+  contratos: "contratos",
+  prospectos: "prospectos",
+  terrenos: "terrenos",
+};
+
+/** "Busca plazas, locales, … y terrenos", solo con los grupos que el rol ve. */
+function descripcionBuscador(rol: Rol): string {
+  const grupos = (Object.keys(NOMBRE_GRUPO) as (keyof Resultados)[])
+    .filter((g) => grupoVisible(rol, g))
+    .map((g) => NOMBRE_GRUPO[g]);
+  return `Busca ${formatLista(grupos)}`;
+}
+
 /**
  * Buscador global ⌘K sobre plazas, locales, locatarios, contratos, prospectos y
- * terrenos; el contratista externo no lo ve.
+ * terrenos, cada grupo solo si el rol abre su ruta; el contratista externo no
+ * lo ve.
  */
 export function Buscador() {
   const { rol } = useSesion();
-  return rol === "CONTRATISTA" ? null : <BuscadorGlobal />;
+  return rol === null || rol === "CONTRATISTA" ? null : <BuscadorGlobal rol={rol} />;
 }
 
-function BuscadorGlobal() {
+function BuscadorGlobal({ rol }: { rol: Rol }) {
   const [abierto, setAbierto] = useState(false);
   const [consulta, setConsulta] = useState("");
 
@@ -220,7 +259,7 @@ function BuscadorGlobal() {
         open={abierto}
         onOpenChange={cambiarAbierto}
         title="Buscar"
-        description="Busca plazas, locales, locatarios, contratos, prospectos y terrenos"
+        description={descripcionBuscador(rol)}
       >
         {/* El filtrado lo hace `ResultadosBusqueda`, que además acota cada grupo. */}
         <Command shouldFilter={false}>
@@ -232,6 +271,7 @@ function BuscadorGlobal() {
           {abierto ? (
             <ResultadosBusqueda
               consulta={consulta}
+              rol={rol}
               cerrar={() => cambiarAbierto(false)}
             />
           ) : null}

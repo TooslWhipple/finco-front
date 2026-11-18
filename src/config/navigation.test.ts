@@ -9,8 +9,8 @@ function activos(ruta: string): string[] {
 }
 
 describe("menú", () => {
-  it("tiene 17 ítems (los 12 del PDF, Mantenimientos del 2026-11-04, Disponibilidad del vendedor, Proveedores, Mis licitaciones y Resumen comercial)", () => {
-    expect(ITEMS).toHaveLength(17);
+  it("tiene 20 ítems (los 12 del PDF, Mantenimientos del 2026-11-04, Disponibilidad del vendedor, Proveedores, Mis licitaciones, Resumen comercial, Campañas, Servicio a clientes y Comisiones)", () => {
+    expect(ITEMS).toHaveLength(20);
     expect(ITEMS.some((i) => "accion" in i)).toBe(false);
   });
 
@@ -36,6 +36,27 @@ describe("menú", () => {
     expect(activos("/mantenimientos")).toEqual(["mantenimientos"]);
   });
 
+  it("Campañas va en Operación justo después de Prospectos y solo se activa en su rama", () => {
+    const operacion = NAVEGACION.find((g) => g.id === "operacion")!;
+    const ids = operacion.items.map((i) => i.id);
+    expect(ids[ids.indexOf("prospectos") + 1]).toBe("campanas");
+    expect(activos("/campanas")).toEqual(["campanas"]);
+  });
+
+  it("Servicio a clientes va en Operación justo después de Contratos y solo se activa en su rama", () => {
+    const operacion = NAVEGACION.find((g) => g.id === "operacion")!;
+    const ids = operacion.items.map((i) => i.id);
+    expect(ids[ids.indexOf("contratos") + 1]).toBe("servicio-clientes");
+    expect(activos("/servicio-clientes")).toEqual(["servicio-clientes"]);
+  });
+
+  it("Comisiones va en Operación justo después de Servicio a clientes y solo se activa en su rama", () => {
+    const operacion = NAVEGACION.find((g) => g.id === "operacion")!;
+    const ids = operacion.items.map((i) => i.id);
+    expect(ids[ids.indexOf("servicio-clientes") + 1]).toBe("comisiones");
+    expect(activos("/comisiones")).toEqual(["comisiones"]);
+  });
+
   it("Proveedores va en Operación justo después de Mantenimientos y resalta también la ficha", () => {
     const operacion = NAVEGACION.find((g) => g.id === "operacion")!;
     const ids = operacion.items.map((i) => i.id);
@@ -50,8 +71,8 @@ describe("visibilidad por rol", () => {
     itemsVisibles(rol).flatMap((g) => g.items.map((i) => i.id));
 
   it("Dirección y Superadmin ven todo salvo los ítems soloRoles", () => {
-    expect(ids("DIRECCION")).toHaveLength(16);
-    expect(ids("SUPERADMIN")).toHaveLength(16);
+    expect(ids("DIRECCION")).toHaveLength(19);
+    expect(ids("SUPERADMIN")).toHaveLength(19);
     expect(ids("DIRECCION")).not.toContain("mis-licitaciones");
   });
 
@@ -84,13 +105,27 @@ describe("visibilidad por rol", () => {
       "prospectos",
       "cotizaciones",
       "contratos",
+      "comisiones",
       "reportes",
     ]);
   });
 
-  it("el Gerente comercial ve lo de Ventas más su Resumen comercial, primero", () => {
-    expect(ids("GERENTE_COMERCIAL")).toEqual(["resumen-comercial", ...ids("VENTAS")]);
-    expect(ids("GERENTE_COMERCIAL")).toContain("reportes");
+  it("el Gerente comercial ve lo de Ventas más su Resumen comercial, primero, y Campañas tras Prospectos", () => {
+    expect(ids("GERENTE_COMERCIAL")).toEqual([
+      "resumen-comercial",
+      "disponibilidad",
+      "inicio",
+      "mapa",
+      "plazas",
+      "prospectos",
+      "campanas",
+      "cotizaciones",
+      "contratos",
+      "servicio-clientes",
+      "comisiones",
+      "reportes",
+    ]);
+    expect(ids("VENTAS")).not.toContain("campanas");
   });
 
   it("Resumen comercial abre Operación y solo lo abren el Gerente comercial, Dirección y Superadmin", () => {
@@ -139,12 +174,21 @@ describe("visibilidad por rol", () => {
       "mapa",
       "plazas",
       "contratos",
+      "servicio-clientes",
       "mantenimientos",
       "proveedores",
       "precios-y-reglas",
       "terrenos",
       "reportes",
       "integraciones",
+    ]);
+  });
+
+  it("Atención a clientes ve Plazas, Contratos y Servicio a clientes, sin cobranza", () => {
+    expect(ids("ATENCION_CLIENTES")).toEqual([
+      "plazas",
+      "contratos",
+      "servicio-clientes",
     ]);
   });
 

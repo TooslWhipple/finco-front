@@ -146,7 +146,11 @@ export function LocalDetalle({ plazaId, localId }: { plazaId: string; localId: s
       <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
           <SectionCard titulo="Fotos">
-            <GaleriaFotos fotos={fotosDeLocal(local)} titulo={`Local ${local.codigo}`} />
+            <GaleriaFotos
+              prioritaria
+              fotos={fotosDeLocal(local)}
+              titulo={`Local ${local.codigo}`}
+            />
           </SectionCard>
           <PrecioReglaLocal local={local} plaza={plaza} />
           <SectionCard titulo="Mantenimientos">

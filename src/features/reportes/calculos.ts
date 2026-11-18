@@ -7,7 +7,10 @@ import {
   avanceEsperado,
   diasEntre,
   embudoProspectos,
+  estadisticaCampanas,
+  ETIQUETA_ORIGEN_PROSPECTO,
   localesSinAbrir,
+  NOTA_ATRIBUCION_DEMO,
   rentaVsMinimo,
   semaforoTerreno,
   type SemaforoTerreno,
@@ -40,7 +43,8 @@ export type IdReporte =
   | "EMBUDO"
   | "VENCIMIENTOS"
   | "TERRENOS"
-  | "OFERTAS_VENDEDOR";
+  | "OFERTAS_VENDEDOR"
+  | "CAMPANAS";
 
 /** Margen sobre el mínimo por debajo del cual un local está "ajustado". */
 export const MARGEN_AJUSTADO = 0.05;
@@ -492,6 +496,68 @@ export function reporteTerrenos(datos: DatosReporte): ResultadoReporte {
   };
 }
 
+/** Cociente ausente (divisor 0): "—" en la tabla y en el CSV. */
+const oGuion = (valor: number | null): number | string => valor ?? "—";
+
+/** "Campañas": una fila por campaña con prospectos, contratos, conversión y costos. */
+export function reporteCampanas(datos: DatosReporte): ResultadoReporte {
+  const estadistica = estadisticaCampanas(
+    datos.campanas,
+    datos.prospectos,
+    datos.cotizaciones,
+    datos.contratos,
+    datos.atribucionContratos,
+  );
+  const campanaPorId = new Map(datos.campanas.map((c) => [c.id, c]));
+  const filas = estadistica.map((e) => {
+    const campana = campanaPorId.get(e.campanaId);
+    return {
+      campana: campana?.nombre ?? e.campanaId,
+      canal: campana ? ETIQUETA_ORIGEN_PROSPECTO[campana.canal] : "—",
+      inversion: e.inversion,
+      prospectos: e.prospectos,
+      ganados: e.ganados,
+      contratos: e.contratos,
+      conversion: oGuion(e.conversion),
+      renta: e.rentaCerrada,
+      costoProspecto: oGuion(e.costoPorProspecto),
+      costoContrato: oGuion(e.costoPorContrato),
+    };
+  });
+  const inversion = estadistica.reduce((s, e) => s + e.inversion, 0);
+  const contratos = estadistica.reduce((s, e) => s + e.contratos, 0);
+  return {
+    resumen:
+      filas.length === 0
+        ? "No hay campañas registradas."
+        : `${formatNumero(filas.length)} campañas con ${formatMoneda(inversion)} invertidos y ${formatNumero(contratos)} contratos cerrados. ${NOTA_ATRIBUCION_DEMO}`,
+    grafica: {
+      serie: "Contratos",
+      formato: "numero",
+      puntos: filas.map((f) => ({
+        etiqueta: f.campana,
+        valor: f.contratos,
+        tono: "primario" as const,
+      })),
+    },
+    tabla: {
+      columnas: [
+        { clave: "campana", etiqueta: "Campaña" },
+        { clave: "canal", etiqueta: "Canal" },
+        { clave: "inversion", etiqueta: "Inversión", formato: "moneda" },
+        { clave: "prospectos", etiqueta: "Prospectos", formato: "numero" },
+        { clave: "ganados", etiqueta: "Ganados", formato: "numero" },
+        { clave: "contratos", etiqueta: "Contratos", formato: "numero" },
+        { clave: "conversion", etiqueta: "Conversión", formato: "porcentaje" },
+        { clave: "renta", etiqueta: "Renta mensual cerrada", formato: "moneda" },
+        { clave: "costoProspecto", etiqueta: "Costo por prospecto", formato: "moneda" },
+        { clave: "costoContrato", etiqueta: "Costo por contrato", formato: "moneda" },
+      ],
+      filas,
+    },
+  };
+}
+
 /** Al hacer clic en una fila, el reporte de `destino` se abre filtrado por esa plaza. */
 export interface Drilldown {
   destino: IdReporte;
@@ -535,6 +601,7 @@ export const REPORTES: readonly DefinicionReporte[] = [
     descripcion: "Cartera vencida agrupada por días de atraso.",
     archivo: "cobranza-antiguedad-saldos",
     calcular: reporteCobranza,
+    requiere: "cobranza.ver",
   },
   {
     id: "PRECIOS",
@@ -588,6 +655,7 @@ export const REPORTES: readonly DefinicionReporte[] = [
     descripcion: "Proyectos en desarrollo: avance, semáforo y responsable.",
     archivo: "avance-terrenos",
     calcular: reporteTerrenos,
+    requiere: "terrenos.ver",
   },
   {
     id: "OFERTAS_VENDEDOR",
@@ -596,6 +664,14 @@ export const REPORTES: readonly DefinicionReporte[] = [
       "Cada oferta hecha a un cliente: quién la hizo, qué local, qué día, a qué hora y a qué precio.",
     archivo: "ofertas-por-vendedor",
     calcular: reporteOfertasVendedor,
+    requiere: "comercial.verEquipo",
+  },
+  {
+    id: "CAMPANAS",
+    titulo: "Campañas",
+    descripcion: `Prospectos, contratos, conversión y costo de cada campaña comercial. ${NOTA_ATRIBUCION_DEMO}`,
+    archivo: "campanas",
+    calcular: reporteCampanas,
     requiere: "comercial.verEquipo",
   },
 ];

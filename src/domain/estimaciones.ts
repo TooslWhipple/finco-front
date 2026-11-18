@@ -1,4 +1,5 @@
 import { sumarDias } from "./fechas";
+import { redondearCentavos } from "./numeros";
 import { acumuladoValidado, ETIQUETA_UNIDAD, montoContrato } from "./obra";
 import type {
   ContratoObra,
@@ -13,8 +14,6 @@ import type {
 
 /** Tolerancia numérica al comparar volúmenes. */
 const TOLERANCIA = 1e-9;
-
-const redondear2 = (valor: number): number => Math.round(valor * 100) / 100;
 
 /** Lo que captura el Supervisor: el volumen que el contratista quiere cobrar. */
 export interface EntradaEstimacion {
@@ -50,7 +49,7 @@ export function importeBrutoEstimacion(
       suma + (Number.isFinite(volumen) && volumen > 0 ? volumen * c.precioUnitario : 0)
     );
   }, 0);
-  return redondear2(bruto);
+  return redondearCentavos(bruto);
 }
 
 /** Anticipo que aún falta amortizar: el anticipo total menos lo ya descontado. */
@@ -63,7 +62,7 @@ export function anticipoPendiente(
     (suma, e) => suma + e.amortizacionAnticipo,
     0,
   );
-  return Math.max(0, redondear2(total - amortizado));
+  return Math.max(0, redondearCentavos(total - amortizado));
 }
 
 /**
@@ -77,15 +76,15 @@ export function calcularImportes(
 ): ImportesEstimacion {
   const importeBruto = importeBrutoEstimacion(contrato, volumenes);
   const amortizacionAnticipo = Math.min(
-    redondear2(importeBruto * contrato.anticipoPct),
+    redondearCentavos(importeBruto * contrato.anticipoPct),
     anticipoPendiente(contrato, previas),
   );
-  const fondoGarantia = redondear2(importeBruto * contrato.fondoGarantiaPct);
+  const fondoGarantia = redondearCentavos(importeBruto * contrato.fondoGarantiaPct);
   return {
     importeBruto,
     amortizacionAnticipo,
     fondoGarantia,
-    importeNeto: redondear2(importeBruto - amortizacionAnticipo - fondoGarantia),
+    importeNeto: redondearCentavos(importeBruto - amortizacionAnticipo - fondoGarantia),
   };
 }
 
@@ -156,7 +155,7 @@ export function erroresEstimacion(
     const restante = disponible[concepto.id] ?? 0;
     if (volumen > restante + TOLERANCIA) {
       errores.volumenes[concepto.id] =
-        `Excede lo validado en cortes: quedan ${redondear2(restante)} ${ETIQUETA_UNIDAD[concepto.unidad]} por estimar.`;
+        `Excede lo validado en cortes: quedan ${redondearCentavos(restante)} ${ETIQUETA_UNIDAD[concepto.unidad]} por estimar.`;
     }
   }
   if (!hayVolumen && Object.keys(errores.volumenes).length === 0) {

@@ -88,6 +88,7 @@ export function Prospectos({ localInicialId, prospectoInicialId }: ProspectosPro
   const avanzarProspecto = useAppStore((s) => s.avanzarProspecto);
   const registrarContacto = useAppStore((s) => s.registrarContactoProspecto);
   const marcarPerdido = useAppStore((s) => s.marcarProspectoPerdido);
+  const registrarDocumento = useAppStore((s) => s.registrarDocumentoProspecto);
 
   const [vista, setVista] = useState<Vista>("TABLERO");
   const [filtro, setFiltro] = useState({
@@ -265,6 +266,11 @@ export function Prospectos({ localInicialId, prospectoInicialId }: ProspectosPro
           subtexto={`con cotización enviada · ${formatNumero(kpis.porCotizar)} con visita, por cotizar`}
         />
         <KpiCard
+          etiqueta="En negociación"
+          valor={formatNumero(kpis.enNegociacion)}
+          subtexto="renegociando la oferta antes del cierre"
+        />
+        <KpiCard
           etiqueta="Prospectos fríos"
           valor={formatNumero(kpis.frios)}
           subtexto="30 días o más sin contacto"
@@ -378,6 +384,7 @@ export function Prospectos({ localInicialId, prospectoInicialId }: ProspectosPro
               onAvanzar={avanzarProspecto}
               onRegistrarContacto={registrarContacto}
               onMarcarPerdido={marcarPerdido}
+              onRegistrarDocumento={registrarDocumento}
               onCerrar={() => setSeleccionadoId(null)}
             />
           ) : null

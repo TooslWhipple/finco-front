@@ -1,4 +1,17 @@
 import {
+  calcularComisiones,
+  cotizacionRequirioExcepcion,
+  mesesCobrados,
+  type Comision,
+  type EsquemaComisiones,
+  esCalificacionCaso,
+  puedeEscalar,
+  siguienteFolioCaso,
+  validarTransicionCaso,
+  TEXTO_BITACORA_CASO,
+  type CasoServicio,
+  type EstatusCaso,
+  type Usuario,
   aplicarParcheConOferta,
   consumoPresupuesto,
   crearOferta,
@@ -10,6 +23,7 @@ import {
   transicionar,
   ETIQUETA_ETAPA_PROSPECTO,
   ETIQUETA_TIPO_CONTACTO,
+  expedienteCompleto,
   prospectoActivo,
   ETAPAS_TERRENO,
   reglaEfectiva,
@@ -40,6 +54,7 @@ import {
   type PlantillaAviso,
   type Prospecto,
   type TipoContactoProspecto,
+  type TipoDocumentoProspecto,
   type ReglaActualizacion,
   type ReglaRecargo,
   type Terreno,
@@ -78,6 +93,7 @@ import {
   resolverCorte,
   resolverEstimacion,
   rfcEnUso,
+  type Campana,
   type Proveedor,
 } from "@/domain";
 
@@ -181,6 +197,23 @@ export interface MantenimientosState {
 export interface ProveedoresState {
   /** Padrón único de proveedores de mantenimiento y obra. */
   padron: Proveedor[];
+}
+
+export interface CampanasState {
+  /** Catálogo de campañas comerciales. */
+  campanas: Campana[];
+}
+
+export interface CasosState {
+  /** Casos de servicio a clientes. */
+  casos: CasoServicio[];
+}
+
+export interface ComisionesState {
+  /** Esquema vigente: solo afecta a las comisiones que se generen después. */
+  esquema: EsquemaComisiones;
+  /** Comisiones generadas (foto fija al firmar cada contrato). */
+  comisiones: Comision[];
 }
 
 export interface ReglasDefaultState {
@@ -615,6 +648,25 @@ export function marcarProspectoPerdido(
   );
 }
 
+/**
+ * Gana un prospecto vivo al generarse el contrato de su cotización y lo anota
+ * con el folio; los ya ganados o perdidos no cambian.
+ */
+export function ganarProspectoPorContrato(
+  estado: ProspectosState,
+  prospectoId: string,
+  folio: string,
+  fecha: FechaISO,
+): ProspectosState {
+  return moverProspecto(
+    estado,
+    prospectoId,
+    fecha,
+    (actual) => (siguienteEtapaProspecto(actual) ? "GANADO" : null),
+    () => `Contrato ${folio} generado`,
+  );
+}
+
 /** Anota un contacto con un prospecto vivo: reinicia sus días sin contacto. */
 export function registrarContactoProspecto(
   estado: ProspectosState,
@@ -634,6 +686,49 @@ export function registrarContactoProspecto(
       };
       return { ...p, actividad: [...p.actividad, hecho] };
     }),
+  };
+}
+
+/**
+ * Marca (con la fecha de hoy) o desmarca un documento del expediente de un
+ * prospecto vivo; no anota nada en la actividad.
+ */
+export function registrarDocumentoProspecto(
+  estado: ProspectosState,
+  id: string,
+  tipo: TipoDocumentoProspecto,
+  entregado: boolean,
+  hoy: FechaISO,
+): ProspectosState {
+  return {
+    prospectos: estado.prospectos.map((p) => {
+      if (p.id !== id || !prospectoActivo(p)) return p;
+      const documentos = { ...p.documentos };
+      if (entregado) documentos[tipo] = hoy;
+      else delete documentos[tipo];
+      return { ...p, documentos };
+    }),
+  };
+}
+
+/**
+ * Lleva el expediente del prospecto a la instantánea de sus cotizaciones aún
+ * abiertas (BORRADOR o ENVIADA) para que el candado EXPEDIENTE lo refleje; las
+ * que ya generaron contrato conservan la suya.
+ */
+export function recalcularExpedienteCotizaciones(
+  estado: CotizacionesState,
+  prospecto: Prospecto,
+): CotizacionesState {
+  const completo = expedienteCompleto(prospecto);
+  return {
+    cotizaciones: estado.cotizaciones.map((c) =>
+      c.prospectoId === prospecto.id &&
+      (c.estado === "BORRADOR" || c.estado === "ENVIADA") &&
+      c.prospecto.documentosCompletos !== completo
+        ? { ...c, prospecto: { ...c.prospecto, documentosCompletos: completo } }
+        : c,
+    ),
   };
 }
 
@@ -1191,6 +1286,250 @@ export function editarProveedor(
   return {
     padron: estado.padron.map((p) => (p.id === proveedor.id ? proveedor : p)),
   };
+}
+
+// --- campañas comerciales ------------------------------------------------
+
+/** Alta en el catálogo de campañas; se ignora si el id ya existe. */
+export function agregarCampana(estado: CampanasState, campana: Campana): CampanasState {
+  if (estado.campanas.some((c) => c.id === campana.id)) return estado;
+  return { campanas: [...estado.campanas, campana] };
+}
+
+/** Reemplaza los datos de una campaña; se ignora si no existe. */
+export function editarCampana(estado: CampanasState, campana: Campana): CampanasState {
+  if (!estado.campanas.some((c) => c.id === campana.id)) return estado;
+  return {
+    campanas: estado.campanas.map((c) => (c.id === campana.id ? campana : c)),
+  };
+}
+
+// --- servicio a clientes ---------------------------------------------------
+
+/** Lo que captura el alta del caso: el resto lo fija el reducer (nace recibido). */
+export type NuevoCaso = Pick<
+  CasoServicio,
+  "plazaId" | "localId" | "locatarioId" | "tipo" | "prioridad" | "canal" | "descripcion"
+> &
+  Pick<Partial<CasoServicio>, "facturaId">;
+
+/** Id siguiente al mayor `cas-NNNN` (los folios reinician por año; los ids no). */
+function siguienteIdCaso(casos: readonly CasoServicio[]): string {
+  const maximo = casos.reduce(
+    (mayor, c) => Math.max(mayor, Number(/^cas-(\d+)$/.exec(c.id)?.[1] ?? 0)),
+    0,
+  );
+  return `cas-${String(maximo + 1).padStart(4, "0")}`;
+}
+
+function conEntrada(
+  caso: CasoServicio,
+  fecha: string,
+  autor: string,
+  texto: string,
+): CasoServicio {
+  const entrada = { id: `${caso.id}-b${caso.bitacora.length + 1}`, fecha, autor, texto };
+  return { ...caso, bitacora: [...caso.bitacora, entrada] };
+}
+
+/** Aplica `cambio` al caso `id`; si no existe o `cambio` devuelve `undefined`, deja el estado igual. */
+function cambiarCaso(
+  estado: CasosState,
+  id: string,
+  cambio: (caso: CasoServicio) => CasoServicio | undefined,
+): CasosState {
+  const actual = estado.casos.find((c) => c.id === id);
+  const siguiente = actual && cambio(actual);
+  if (!siguiente) return estado;
+  return { casos: estado.casos.map((c) => (c.id === id ? siguiente : c)) };
+}
+
+/** Registra un caso recibido con el siguiente folio del año; la factura solo en una aclaración. */
+export function registrarCaso(
+  estado: CasosState,
+  nuevo: NuevoCaso,
+  ahora: string,
+  autor: string,
+): CasosState {
+  const { facturaId, ...datos } = nuevo;
+  const caso: CasoServicio = {
+    ...datos,
+    ...(nuevo.tipo === "ACLARACION_FACTURA" && facturaId ? { facturaId } : {}),
+    id: siguienteIdCaso(estado.casos),
+    folio: siguienteFolioCaso(estado.casos, Number(ahora.slice(0, 4))),
+    estatus: "RECIBIDO",
+    abiertoEl: ahora,
+    bitacora: [],
+  };
+  return {
+    casos: [
+      ...estado.casos,
+      conEntrada(caso, ahora, autor, TEXTO_BITACORA_CASO.registrado(nuevo.canal)),
+    ],
+  };
+}
+
+/**
+ * Responde al locatario. La primera respuesta fija `primeraRespuestaEl` y el
+ * responsable y saca al caso de RECIBIDO; las siguientes solo quedan en la
+ * bitácora. Un caso cerrado no se responde.
+ */
+export function responderCaso(
+  estado: CasosState,
+  id: string,
+  texto: string,
+  ahora: string,
+  responsable: Pick<Usuario, "id" | "nombre">,
+): CasosState {
+  return cambiarCaso(estado, id, (caso) => {
+    if (caso.estatus === "CERRADO") return undefined;
+    const anotado = conEntrada(
+      caso,
+      ahora,
+      responsable.nombre,
+      TEXTO_BITACORA_CASO.respuesta(texto),
+    );
+    if (caso.primeraRespuestaEl !== undefined) return anotado;
+    return {
+      ...anotado,
+      estatus: "EN_ATENCION",
+      primeraRespuestaEl: ahora,
+      responsableId: responsable.id,
+    };
+  });
+}
+
+/** Mueve el caso según su ciclo: RESUELTO fija `resueltoEl`; CERRADO guarda la calificación. */
+export function transicionarCaso(
+  estado: CasosState,
+  id: string,
+  destino: EstatusCaso,
+  ahora: string,
+  autor: string,
+  calificacion?: number,
+): CasosState {
+  return cambiarCaso(estado, id, (caso) => {
+    if (!validarTransicionCaso(caso, destino, calificacion).ok) return undefined;
+    const cambiado: CasoServicio = { ...caso, estatus: destino };
+    if (destino === "RESUELTO") cambiado.resueltoEl = ahora;
+    // `validarTransicionCaso` ya exige la calificación al cerrar; el guardia la tipa.
+    if (destino === "CERRADO" && esCalificacionCaso(calificacion))
+      cambiado.calificacion = calificacion;
+    return conEntrada(
+      cambiado,
+      ahora,
+      autor,
+      TEXTO_BITACORA_CASO.estatus(destino, calificacion),
+    );
+  });
+}
+
+/** Deja un comentario interno en la bitácora; no cuenta como respuesta. */
+export function comentarCaso(
+  estado: CasosState,
+  id: string,
+  texto: string,
+  ahora: string,
+  autor: string,
+): CasosState {
+  return cambiarCaso(estado, id, (caso) => conEntrada(caso, ahora, autor, texto));
+}
+
+/**
+ * Escala el caso a un mantenimiento correctivo de origen locatario en su plaza
+ * y su local, y en el mismo paso liga el mantenimiento creado al caso con su
+ * entrada de bitácora. Si el caso no se puede escalar (`puedeEscalar`, que
+ * evita el doble alta), deja ambos estados igual.
+ */
+export function escalarCaso(
+  casos: CasosState,
+  mantenimientos: MantenimientosState,
+  casoId: string,
+  nuevo: NuevoMantenimiento,
+  ahora: string,
+  solicitadoPor: string,
+): { casos: CasosState; mantenimientos: MantenimientosState } {
+  const caso = casos.casos.find((c) => c.id === casoId);
+  if (!caso || !puedeEscalar(caso)) return { casos, mantenimientos };
+  const siguientes = agregarMantenimiento(
+    mantenimientos,
+    {
+      ...nuevo,
+      tipo: "CORRECTIVO",
+      origen: "LOCATARIO",
+      plazaId: caso.plazaId,
+      localId: caso.localId,
+    },
+    ahora.slice(0, 10),
+    solicitadoPor,
+  );
+  const creado = siguientes.mantenimientos.at(-1);
+  if (!creado) return { casos, mantenimientos };
+  return {
+    mantenimientos: siguientes,
+    casos: cambiarCaso(casos, casoId, (c) =>
+      conEntrada(
+        { ...c, mantenimientoId: creado.id },
+        ahora,
+        solicitadoPor,
+        TEXTO_BITACORA_CASO.escalado(creado.folio),
+      ),
+    ),
+  };
+}
+
+// --- comisiones -------------------------------------------------------------
+
+/**
+ * Genera las comisiones de un contrato recién firmado de una cotización, con el
+ * esquema vigente. `vendedorComercial` lo resuelve el llamador. Los ids que ya
+ * existen se ignoran: firmar dos veces no duplica comisiones.
+ */
+export function registrarComisionesDeFirma(
+  estado: ComisionesState,
+  contrato: Contrato,
+  cotizacion: Cotizacion,
+  excepciones: readonly ExcepcionPrecio[],
+  vendedorComercial: boolean,
+  ahora: string,
+): ComisionesState {
+  const generadas = calcularComisiones(
+    contrato,
+    estado.esquema,
+    {
+      vendedorId: cotizacion.vendedorId,
+      vendedorComercial,
+      requirioExcepcion: cotizacionRequirioExcepcion(cotizacion.id, excepciones),
+      mesesCobrados: mesesCobrados(cotizacion.plazoMeses, cotizacion.mesesGracia),
+    },
+    ahora,
+  );
+  const existentes = new Set(estado.comisiones.map((c) => c.id));
+  const nuevas = generadas.filter((c) => !existentes.has(c.id));
+  if (nuevas.length === 0) return estado;
+  return { ...estado, comisiones: [...estado.comisiones, ...nuevas] };
+}
+
+/** Marca una comisión pendiente como pagada en `fecha`; inexistente o ya pagada, sin cambio. */
+export function marcarComisionPagada(
+  estado: ComisionesState,
+  id: string,
+  fecha: FechaISO,
+): ComisionesState {
+  const actual = estado.comisiones.find((c) => c.id === id);
+  if (!actual || actual.pagadaEl !== undefined) return estado;
+  return {
+    ...estado,
+    comisiones: estado.comisiones.map((c) => (c.id === id ? { ...c, pagadaEl: fecha } : c)),
+  };
+}
+
+/** Reemplaza el esquema vigente; las comisiones ya generadas no cambian. */
+export function editarEsquemaComisiones(
+  estado: ComisionesState,
+  esquema: EsquemaComisiones,
+): ComisionesState {
+  return { ...estado, esquema: { ...esquema, mandosMedios: [...esquema.mandosMedios] } };
 }
 
 // --- reglas por default ---------------------------------------------------

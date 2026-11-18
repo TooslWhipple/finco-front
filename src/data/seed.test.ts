@@ -7,6 +7,13 @@ import {
   montoDePrecios,
   proveedoresActivos,
   antiguedadSaldos,
+  campanaVigente,
+  contratoVigenteParaApertura,
+  estadisticaCampanas,
+  estadoMeta,
+  foliosFacturaDeLocal,
+  horasEntre,
+  sumarDias,
   carteraVencida,
   consumoPresupuesto,
   excedenteSobregiro,
@@ -19,6 +26,7 @@ import {
   kpisMantenimiento,
   consecutivoDeFolio,
   embudoProspectos,
+  expedienteCompleto,
   enDesarrolloEn,
   estatusCobro,
   evaluarCandados,
@@ -32,7 +40,7 @@ import {
   temperaturaProspecto,
   rentaVsMinimo,
 } from "@/domain";
-import { USUARIOS_DEMO } from "@/config/usuarios";
+import { IDS_VENDEDORES, USUARIOS_DEMO } from "@/config/usuarios";
 import { CATALOGO, PROVEEDORES } from "./catalogo";
 import {
   COTIZACION_CANDADO,
@@ -40,6 +48,7 @@ import {
   LOCAL_HEROE,
   PLAZA_HEROE_ID,
 } from "./heroe";
+import { AHORA_DEMO } from "@/lib/tiempo";
 import { crearSeed } from "./seed";
 
 const seed = crearSeed();
@@ -339,11 +348,37 @@ describe("prospectos", () => {
     for (const c of seed.cotizaciones) {
       const prospecto = porId.get(c.prospectoId ?? "");
       expect(prospecto, c.id).toBeDefined();
-      expect(prospecto!.etapa).toBe("COTIZADO");
+      expect(prospecto!.etapa, c.id).toBe(
+        c.ofertas.length === 3 ? "NEGOCIACION" : "COTIZADO",
+      );
       expect(prospecto!.nombre).toBe(c.prospecto.nombre);
       expect(prospecto!.localIds).toEqual([c.localId]);
-      expect(prospecto!.documentosCompletos).toBe(c.prospecto.documentosCompletos);
+      expect(expedienteCompleto(prospecto!), c.id).toBe(c.prospecto.documentosCompletos);
     }
+  });
+
+  it("el expediente no guarda el booleano y sus fechas caen entre el alta y hoy", () => {
+    for (const p of seed.prospectos) {
+      expect(Object.hasOwn(p, "documentosCompletos"), p.id).toBe(false);
+      for (const fecha of Object.values(p.documentos)) {
+        expect(fecha >= p.creadoEl && fecha <= DEMO_TODAY, `${p.id} ${fecha}`).toBe(true);
+      }
+    }
+  });
+
+  it("los ganados tienen el expediente completo y el héroe es persona moral con sus 5 documentos", () => {
+    for (const p of seed.prospectos.filter((p) => p.etapa === "GANADO"))
+      expect(expedienteCompleto(p), p.id).toBe(true);
+    const cotizacion = seed.cotizaciones.find((c) => c.id === COTIZACION_HEROE)!;
+    const heroe = porId.get(cotizacion.prospectoId ?? "")!;
+    expect(heroe.tipoPersona).toBe("MORAL");
+    expect(Object.keys(heroe.documentos)).toHaveLength(5);
+  });
+
+  it("en negociación están solo los de cotización con 3 ofertas, y hay de ambas etapas", () => {
+    const etapas = seed.cotizaciones.map((c) => porId.get(c.prospectoId ?? "")!.etapa);
+    expect(etapas.filter((e) => e === "NEGOCIACION").length).toBeGreaterThan(0);
+    expect(etapas.filter((e) => e === "COTIZADO").length).toBeGreaterThan(0);
   });
 
   it("A-09 tiene 2 prospectos activos, uno es el de COT-2026-0418", () => {
@@ -832,5 +867,211 @@ describe("caso demo de liberación", () => {
       return añosHastaFecha(local.historial, DEMO_TODAY).length >= 3;
     });
     expect(conSalto.map((c) => c.localId)).toContain("plz-alborada-A-05");
+  });
+});
+
+describe("campañas y atribución de contratos", () => {
+  const campanaPorId = new Map(seed.campanas.map((c) => [c.id, c]));
+
+  it("siembra las 6 campañas cmp-01..cmp-06", () => {
+    expect(seed.campanas.map((c) => c.id)).toEqual([
+      "cmp-01",
+      "cmp-02",
+      "cmp-03",
+      "cmp-04",
+      "cmp-05",
+      "cmp-06",
+    ]);
+  });
+
+  it("todo campanaId existe, su canal es el origen y estaba vigente en el alta", () => {
+    const ligados = seed.prospectos.filter((p) => p.campanaId !== undefined);
+    expect(ligados.length).toBeGreaterThan(0);
+    for (const p of ligados) {
+      const campana = campanaPorId.get(p.campanaId!);
+      expect(campana, p.id).toBeDefined();
+      expect(campana!.canal).toBe(p.origen);
+      expect(campanaVigente(campana!, p.creadoEl)).toBe(true);
+    }
+  });
+
+  it("solo los prospectos REDES y SITIO_WEB llevan campaña", () => {
+    const origenes = new Set(
+      seed.prospectos.filter((p) => p.campanaId !== undefined).map((p) => p.origen),
+    );
+    expect([...origenes].sort()).toEqual(["REDES", "SITIO_WEB"]);
+  });
+
+  it("deja prospectos en al menos 3 de las campañas cmp-01 a cmp-04", () => {
+    const conProspectos = new Set(seed.prospectos.map((p) => p.campanaId));
+    const elegibles = ["cmp-01", "cmp-02", "cmp-03", "cmp-04"];
+    expect(elegibles.filter((id) => conProspectos.has(id)).length).toBeGreaterThanOrEqual(
+      3,
+    );
+  });
+
+  it("atribuye exactamente 15 contratos de 2026 a vendedores del equipo", () => {
+    const contratoPorId = new Map(seed.contratos.map((c) => [c.id, c]));
+    const atribuidos = Object.entries(seed.atribucionContratos);
+    expect(atribuidos).toHaveLength(15);
+    for (const [id, { vendedorId, campanaId }] of atribuidos) {
+      expect(contratoPorId.get(id)?.inicio.startsWith("2026"), id).toBe(true);
+      expect(IDS_VENDEDORES).toContain(vendedorId);
+      if (campanaId !== undefined) expect(campanaPorId.has(campanaId)).toBe(true);
+    }
+  });
+
+  it("al menos una campaña está vigente a DEMO_TODAY", () => {
+    expect(seed.campanas.some((c) => campanaVigente(c, DEMO_TODAY))).toBe(true);
+  });
+
+  it("la estadística del seed tiene 3 campañas con contratos y conversión ≤ 1", () => {
+    const estadistica = estadisticaCampanas(
+      seed.campanas,
+      seed.prospectos,
+      seed.cotizaciones,
+      seed.contratos,
+      seed.atribucionContratos,
+    );
+    expect(estadistica.filter((e) => e.contratos > 0).length).toBeGreaterThanOrEqual(3);
+    for (const e of estadistica) {
+      if (e.conversion !== null) expect(e.conversion).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+describe("comisiones históricas", () => {
+  const comisiones = seed.comisiones;
+  const contratoPorId = new Map(seed.contratos.map((c) => [c.id, c]));
+
+  it("son deterministas, con ids únicos", () => {
+    expect(crearSeed().comisiones).toEqual(comisiones);
+    expect(comisiones.length).toBeGreaterThan(0);
+    expect(new Set(comisiones.map((c) => c.id)).size).toBe(comisiones.length);
+  });
+
+  it("todas son de contratos atribuidos de 2026, generadas el día de inicio", () => {
+    for (const c of comisiones) {
+      const atribucion = seed.atribucionContratos[c.contratoId];
+      expect(atribucion, c.id).toBeDefined();
+      const contrato = contratoPorId.get(c.contratoId)!;
+      expect(contrato.inicio.startsWith("2026"), c.id).toBe(true);
+      expect(c.generadaEl).toBe(contrato.inicio);
+      if (c.concepto === "MANDO_MEDIO") {
+        expect(c.usuarioId).not.toBe(atribucion.vendedorId);
+      } else {
+        expect(c.usuarioId).toBe(atribucion.vendedorId);
+      }
+      expect(IDS_VENDEDORES).toContain(atribucion.vendedorId);
+    }
+  });
+
+  it("los cobradores son vendedores de IDS_VENDEDORES", () => {
+    for (const c of comisiones) expect(IDS_VENDEDORES).toContain(c.usuarioId);
+  });
+
+  it("hay pagadas y pendientes, con generadaEl ≤ pagadaEl ≤ DEMO_TODAY", () => {
+    const pagadas = comisiones.filter((c) => c.pagadaEl !== undefined);
+    expect(pagadas.length).toBeGreaterThan(0);
+    expect(pagadas.length).toBeLessThan(comisiones.length);
+    for (const c of pagadas) {
+      expect(c.generadaEl <= c.pagadaEl!, c.id).toBe(true);
+      expect(c.pagadaEl! <= DEMO_TODAY, c.id).toBe(true);
+    }
+  });
+});
+
+describe("casos de servicio a clientes", () => {
+  const casos = seed.casos;
+  const vigentePorLocal = new Map(
+    seed.contratos
+      .filter((c) => contratoVigenteParaApertura(c, DEMO_TODAY))
+      .map((c) => [c.localId, c]),
+  );
+  const localPorId = new Map(seed.locales.map((l) => [l.id, l]));
+  const mantenimientoPorId = new Map(seed.mantenimientos.map((m) => [m.id, m]));
+  const desde = sumarDias(DEMO_TODAY, -60);
+
+  it("hay unos 30 de los últimos 60 días, con ids y folios únicos", () => {
+    expect(casos.length).toBeGreaterThanOrEqual(25);
+    expect(casos.length).toBeLessThanOrEqual(40);
+    expect(new Set(casos.map((c) => c.id)).size).toBe(casos.length);
+    expect(new Set(casos.map((c) => c.folio)).size).toBe(casos.length);
+    for (const c of casos) {
+      expect(c.folio).toMatch(/^CAS-\d{4}-\d{4}$/);
+      expect(c.abiertoEl.slice(0, 10) >= desde, c.folio).toBe(true);
+      expect(horasEntre(c.abiertoEl, AHORA_DEMO), c.folio).toBeGreaterThan(0);
+    }
+  });
+
+  it("cada caso apunta a un local con contrato vigente, a su plaza y a su locatario", () => {
+    for (const c of casos) {
+      const contrato = vigentePorLocal.get(c.localId);
+      expect(contrato, c.folio).toBeDefined();
+      expect(c.locatarioId, c.folio).toBe(contrato?.locatarioId);
+      expect(localPorId.get(c.localId)?.plazaId, c.folio).toBe(c.plazaId);
+    }
+  });
+
+  it("el ciclo es coherente: respuesta tras abrir, resolución en RESUELTO y CERRADO, calificación al cerrar", () => {
+    for (const c of casos) {
+      if (c.estatus === "RECIBIDO") {
+        expect(c.primeraRespuestaEl, c.folio).toBeUndefined();
+        continue;
+      }
+      expect(c.primeraRespuestaEl, c.folio).toBeDefined();
+      expect(horasEntre(c.abiertoEl, c.primeraRespuestaEl!), c.folio).toBeGreaterThan(0);
+      expect(c.responsableId, c.folio).toBe("usr-atencion");
+      if (c.estatus === "RESUELTO" || c.estatus === "CERRADO")
+        expect(c.resueltoEl, c.folio).toBeDefined();
+      if (c.estatus === "CERRADO") expect(c.calificacion, c.folio).toBeDefined();
+    }
+  });
+
+  it("hay al menos un por vencer (ALTA de 3,5 horas), un fuera de tiempo, un escalado y una aclaración", () => {
+    expect(
+      casos.some(
+        (c) =>
+          c.prioridad === "ALTA" &&
+          c.estatus === "RECIBIDO" &&
+          horasEntre(c.abiertoEl, AHORA_DEMO) === 3.5 &&
+          estadoMeta(c, AHORA_DEMO) === "POR_VENCER",
+      ),
+    ).toBe(true);
+    expect(casos.some((c) => estadoMeta(c, AHORA_DEMO) === "FUERA_DE_TIEMPO")).toBe(true);
+    expect(casos.some((c) => c.mantenimientoId !== undefined)).toBe(true);
+    expect(casos.some((c) => c.tipo === "ACLARACION_FACTURA")).toBe(true);
+  });
+
+  it("los escalados se ligan a un correctivo de locatario del mismo local, uno por caso y con el tipo de su categoría", () => {
+    const escalados = casos.filter((c) => c.mantenimientoId !== undefined);
+    expect(new Set(escalados.map((c) => c.mantenimientoId)).size).toBe(escalados.length);
+    const tipoDe = { PLOMERIA: "FUGA", ELECTRICO: "FALLA" } as Record<string, string>;
+    for (const c of escalados) {
+      const m = mantenimientoPorId.get(c.mantenimientoId!);
+      expect(m, c.folio).toBeDefined();
+      expect(m?.tipo, c.folio).toBe("CORRECTIVO");
+      expect(m?.origen, c.folio).toBe("LOCATARIO");
+      expect(m?.localId, c.folio).toBe(c.localId);
+      expect(m!.fechaProgramada > c.abiertoEl.slice(0, 10), c.folio).toBe(true);
+      expect(m!.fechaProgramada >= desde, c.folio).toBe(true);
+      expect(c.tipo, c.folio).toBe(tipoDe[m!.categoria] ?? "DANO");
+    }
+  });
+
+  it("las aclaraciones usan una factura con folio del local, de los tres últimos meses y no posterior al caso", () => {
+    for (const c of casos.filter((x) => x.tipo === "ACLARACION_FACTURA")) {
+      const folio = foliosFacturaDeLocal(seed.facturas, c.localId, DEMO_TODAY).find(
+        (f) => f.id === c.facturaId,
+      );
+      expect(folio, c.folio).toBeDefined();
+      expect(folio!.mes <= c.abiertoEl.slice(0, 7), c.folio).toBe(true);
+    }
+  });
+
+  it("no agrega mantenimientos: la numeración mnt-NNNN sigue consecutiva", () => {
+    expect(seed.mantenimientos.map((m) => m.id)).toEqual(
+      seed.mantenimientos.map((_, i) => `mnt-${String(i + 1).padStart(4, "0")}`),
+    );
   });
 });

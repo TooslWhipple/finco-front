@@ -1,7 +1,11 @@
 import {
   DEMO_TODAY,
+  DOCUMENTOS_REQUERIDOS,
   ETAPAS_PROSPECTO,
+  ORIGENES_PROSPECTO,
+  diasEntre,
   sumarDias,
+  tipoPersonaDeRfc,
   type ActividadProspecto,
   diasSinContacto,
   prospectoActivo,
@@ -9,6 +13,7 @@ import {
   type Contrato,
   type Cotizacion,
   type EtapaProspecto,
+  type ExpedienteProspecto,
   type Local,
   type Locatario,
   type OrigenProspecto,
@@ -20,6 +25,8 @@ import { crearPrng, type Prng } from "./prng";
 import { vendedorDeProspecto } from "./vendedores";
 
 const SEMILLA_PROSPECTOS = 4_117;
+/** PRNG aparte para el expediente: no reordena el consumo del principal. */
+const SEMILLA_DOCUMENTOS = 4_118;
 
 /** Prospectos sin cotización por etapa (con las 22 cotizaciones del seed suman unos 60). */
 const SIN_COTIZACION: ReadonlyArray<readonly [EtapaProspecto, number]> = [
@@ -28,15 +35,6 @@ const SIN_COTIZACION: ReadonlyArray<readonly [EtapaProspecto, number]> = [
   ["VISITA", 8],
   ["GANADO", 6],
   ["PERDIDO", 5],
-];
-
-const ORIGENES: readonly OrigenProspecto[] = [
-  "REFERIDO",
-  "SITIO_WEB",
-  "LLAMADA",
-  "REDES",
-  "BROKER",
-  "EVENTO",
 ];
 
 const TEXTO_ORIGEN: Record<OrigenProspecto, string> = {
@@ -160,13 +158,38 @@ function actividadDe(datos: DatosActividad): ActividadProspecto[] {
   return actividad;
 }
 
+/**
+ * Documentos entregados según el objetivo de completitud: completo trae todos
+ * los requeridos y, si no, falta al menos uno. Cada fecha cae entre el alta y
+ * el último hecho del seguimiento.
+ */
+function documentosDe(
+  tipoPersona: ExpedienteProspecto["tipoPersona"],
+  completo: boolean,
+  desde: string,
+  hasta: string,
+  rng: Prng,
+): ExpedienteProspecto["documentos"] {
+  const requeridos = DOCUMENTOS_REQUERIDOS[tipoPersona];
+  const entregados = completo
+    ? [...requeridos]
+    : rng.barajar(requeridos).slice(0, rng.entero(0, requeridos.length - 1));
+  const margen = Math.max(0, diasEntre(desde, hasta));
+  return Object.fromEntries(
+    requeridos
+      .filter((tipo) => entregados.includes(tipo))
+      .map((tipo) => [tipo, sumarDias(desde, rng.entero(0, margen))]),
+  );
+}
+
 /** Mínimo de prospectos fríos y de tibios que la demo muestra por vendedor. */
 const MINIMO_POR_TEMPERATURA = 3;
 
 /**
  * Enfría (sin tocar el orden del seguimiento) a prospectos al día de cada
  * vendedor hasta que tenga al menos 3 fríos y 3 tibios. Solo mueve a los
- * activos sin cotización: los cotizados conservan la fecha de su oferta.
+ * activos sin cotización: los cotizados y en negociación conservan la fecha de
+ * su oferta.
  */
 function enfriarProspectos(prospectos: Prospecto[]): Prospecto[] {
   const resultado = [...prospectos];
@@ -177,7 +200,11 @@ function enfriarProspectos(prospectos: Prospecto[]): Prospecto[] {
       temperaturaProspecto(diasSinContacto(p, DEMO_TODAY));
     const contar = (t: string) => propios.filter((p) => temperatura(p) === t).length;
     const candidatos = propios.filter(
-      (p) => prospectoActivo(p) && p.etapa !== "COTIZADO" && temperatura(p) === "AL_DIA",
+      (p) =>
+        prospectoActivo(p) &&
+        p.etapa !== "COTIZADO" &&
+        p.etapa !== "NEGOCIACION" &&
+        temperatura(p) === "AL_DIA",
     );
     const pendientes = [
       ...Array.from(
@@ -201,6 +228,12 @@ function enfriarProspectos(prospectos: Prospecto[]): Prospecto[] {
           ...a,
           fecha: sumarDias(a.fecha, -desplazo),
         })),
+        documentos: Object.fromEntries(
+          Object.entries(candidato.documentos).map(([tipo, fecha]) => [
+            tipo,
+            sumarDias(fecha, -desplazo),
+          ]),
+        ),
       };
     });
   }
@@ -215,7 +248,8 @@ export interface Prospeccion {
 
 /**
  * Prospectos de la demo, coherentes con el resto del seed:
- * - cada cotización tiene su prospecto (etapa COTIZADO) y queda enlazada;
+ * - cada cotización tiene su prospecto y queda enlazada: en NEGOCIACION si la
+ *   cotización tiene 3 ofertas y en COTIZADO si no;
  * - A-09 tiene exactamente 2 prospectos activos: Café Tierra Alta (COT-2026-0418) y otro;
  * - los ganados son locatarios que firmaron contrato recientemente;
  * - el interés abierto cae en locales disponibles o de plazas en preventa.
@@ -227,6 +261,7 @@ export function crearProspectos(
   contratos: readonly Contrato[],
 ): Prospeccion {
   const rng = crearPrng(SEMILLA_PROSPECTOS);
+  const rngDocumentos = crearPrng(SEMILLA_DOCUMENTOS);
   const porId = new Map(locales.map((l) => [l.id, l]));
   const locatarioPorId = new Map(locatarios.map((l) => [l.id, l]));
   const idHeroe = `${PLAZA_HEROE_ID}-${LOCAL_HEROE}`;
@@ -235,33 +270,47 @@ export function crearProspectos(
     ...cotizaciones.map((c) => c.prospecto.nombre),
   ]);
   const prospectos: Prospecto[] = [];
+  /**
+   * `expedienteObjetivo` decide si el expediente sembrado queda completo; las
+   * cotizaciones pasan su instantánea para que ambas coincidan.
+   */
   const alta = (
-    base: Pick<
-      Prospecto,
-      "nombre" | "documentosCompletos" | "aval" | "etapa" | "localIds" | "giro"
-    >,
+    base: Pick<Prospecto, "nombre" | "aval" | "etapa" | "localIds" | "giro">,
+    expedienteObjetivo: boolean,
     cotizacion?: Cotizacion,
   ): Prospecto => {
-    const origen = rng.elegir(ORIGENES);
+    const origen = rng.elegir(ORIGENES_PROSPECTO);
     const creadoEl = cotizacion
       ? sumarDias(cotizacion.emitidaEl, -rng.entero(12, 30))
       : sumarDias(DEMO_TODAY, -rng.entero(2, 75));
+    const rfc = rfcFicticio(base.nombre, rng);
+    const contacto = contactoDe(base.nombre, rng);
+    const actividad = actividadDe({
+      etapa: base.etapa,
+      origen,
+      creadoEl,
+      codigosLocales: base.localIds.map((id) => porId.get(id)?.codigo ?? ""),
+      cotizacion,
+      rng,
+    });
+    const tipoPersona = tipoPersonaDeRfc(rfc);
     const prospecto: Prospecto = {
       ...base,
       id: `pro-${String(prospectos.length + 1).padStart(3, "0")}`,
-      rfc: rfcFicticio(base.nombre, rng),
-      contacto: contactoDe(base.nombre, rng),
+      rfc,
+      tipoPersona,
+      documentos: documentosDe(
+        tipoPersona,
+        expedienteObjetivo,
+        creadoEl,
+        actividad.at(-1)?.fecha ?? creadoEl,
+        rngDocumentos,
+      ),
+      contacto,
       origen,
       creadoEl,
       vendedorId: vendedorDeProspecto(cotizacion, prospectos.length),
-      actividad: actividadDe({
-        etapa: base.etapa,
-        origen,
-        creadoEl,
-        codigosLocales: base.localIds.map((id) => porId.get(id)?.codigo ?? ""),
-        cotizacion,
-        rng,
-      }),
+      actividad,
     };
     prospectos.push(prospecto);
     return prospecto;
@@ -283,12 +332,13 @@ export function crearProspectos(
     const prospecto = alta(
       {
         nombre: cotizacion.prospecto.nombre,
-        documentosCompletos: cotizacion.prospecto.documentosCompletos,
         aval: cotizacion.prospecto.aval,
-        etapa: "COTIZADO",
+        // La más renegociada (3 ofertas) ya está en negociación; regla sin PRNG.
+        etapa: cotizacion.ofertas.length === 3 ? "NEGOCIACION" : "COTIZADO",
         giro: cotizacion.giro ?? local?.giro ?? rng.elegir(GIROS),
         localIds: [cotizacion.localId],
       },
+      cotizacion.prospecto.documentosCompletos,
       cotizacion,
     );
     return { ...cotizacion, prospectoId: prospecto.id };
@@ -296,12 +346,7 @@ export function crearProspectos(
 
   // Segundo prospecto de A-09, en visita.
   const segundoA09 = nombreNuevo();
-  alta({
-    ...segundoA09,
-    documentosCompletos: false,
-    etapa: "VISITA",
-    localIds: [idHeroe],
-  });
+  alta({ ...segundoA09, etapa: "VISITA", localIds: [idHeroe] }, false);
 
   // Ganados: los locatarios con contrato más reciente.
   const ganados = SIN_COTIZACION.find(([etapa]) => etapa === "GANADO")![1];
@@ -310,14 +355,16 @@ export function crearProspectos(
     .slice(0, ganados)
     .forEach((contrato) => {
       const locatario = locatarioPorId.get(contrato.locatarioId);
-      alta({
-        nombre: locatario?.nombre ?? "Locatario",
-        giro: locatario?.giro ?? rng.elegir(GIROS),
-        documentosCompletos: true,
-        aval: "Aval solidario registrado",
-        etapa: "GANADO",
-        localIds: [contrato.localId],
-      });
+      alta(
+        {
+          nombre: locatario?.nombre ?? "Locatario",
+          giro: locatario?.giro ?? rng.elegir(GIROS),
+          aval: "Aval solidario registrado",
+          etapa: "GANADO",
+          localIds: [contrato.localId],
+        },
+        true,
+      );
     });
 
   // Interés abierto: disponibles (sin A-09) y locales de preventa.
@@ -328,12 +375,10 @@ export function crearProspectos(
     if (etapa === "GANADO") continue;
     for (let i = 0; i < cantidad; i++) {
       const destinos = rng.barajar(interes).slice(0, rng.entero(1, 2));
-      alta({
-        ...nombreNuevo(),
-        documentosCompletos: etapa === "VISITA" ? rng.prob(0.6) : false,
-        etapa,
-        localIds: destinos.map((l) => l.id),
-      });
+      const datos = nombreNuevo();
+      // Misma posición del PRNG que antes: tras `nombreNuevo()`.
+      const expedienteObjetivo = etapa === "VISITA" ? rng.prob(0.6) : false;
+      alta({ ...datos, etapa, localIds: destinos.map((l) => l.id) }, expedienteObjetivo);
     }
   }
   return {

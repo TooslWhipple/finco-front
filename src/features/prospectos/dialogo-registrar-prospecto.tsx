@@ -13,12 +13,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { DEMO_TODAY, siguienteIdProspecto } from "@/domain";
-import { useLocales, usePlazas, useSesion } from "@/hooks";
+import {
+  campanaVigente,
+  DEMO_TODAY,
+  ETIQUETA_ORIGEN_PROSPECTO,
+  siguienteIdProspecto,
+} from "@/domain";
+import { useCampanas, useLocales, usePlazas, useSesion } from "@/hooks";
 import { useAppStore } from "@/store";
 import { Campo, CLASE_SELECT } from "@/features/cotizacion/campo";
 import {
   OPCIONES_ORIGEN,
+  OPCIONES_TIPO_PERSONA,
   esquemaNuevoProspecto,
   prospectoDesdeFormulario,
   type NuevoProspectoFormulario,
@@ -60,9 +66,10 @@ const VALORES_INICIALES: NuevoProspectoFormulario = {
   telefono: "",
   correo: "",
   origen: "REFERIDO",
+  campanaId: "",
+  tipoPersona: "MORAL",
   plazaId: "",
   localId: "",
-  documentosCompletos: false,
   avalRegistrado: false,
 };
 
@@ -76,6 +83,8 @@ function FormularioProspecto({
   const registrarProspecto = useAppStore((s) => s.registrarProspecto);
   const { usuario } = useSesion();
   const plazas = usePlazas().datos ?? [];
+  const campanas = useCampanas();
+  const vigentes = campanas.filter((c) => campanaVigente(c, DEMO_TODAY));
 
   const form = useForm<NuevoProspectoFormulario, unknown, NuevoProspectoValidado>({
     resolver: zodResolver(esquemaNuevoProspecto),
@@ -88,6 +97,8 @@ function FormularioProspecto({
     formState: { errors, isValid },
   } = form;
   const plazaId = useWatch({ control: form.control, name: "plazaId" });
+  const campanaId = useWatch({ control: form.control, name: "campanaId" });
+  const campanaElegida = campanas.find((c) => c.id === campanaId);
   const locales = useLocales(plazaId || undefined);
   const conInteres = (plazaId ? (locales.datos ?? []) : []).filter(
     (l) =>
@@ -100,7 +111,9 @@ function FormularioProspecto({
     if (!usuario) return;
     // El id sale de todos los prospectos del store, no solo de los visibles para este vendedor.
     const id = siguienteIdProspecto(useAppStore.getState().prospectos.prospectos);
-    registrarProspecto(prospectoDesdeFormulario(v, id, DEMO_TODAY, usuario.id));
+    // "" (Sin campaña) o un id desconocido no ligan campaña.
+    const campana = campanas.find((c) => c.id === v.campanaId);
+    registrarProspecto(prospectoDesdeFormulario(v, id, DEMO_TODAY, usuario.id, campana));
     toast.success(`Prospecto ${v.nombre} registrado`, {
       description: "Entró al embudo en la etapa Nuevo.",
     });
@@ -121,8 +134,26 @@ function FormularioProspecto({
           etiqueta="Razón social o nombre"
           htmlFor="prospecto-nombre"
           error={errors.nombre?.message}
+          className="col-span-2"
         >
           <Input id="prospecto-nombre" {...register("nombre")} />
+        </Campo>
+        <Campo
+          etiqueta="Tipo de persona"
+          htmlFor="prospecto-tipo-persona"
+          error={errors.tipoPersona?.message}
+        >
+          <select
+            id="prospecto-tipo-persona"
+            className={CLASE_SELECT}
+            {...register("tipoPersona", { deps: ["rfc"] })}
+          >
+            {OPCIONES_TIPO_PERSONA.map((o) => (
+              <option key={o.valor} value={o.valor}>
+                {o.etiqueta}
+              </option>
+            ))}
+          </select>
         </Campo>
         <Campo etiqueta="RFC" htmlFor="prospecto-rfc" error={errors.rfc?.message}>
           <Input
@@ -136,17 +167,50 @@ function FormularioProspecto({
           <Input id="prospecto-giro" placeholder="Cafetería" {...register("giro")} />
         </Campo>
         <Campo
-          etiqueta="Origen"
-          htmlFor="prospecto-origen"
-          error={errors.origen?.message}
+          etiqueta="Campaña (opcional)"
+          htmlFor="prospecto-campana"
+          error={errors.campanaId?.message}
+          ayuda="Solo campañas vigentes."
         >
-          <select id="prospecto-origen" className={CLASE_SELECT} {...register("origen")}>
-            {OPCIONES_ORIGEN.map((o) => (
-              <option key={o.valor} value={o.valor}>
-                {o.etiqueta}
+          <select
+            id="prospecto-campana"
+            className={CLASE_SELECT}
+            {...register("campanaId", {
+              onChange: (e: { target: { value: string } }) => {
+                const campana = campanas.find((c) => c.id === e.target.value);
+                if (campana) setValue("origen", campana.canal, { shouldValidate: true });
+              },
+            })}
+          >
+            <option value="">Sin campaña</option>
+            {vigentes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
               </option>
             ))}
           </select>
+        </Campo>
+        <Campo
+          etiqueta="Origen"
+          htmlFor="prospecto-origen"
+          error={errors.origen?.message}
+          ayuda={campanaElegida ? "Lo fija el canal de la campaña." : undefined}
+        >
+          {campanaElegida ? (
+            <Input
+              id="prospecto-origen"
+              readOnly
+              value={ETIQUETA_ORIGEN_PROSPECTO[campanaElegida.canal]}
+            />
+          ) : (
+            <select id="prospecto-origen" className={CLASE_SELECT} {...register("origen")}>
+              {OPCIONES_ORIGEN.map((o) => (
+                <option key={o.valor} value={o.valor}>
+                  {o.etiqueta}
+                </option>
+              ))}
+            </select>
+          )}
         </Campo>
         <Campo
           etiqueta="Contacto"
@@ -215,14 +279,6 @@ function FormularioProspecto({
             ))}
           </select>
         </Campo>
-        <label className="col-span-2 flex items-center gap-2 text-sm text-brand-text">
-          <input
-            type="checkbox"
-            className="size-4 accent-brand-secondary"
-            {...register("documentosCompletos")}
-          />
-          Expediente completo (acta, RFC, identificación, comprobante)
-        </label>
         <label className="col-span-2 flex items-center gap-2 text-sm text-brand-text">
           <input
             type="checkbox"

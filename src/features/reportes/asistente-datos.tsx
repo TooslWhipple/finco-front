@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { MessageCircleQuestion, Send, Sparkles } from "lucide-react";
 import { EmptyState, SectionCard } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PREGUNTAS_ASISTENTE, buscarPregunta, type PreguntaAsistente } from "./asistente";
+import type { Rol } from "@/domain";
+import {
+  buscarPregunta,
+  preguntasPara,
+  temasDe,
+  type PreguntaAsistente,
+} from "./asistente";
 import { GraficaBarras } from "./grafica-barras";
 import type { DatosReporte } from "./tipos";
 
@@ -15,9 +21,12 @@ type Turno =
 
 /**
  * Asistente simulado: las respuestas salen de un catálogo declarativo y se
- * calculan al momento sobre el estado actual de la demo. No hay IA.
+ * calculan al momento sobre el estado actual de la demo. No hay IA. Solo
+ * ofrece, busca y anuncia las preguntas que el rol puede hacer.
  */
-export function AsistenteDatos({ datos }: { datos: DatosReporte }) {
+export function AsistenteDatos({ datos, rol }: { datos: DatosReporte; rol: Rol | null }) {
+  const preguntas = useMemo(() => preguntasPara(rol), [rol]);
+  const temas = temasDe(preguntas);
   const [texto, setTexto] = useState("");
   const [turno, setTurno] = useState<Turno | null>(null);
 
@@ -33,13 +42,11 @@ export function AsistenteDatos({ datos }: { datos: DatosReporte }) {
     e.preventDefault();
     const limpio = texto.trim();
     if (!limpio) return;
-    preguntar(buscarPregunta(limpio), limpio);
+    preguntar(buscarPregunta(limpio, preguntas), limpio);
   };
 
   const elegida =
-    turno?.tipo === "respuesta"
-      ? PREGUNTAS_ASISTENTE.find((p) => p.id === turno.id)
-      : undefined;
+    turno?.tipo === "respuesta" ? preguntas.find((p) => p.id === turno.id) : undefined;
   const respuesta = elegida?.responder(datos);
 
   return (
@@ -49,7 +56,7 @@ export function AsistenteDatos({ datos }: { datos: DatosReporte }) {
           <Input
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
-            placeholder="Ej. ¿Cómo va la cobranza este mes?"
+            placeholder={`Pregunta sobre ${temas}`}
             aria-label="Pregunta sobre tus datos"
           />
           <Button type="submit" disabled={texto.trim() === ""}>
@@ -57,9 +64,11 @@ export function AsistenteDatos({ datos }: { datos: DatosReporte }) {
           </Button>
         </form>
         <div className="mt-4">
-          <p className="mb-2 text-sm text-brand-text-muted">Preguntas sugeridas</p>
+          <p className="mb-2 text-sm text-brand-text-muted">
+            Preguntas sugeridas sobre {temas}
+          </p>
           <ul className="flex flex-wrap gap-2">
-            {PREGUNTAS_ASISTENTE.map((p) => (
+            {preguntas.map((p) => (
               <li key={p.id}>
                 <button
                   type="button"
@@ -90,7 +99,7 @@ export function AsistenteDatos({ datos }: { datos: DatosReporte }) {
           <EmptyState
             icono={MessageCircleQuestion}
             titulo="Aún no sé responder eso"
-            descripcion="Esta demo contesta sobre ocupación, cobranza, contratos, prospectos, proyectos y precios. Prueba con una de las preguntas sugeridas."
+            descripcion={`Esta demo contesta sobre ${temas}. Prueba con una de las preguntas sugeridas.`}
           />
         </SectionCard>
       ) : respuesta ? (

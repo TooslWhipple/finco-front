@@ -68,9 +68,13 @@ describe("repositorios mock", () => {
     expect(contratos.every((c) => c.estado === "VIGENTE")).toBe(true);
   });
 
+  it("contratos: la atribución demo es la del seed", async () => {
+    expect(await repos.contratos.atribucionContratos()).toEqual(seed.atribucionContratos);
+  });
+
   it("configuración: usuarios, reglas por plaza y parámetros del dominio", async () => {
     const usuarios = await repos.configuracion.listarUsuarios();
-    expect(usuarios).toHaveLength(9);
+    expect(usuarios).toHaveLength(13);
     expect(usuarios.find((u) => u.id === "usr-contratista")).toMatchObject({
       rol: "CONTRATISTA",
       proveedorId: "prv-obra-07",

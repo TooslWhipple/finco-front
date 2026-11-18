@@ -34,10 +34,14 @@ export function ContenidoSidebar({ onNavegar }: { onNavegar?: () => void }) {
           <Image
             src="/brand/logo.png"
             alt="Plazas Finco"
-            width={140}
-            height={40}
-            priority
-            style={{ height: "auto" }}
+            width={506}
+            height={143}
+            // Siempre sobre el pliegue. `sizes` pide el ancho real (140 px) y, de
+            // paso, separa su URL de la del logo de la vista previa del contrato
+            // (diferido): Next identifica cada imagen por su URL.
+            sizes="140px"
+            loading="eager"
+            className="h-auto w-35"
           />
         </Link>
         <p className="mt-2 text-[0.7rem] font-medium tracking-[0.2em] text-white/80 uppercase">

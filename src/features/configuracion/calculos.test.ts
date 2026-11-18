@@ -21,11 +21,17 @@ describe("matrizPermisos", () => {
         expect(fila.permitido[rol]).toBe(PERMISOS[rol].includes(fila.accion));
   });
 
-  it("Dirección autoriza excepciones y sobregiros y ve al equipo comercial; Superadmin las tiene todas", () => {
+  it("Dirección autoriza excepciones y sobregiros, ve al equipo comercial, la cobranza y la obra; Superadmin las tiene todas", () => {
     expect(filas.filter((f) => f.permitido.DIRECCION).map((f) => f.accion)).toEqual([
       "comercial.verEquipo",
+      "campanas.gestionar",
+      "casos.gestionar",
+      "comisiones.pagar",
+      "comisiones.esquemaEditar",
       "excepcion.autorizar",
+      "cobranza.ver",
       "mantenimiento.sobregiroAutorizar",
+      "terrenos.ver",
     ]);
     expect(filas.every((f) => f.permitido.SUPERADMIN)).toBe(true);
   });
@@ -37,6 +43,31 @@ describe("matrizPermisos", () => {
     const obra = ACCIONES_MATRIZ.find((m) => m.modulo === "Obra y licitación")!;
     const ids = obra.acciones.map((a) => a.accion);
     expect(ids[ids.indexOf("licitacion.gestionar") + 1]).toBe("licitacion.responder");
+  });
+
+  it("Servicio a clientes va justo después de Contratos y lo gestionan Atención a clientes y Dirección", () => {
+    const modulos = ACCIONES_MATRIZ.map((m) => m.modulo);
+    expect(modulos[modulos.indexOf("Contratos") + 1]).toBe("Servicio a clientes");
+    expect(
+      filas.filter((f) => f.permitido.ATENCION_CLIENTES).map((f) => f.accion),
+    ).toEqual(["casos.gestionar"]);
+  });
+
+  it("Comisiones va tras Servicio a clientes y sus acciones son de Dirección y Superadmin", () => {
+    const modulos = ACCIONES_MATRIZ.map((m) => m.modulo);
+    expect(modulos[modulos.indexOf("Servicio a clientes") + 1]).toBe("Comisiones");
+    const comisiones = ACCIONES_MATRIZ.find((m) => m.modulo === "Comisiones")!;
+    expect(comisiones.acciones.map((a) => a.accion)).toEqual([
+      "comisiones.pagar",
+      "comisiones.esquemaEditar",
+    ]);
+    for (const accion of ["comisiones.pagar", "comisiones.esquemaEditar"]) {
+      const fila = filas.find((f) => f.accion === accion)!;
+      expect(ROLES.filter((rol) => fila.permitido[rol]).sort()).toEqual([
+        "DIRECCION",
+        "SUPERADMIN",
+      ]);
+    }
   });
 
   it("agrupa por módulo en el orden del catálogo", () => {

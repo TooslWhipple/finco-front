@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { Building2, ArrowRight } from "lucide-react";
-import { rutaPlaza } from "@/domain";
 import { SectionCard } from "@/components/shared";
+import { hrefPermitido } from "@/config/acceso-rutas";
+import { rutaPlaza } from "@/domain";
+import { useSesion } from "@/hooks";
 import { avisarProximaFase } from "@/lib/avisos";
 import { formatNumero, formatPorcentaje } from "@/lib/format";
 import type { ResumenCiudad, ResumenPlaza } from "./agregados";
@@ -46,7 +48,14 @@ export function OcupacionPorCiudad({ ciudades }: { ciudades: ResumenCiudad[] }) 
   );
 }
 
+const CLASE_FILA_PLAZA = "flex items-center gap-3 py-2.5 text-sm";
+
+/**
+ * Plazas con más locales disponibles. Una plaza cuya ruta el rol no abre (la de
+ * una plaza en preventa lleva a su terreno) se muestra sin enlace.
+ */
 export function MasDisponibilidad({ plazas }: { plazas: ResumenPlaza[] }) {
+  const { rol } = useSesion();
   return (
     <SectionCard
       titulo="Más disponibilidad"
@@ -64,12 +73,10 @@ export function MasDisponibilidad({ plazas }: { plazas: ResumenPlaza[] }) {
         <p className="text-sm text-brand-text-muted">Sin plazas con disponibilidad.</p>
       ) : (
         <ul className="divide-y divide-brand-line">
-          {plazas.map((p) => (
-            <li key={p.plaza.id}>
-              <Link
-                href={rutaPlaza(p.plaza.id)}
-                className="flex items-center gap-3 py-2.5 text-sm hover:text-brand-secondary"
-              >
+          {plazas.map((p) => {
+            const ruta = rutaPlaza(p.plaza.id);
+            const contenido = (
+              <>
                 <span
                   aria-hidden
                   className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-cream text-brand-primary"
@@ -93,9 +100,23 @@ export function MasDisponibilidad({ plazas }: { plazas: ResumenPlaza[] }) {
                     {formatNumero(p.disponibles)} disp.
                   </span>
                 )}
-              </Link>
-            </li>
-          ))}
+              </>
+            );
+            return (
+              <li key={p.plaza.id}>
+                {rol && hrefPermitido(rol, ruta) ? (
+                  <Link
+                    href={ruta}
+                    className={`${CLASE_FILA_PLAZA} hover:text-brand-secondary`}
+                  >
+                    {contenido}
+                  </Link>
+                ) : (
+                  <div className={CLASE_FILA_PLAZA}>{contenido}</div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </SectionCard>

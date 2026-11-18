@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { GaleriaFotos, PanelDetalle, StatusChip } from "@/components/shared";
 import { Button } from "@/components/ui/button";
+import { rutaPermitida } from "@/config/acceso-rutas";
 import {
   DEMO_TODAY,
   diasDeAtraso,
@@ -14,6 +15,7 @@ import {
   type EstatusMantenimiento,
   type Mantenimiento,
 } from "@/domain";
+import { useSesion } from "@/hooks";
 import { formatFecha, formatMoneda } from "@/lib/format";
 import { ChipSobregiro } from "./chip-sobregiro";
 import type { ContextoMantenimiento } from "./contexto";
@@ -55,9 +57,13 @@ const ETIQUETA_ORIGEN = {
 } as const;
 const ETIQUETA_CARGO = { PLAZA: "Plaza", LOCATARIO: "Locatario" } as const;
 
+/** Las facturas SAT de mantenimiento solo las ve quien abre el módulo Mantenimientos. */
+const RUTA_MANTENIMIENTOS = "/mantenimientos";
+
 /**
- * Panel de un mantenimiento: datos, fechas y costos, evidencia en galería y las
- * acciones de transición (iniciar, finalizar con costo real, cancelar).
+ * Panel de un mantenimiento: datos, fechas y costos, facturas SAT (solo con el
+ * módulo Mantenimientos), evidencia en galería y las acciones de transición
+ * (iniciar, finalizar con costo real, cancelar).
  */
 export function DetalleMantenimiento({
   mantenimiento: m,
@@ -67,6 +73,8 @@ export function DetalleMantenimiento({
   onCerrar,
   className,
 }: DetalleMantenimientoProps) {
+  const { rol } = useSesion();
+  const veFacturas = rol !== null && rutaPermitida(rol, RUTA_MANTENIMIENTOS);
   const [finalizando, setFinalizando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
   const local = contexto.local(m.localId);
@@ -146,10 +154,16 @@ export function DetalleMantenimiento({
                 },
               ]
             : []),
-          {
-            titulo: "Facturas",
-            contenido: <SeccionFacturas mantenimiento={m} puedeLigar={puedeGestionar} />,
-          },
+          ...(veFacturas
+            ? [
+                {
+                  titulo: "Facturas",
+                  contenido: (
+                    <SeccionFacturas mantenimiento={m} puedeLigar={puedeGestionar} />
+                  ),
+                },
+              ]
+            : []),
           {
             titulo: "Evidencia",
             contenido: (
