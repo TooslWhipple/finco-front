@@ -19,7 +19,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { can } from "@/config/permissions";
 import { IDS_VENDEDORES, nombreDeUsuario } from "@/config/usuarios";
+import type { Rol } from "@/domain";
 import { useCiudades, usePlazas, useSesion } from "@/hooks";
+import { formatLista } from "@/lib/format";
 import { AsistenteDatos } from "./asistente-datos";
 import { FILTRO_INICIAL, REPORTES, TODOS, acotarDatos, type IdReporte } from "./calculos";
 import { tablaACsv } from "./csv";
@@ -61,6 +63,22 @@ export function columnasDe(
       </span>
     ),
   }));
+}
+
+/** Qué cubren los reportes, sin mencionar cobranza ni terrenos al rol que no los ve. */
+function descripcionReportes(rol: Rol | null): string {
+  const temas = [
+    "ocupación",
+    ...(can(rol, "cobranza.ver") ? ["cobranza"] : []),
+    "precios",
+    "rentas",
+    "excepciones",
+    "prospectos",
+    "contratos",
+    ...(can(rol, "terrenos.ver") ? ["terrenos"] : []),
+  ];
+  const texto = formatLista(temas);
+  return `${texto.charAt(0).toUpperCase()}${texto.slice(1)} con gráfica y tabla.`;
 }
 
 /** Valor de `?vista=` que abre el asistente; sin él, la vista de reportes. */
@@ -142,7 +160,7 @@ export function Reportes() {
     <div className="space-y-6">
       <PageHeader
         titulo="Reportes"
-        descripcion="Ocupación, cobranza, precios, rentas, excepciones, prospectos, contratos y terrenos con gráfica y tabla."
+        descripcion={descripcionReportes(rol)}
         acciones={
           vista === "REPORTES" ? (
             <>
@@ -173,7 +191,7 @@ export function Reportes() {
 
       {vista === "ASISTENTE" ? (
         datos ? (
-          <AsistenteDatos datos={datos} />
+          <AsistenteDatos datos={datos} rol={rol} />
         ) : null
       ) : (
         <>

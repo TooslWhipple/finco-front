@@ -46,6 +46,7 @@ export function Disponibilidad() {
     () => localesDisponibles((locales ?? []).filter((l) => l.plazaId === plazaId)),
     [locales, plazaId],
   );
+  const fotosPrimeraFila = useMemo(() => fotosSobreElPliegue(tarjetas), [tarjetas]);
   const kpis = kpisDisponibilidad(opciones, cotizaciones);
   const equipo = rol ? veTodoElEquipo(rol) : false;
   const puedeCotizar = can(rol, "cotizaciones.crear");
@@ -102,7 +103,11 @@ export function Disponibilidad() {
         <ul className="grid grid-cols-2 gap-4 lg:grid-cols-3">
           {tarjetas.map((local) => (
             <li key={local.id} className="min-w-0">
-              <TarjetaLocal local={local} puedeCotizar={puedeCotizar} />
+              <TarjetaLocal
+                local={local}
+                puedeCotizar={puedeCotizar}
+                prioritaria={fotosPrimeraFila.has(fotosDeLocal(local)[0]?.src ?? "")}
+              />
             </li>
           ))}
         </ul>
@@ -111,7 +116,33 @@ export function Disponibilidad() {
   );
 }
 
-function TarjetaLocal({ local, puedeCotizar }: { local: Local; puedeCotizar: boolean }) {
+/** Tarjetas de la primera fila (3 columnas desde `lg`): su foto es candidata a LCP. */
+const FOTOS_PRIMERA_FILA = 3;
+
+/**
+ * Fotos de la primera fila. Next identifica cada imagen por su URL y el catálogo
+ * repite fotos entre locales: si una tarjeta de más abajo trae la misma foto sin
+ * `eager`, el aviso de LCP salta aunque la de arriba la tenga. Cargarla sin
+ * diferir en todas las que la repiten no cuesta nada: es el mismo archivo.
+ */
+function fotosSobreElPliegue(tarjetas: readonly Local[]): ReadonlySet<string> {
+  return new Set(
+    tarjetas
+      .slice(0, FOTOS_PRIMERA_FILA)
+      .flatMap((local) => fotosDeLocal(local)[0]?.src ?? []),
+  );
+}
+
+function TarjetaLocal({
+  local,
+  puedeCotizar,
+  prioritaria,
+}: {
+  local: Local;
+  puedeCotizar: boolean;
+  /** Carga la foto sin diferirla (es una foto de la primera fila). */
+  prioritaria: boolean;
+}) {
   const foto = fotosDeLocal(local)[0];
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-brand-line bg-card shadow-xs">
@@ -123,6 +154,7 @@ function TarjetaLocal({ local, puedeCotizar }: { local: Local; puedeCotizar: boo
             width={foto.ancho}
             height={foto.alto}
             sizes="(min-width: 1024px) 20rem, 50vw"
+            loading={prioritaria ? "eager" : undefined}
             className="size-full object-cover"
           />
         ) : (

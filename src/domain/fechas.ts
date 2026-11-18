@@ -18,6 +18,24 @@ export function diasEntre(desde: FechaISO, hasta: FechaISO): number {
   return Math.round((aUtc(hasta) - aUtc(desde)) / MS_DIA);
 }
 
+const MS_HORA = 3_600_000;
+
+/**
+ * Lee un ISO con hora sin zona (`YYYY-MM-DDTHH:mm` o con segundos) por sus
+ * componentes, como si fuera UTC: así no depende de la zona del navegador ni
+ * del horario de verano.
+ */
+function aUtcConHora(fechaHora: string): number {
+  const [fecha, hora = "00:00"] = fechaHora.split("T");
+  const [h, min, seg = 0] = hora.split(":").map(Number);
+  return aUtc(fecha) + Date.UTC(1970, 0, 1, h, min, seg);
+}
+
+/** Horas decimales de `desde` a `hasta` (ISO con hora sin zona; negativo si `hasta` es anterior). */
+export function horasEntre(desde: string, hasta: string): number {
+  return (aUtcConHora(hasta) - aUtcConHora(desde)) / MS_HORA;
+}
+
 function deUtc(ms: number): FechaISO {
   return new Date(ms).toISOString().slice(0, 10);
 }

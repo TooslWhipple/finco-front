@@ -2,13 +2,19 @@ import { describe, expect, it } from "vitest";
 import type { Prospecto } from "./tipos";
 import { crearProspecto } from "./fixtures";
 import {
+  DOCUMENTOS_REQUERIDOS,
   diasSinContacto,
+  documentosFaltantes,
   embudoProspectos,
+  expedienteCompleto,
+  fechaUltimoHecho,
+  LARGO_RFC_POR_TIPO,
   prospectoActivo,
   prospectosPorLocal,
   siguienteEtapaProspecto,
   siguienteIdProspecto,
   temperaturaProspecto,
+  tipoPersonaDeRfc,
 } from "./prospectos";
 
 describe("embudoProspectos", () => {
@@ -24,11 +30,20 @@ describe("embudoProspectos", () => {
       "CONTACTADO",
       "VISITA",
       "COTIZADO",
+      "NEGOCIACION",
       "GANADO",
       "PERDIDO",
     ]);
-    expect(embudo.map((p) => p.cantidad)).toEqual([2, 0, 1, 0, 1, 0]);
+    expect(embudo.map((p) => p.cantidad)).toEqual([2, 0, 1, 0, 0, 1, 0]);
     expect(embudo[0].proporcion).toBe(0.5);
+  });
+
+  it("incluye la etapa de negociación entre cotizado y ganado", () => {
+    const embudo = embudoProspectos([crearProspecto({ id: "1", etapa: "NEGOCIACION" })]);
+    const etapas = embudo.map((p) => p.etapa);
+    expect(etapas.indexOf("NEGOCIACION")).toBe(etapas.indexOf("COTIZADO") + 1);
+    expect(etapas.indexOf("GANADO")).toBe(etapas.indexOf("NEGOCIACION") + 1);
+    expect(embudo.find((p) => p.etapa === "NEGOCIACION")?.cantidad).toBe(1);
   });
 
   it("sin prospectos todo queda en cero", () => {
@@ -61,7 +76,8 @@ describe("prospectosPorLocal", () => {
 describe("siguienteEtapaProspecto", () => {
   it("avanza por el embudo y se detiene al ganar o perder", () => {
     expect(siguienteEtapaProspecto("NUEVO")).toBe("CONTACTADO");
-    expect(siguienteEtapaProspecto("COTIZADO")).toBe("GANADO");
+    expect(siguienteEtapaProspecto("COTIZADO")).toBe("NEGOCIACION");
+    expect(siguienteEtapaProspecto("NEGOCIACION")).toBe("GANADO");
     expect(siguienteEtapaProspecto("GANADO")).toBeNull();
     expect(siguienteEtapaProspecto("PERDIDO")).toBeNull();
   });
@@ -103,6 +119,11 @@ describe("diasSinContacto", () => {
     expect(diasSinContacto(conActividad([], "GANADO"), hoy)).toBeNull();
     expect(diasSinContacto(conActividad([], "PERDIDO"), hoy)).toBeNull();
   });
+
+  it("fechaUltimoHecho da la actividad más reciente o, sin actividad, el alta", () => {
+    expect(fechaUltimoHecho(conActividad(["2026-10-20", "2026-09-01"]))).toBe("2026-10-20");
+    expect(fechaUltimoHecho(conActividad([], "GANADO"))).toBe("2026-08-01");
+  });
 });
 
 describe("temperaturaProspecto", () => {
@@ -116,5 +137,57 @@ describe("temperaturaProspecto", () => {
 
   it("null no tiene temperatura", () => {
     expect(temperaturaProspecto(null)).toBeNull();
+  });
+});
+
+describe("expediente del prospecto", () => {
+  const fecha = "2026-10-15";
+
+  it("una persona moral sin acta no tiene el expediente completo", () => {
+    const moral = {
+      tipoPersona: "MORAL" as const,
+      documentos: {
+        IDENTIFICACION: fecha,
+        CONSTANCIA_FISCAL: fecha,
+        COMPROBANTE_DOMICILIO: fecha,
+        PODER_REPRESENTANTE: fecha,
+      },
+    };
+    expect(expedienteCompleto(moral)).toBe(false);
+    expect(documentosFaltantes(moral)).toEqual(["ACTA_CONSTITUTIVA"]);
+  });
+
+  it("una persona física con sus tres documentos tiene el expediente completo", () => {
+    const fisica = {
+      tipoPersona: "FISICA" as const,
+      documentos: {
+        IDENTIFICACION: fecha,
+        CONSTANCIA_FISCAL: fecha,
+        COMPROBANTE_DOMICILIO: fecha,
+      },
+    };
+    expect(DOCUMENTOS_REQUERIDOS.FISICA).toHaveLength(3);
+    expect(expedienteCompleto(fisica)).toBe(true);
+    expect(documentosFaltantes(fisica)).toEqual([]);
+  });
+
+  it("documentosFaltantes lista los que faltan en el orden de los requisitos", () => {
+    expect(
+      documentosFaltantes({
+        tipoPersona: "MORAL",
+        documentos: { CONSTANCIA_FISCAL: fecha },
+      }),
+    ).toEqual([
+      "IDENTIFICACION",
+      "COMPROBANTE_DOMICILIO",
+      "ACTA_CONSTITUTIVA",
+      "PODER_REPRESENTANTE",
+    ]);
+  });
+
+  it("tipoPersonaDeRfc distingue 12 caracteres (moral) de 13 (física)", () => {
+    expect(tipoPersonaDeRfc("ABC010101AB1")).toBe("MORAL");
+    expect(tipoPersonaDeRfc("ABCD010101AB1")).toBe("FISICA");
+    expect(LARGO_RFC_POR_TIPO).toEqual({ MORAL: 12, FISICA: 13 });
   });
 });

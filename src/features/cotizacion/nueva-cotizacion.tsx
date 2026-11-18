@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { can } from "@/config/permissions";
 import {
   DEMO_TODAY,
+  documentosFaltantes,
+  expedienteCompleto,
   pactarRegla,
   sumarDias,
   type Cotizacion,
@@ -26,6 +28,7 @@ import {
   useProspectos,
   useSesion,
 } from "@/hooks";
+import { textoFaltantes } from "@/features/prospectos/agregados";
 import { formatMoneda } from "@/lib/format";
 import { useAppStore } from "@/store";
 import { siguienteFolio } from "./calculos";
@@ -88,6 +91,8 @@ interface FormularioNuevaProps {
 
 function FormularioNueva({ plazas, inicial }: FormularioNuevaProps) {
   const router = useRouter();
+  // Con prospecto ligado, la instantánea del expediente sale de sus documentos.
+  const faltantes = inicial.prospecto ? documentosFaltantes(inicial.prospecto) : null;
   const { usuario } = useSesion();
   const crearCotizacion = useAppStore((s) => s.crearCotizacion);
   const cotizaciones = useCotizaciones();
@@ -98,7 +103,9 @@ function FormularioNueva({ plazas, inicial }: FormularioNuevaProps) {
       plazaId: inicial.plazaId,
       localId: inicial.localId,
       prospecto: inicial.prospecto?.nombre ?? "",
-      documentosCompletos: inicial.prospecto?.documentosCompletos ?? true,
+      documentosCompletos: inicial.prospecto
+        ? expedienteCompleto(inicial.prospecto)
+        : true,
       avalRegistrado: inicial.prospecto ? Boolean(inicial.prospecto.aval) : true,
       rentaMensual: inicial.precio ?? 0,
       plazoMeses: PLAZO_POR_OMISION,
@@ -137,7 +144,9 @@ function FormularioNueva({ plazas, inicial }: FormularioNuevaProps) {
       prospectoId: inicial.prospecto?.id,
       prospecto: {
         nombre: v.prospecto,
-        documentosCompletos: v.documentosCompletos,
+        documentosCompletos: inicial.prospecto
+          ? expedienteCompleto(inicial.prospecto)
+          : v.documentosCompletos,
         aval: v.avalRegistrado ? "Aval solidario registrado" : undefined,
       },
       rentaMensual: v.rentaMensual,
@@ -255,14 +264,22 @@ function FormularioNueva({ plazas, inicial }: FormularioNuevaProps) {
               {...register("plazoMeses", { valueAsNumber: true })}
             />
           </Campo>
-          <label className="col-span-2 flex min-h-11 items-center gap-2 text-sm text-brand-text">
-            <input
-              type="checkbox"
-              className="size-5 accent-brand-secondary lg:size-4"
-              {...register("documentosCompletos")}
-            />
-            Expediente del prospecto completo
-          </label>
+          {faltantes ? (
+            <p className="col-span-2 flex min-h-11 items-center text-sm text-brand-text">
+              {faltantes.length === 0
+                ? "Expediente del prospecto completo"
+                : `Expediente del prospecto incompleto. ${textoFaltantes(faltantes.length)}.`}
+            </p>
+          ) : (
+            <label className="col-span-2 flex min-h-11 items-center gap-2 text-sm text-brand-text">
+              <input
+                type="checkbox"
+                className="size-5 accent-brand-secondary lg:size-4"
+                {...register("documentosCompletos")}
+              />
+              Expediente del prospecto completo
+            </label>
+          )}
           <label className="col-span-2 flex min-h-11 items-center gap-2 text-sm text-brand-text">
             <input
               type="checkbox"

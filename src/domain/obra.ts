@@ -1,4 +1,5 @@
 import { diasEntre, lunesDeSemana, sumarDias } from "./fechas";
+import { redondearCentavos } from "./numeros";
 import type {
   ConceptoObra,
   ContratoObra,
@@ -113,8 +114,6 @@ export const FONDO_GARANTIA_PCT = 0.05;
 export function cierreSemana(semana: FechaISO): FechaISO {
   return sumarDias(semana, 6);
 }
-
-const redondear2 = (valor: number): number => Math.round(valor * 100) / 100;
 
 /** Solo los cortes validados por la PMO cuentan para el avance. */
 export function cortesValidados(cortes: readonly CorteSemanal[]): CorteSemanal[] {
@@ -243,7 +242,7 @@ export function erroresCorte(
     const restante = concepto.volumenContratado - (previo[concepto.id] ?? 0);
     if (volumen > restante + TOLERANCIA) {
       errores.volumenes[concepto.id] =
-        `Excede lo contratado: quedan ${redondear2(Math.max(0, restante))} ${ETIQUETA_UNIDAD[concepto.unidad]}.`;
+        `Excede lo contratado: quedan ${redondearCentavos(Math.max(0, restante))} ${ETIQUETA_UNIDAD[concepto.unidad]}.`;
     }
   }
   if (!hayVolumen && Object.keys(errores.volumenes).length === 0) {

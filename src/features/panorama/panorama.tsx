@@ -21,6 +21,7 @@ import {
   SegmentedControl,
 } from "@/components/shared";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { can } from "@/config/permissions";
 import {
   useCiudades,
   useContratos,
@@ -85,7 +86,8 @@ const LEYENDA = [
 const TODOS = "TODOS";
 
 export function Panorama() {
-  const { usuario } = useSesion();
+  const { usuario, rol } = useSesion();
+  const veCobranza = can(rol, "cobranza.ver");
   const ciudades = useCiudades().datos;
   const plazas = usePlazas().datos;
   const locales = useLocales().datos;
@@ -190,20 +192,22 @@ export function Panorama() {
           valor={locales ? formatNumero(localesPorColocar(locales)) : "—"}
           subtexto="incluye plazas nuevas"
         />
-        <KpiCard
-          etiqueta="Cobranza del mes"
-          valor={facturas ? formatMonedaMillones(cobrado) : "—"}
-          subtexto={
-            facturas ? (
-              <>
-                <span className="font-medium text-brand-secondary">
-                  {formatPorcentaje(porcentajeCobrado(facturas))}
-                </span>{" "}
-                de lo facturado
-              </>
-            ) : undefined
-          }
-        />
+        {veCobranza ? (
+          <KpiCard
+            etiqueta="Cobranza del mes"
+            valor={facturas ? formatMonedaMillones(cobrado) : "—"}
+            subtexto={
+              facturas ? (
+                <>
+                  <span className="font-medium text-brand-secondary">
+                    {formatPorcentaje(porcentajeCobrado(facturas))}
+                  </span>{" "}
+                  de lo facturado
+                </>
+              ) : undefined
+            }
+          />
+        ) : null}
         <KpiCard
           etiqueta="Contratos por vencer"
           valor={

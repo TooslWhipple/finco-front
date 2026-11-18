@@ -13,6 +13,7 @@ export const ACCIONES_MATRIZ: readonly {
       { accion: "cotizaciones.crear", etiqueta: "Crear cotizaciones" },
       { accion: "excepcion.solicitar", etiqueta: "Solicitar excepciones" },
       { accion: "comercial.verEquipo", etiqueta: "Ver el trabajo de todo el equipo" },
+      { accion: "campanas.gestionar", etiqueta: "Gestionar campañas" },
     ],
   },
   {
@@ -20,6 +21,22 @@ export const ACCIONES_MATRIZ: readonly {
     acciones: [
       { accion: "contrato.generar", etiqueta: "Generar contrato" },
       { accion: "contratos.gestionar", etiqueta: "Gestionar contratos" },
+    ],
+  },
+  {
+    modulo: "Servicio a clientes",
+    acciones: [
+      {
+        accion: "casos.gestionar",
+        etiqueta: "Registrar, atender y escalar casos de locatarios",
+      },
+    ],
+  },
+  {
+    modulo: "Comisiones",
+    acciones: [
+      { accion: "comisiones.pagar", etiqueta: "Marcar comisiones pagadas" },
+      { accion: "comisiones.esquemaEditar", etiqueta: "Editar esquema de comisiones" },
     ],
   },
   {
@@ -38,6 +55,7 @@ export const ACCIONES_MATRIZ: readonly {
   {
     modulo: "Cobranza e integraciones",
     acciones: [
+      { accion: "cobranza.ver", etiqueta: "Ver cobranza y facturas" },
       { accion: "cobranza.gestionar", etiqueta: "Gestionar cobranza" },
       { accion: "cobranza.avisosProgramar", etiqueta: "Programar avisos automáticos" },
       { accion: "integraciones.sincronizar", etiqueta: "Sincronizar integraciones" },
@@ -81,6 +99,7 @@ export const ACCIONES_MATRIZ: readonly {
   {
     modulo: "Terrenos y configuración",
     acciones: [
+      { accion: "terrenos.ver", etiqueta: "Ver obra y terrenos" },
       { accion: "terrenos.gestionar", etiqueta: "Gestionar terrenos y proyectos" },
       { accion: "configuracion.editar", etiqueta: "Editar configuración" },
     ],

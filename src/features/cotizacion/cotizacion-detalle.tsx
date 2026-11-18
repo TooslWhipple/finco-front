@@ -32,6 +32,7 @@ import {
   useCiudades,
   useCotizacion,
   useExcepciones,
+  useFuentesLocatario,
   useLocal,
   usePlaza,
   useSesion,
@@ -111,6 +112,10 @@ function EditorCotizacion({ cotizacion, local, plaza, ciudad }: EditorProps) {
   const solicitarExcepcion = useAppStore((s) => s.solicitarExcepcion);
   const router = useRouter();
   const generarContrato = useAppStore((s) => s.generarContrato);
+  const { prospectos } = useFuentesLocatario();
+  const prospecto = cotizacion.prospectoId
+    ? prospectos.find((p) => p.id === cotizacion.prospectoId)
+    : undefined;
   const [dialogoAbierto, setDialogoAbierto] = useState(false);
 
   const generado = cotizacion.estado === "CONTRATO_GENERADO";
@@ -376,6 +381,7 @@ function EditorCotizacion({ cotizacion, local, plaza, ciudad }: EditorProps) {
             ciudad={ciudad}
             folioContrato={folioCtr}
             contratoGenerado={generado}
+            prospecto={prospecto}
           />
         </div>
       </div>

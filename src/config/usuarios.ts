@@ -36,6 +36,32 @@ export const USUARIOS_DEMO: readonly Usuario[] = [
     cargo: "Acabados y Pisos del Bajío",
     proveedorId: "prv-obra-07",
   },
+  // Cuentas reales de la demo (login con contraseña). Van al final para que
+  // `usuarioDeRol` siga devolviendo la persona demo de cada rol.
+  {
+    id: "usr-rasek",
+    nombre: "Rasek Higuera Canett",
+    rol: "GERENTE_COMERCIAL",
+    cargo: "Director comercial",
+  },
+  {
+    id: "usr-sergio",
+    nombre: "Sergio Daniel Villela Aragon",
+    rol: "SUPERADMIN",
+    cargo: "Coordinación del proyecto",
+  },
+  {
+    id: "usr-atencion",
+    nombre: "Andrea Robles",
+    rol: "ATENCION_CLIENTES",
+    cargo: "Atención a clientes",
+  },
+  {
+    id: "usr-benjamin",
+    nombre: "Benjamin",
+    rol: "GERENTE_COMERCIAL",
+    cargo: "Gerente comercial",
+  },
 ];
 
 export const ETIQUETA_ROL: Record<Rol, string> = {
@@ -47,6 +73,7 @@ export const ETIQUETA_ROL: Record<Rol, string> = {
   PMO: "PMO",
   SUPERVISOR_OBRA: "Supervisor de obra",
   CONTRATISTA: "Contratista",
+  ATENCION_CLIENTES: "Atención a clientes",
 };
 
 export function usuarioPorId(id: string | null): Usuario | undefined {

@@ -1,8 +1,15 @@
-import { PROGRAMACION_EMISION_INICIAL, REGLA_RECARGO_INICIAL } from "@/domain";
+import {
+  ESQUEMA_INICIAL,
+  PROGRAMACION_EMISION_INICIAL,
+  REGLA_RECARGO_INICIAL,
+} from "@/domain";
 import { crearSeed } from "@/data/seed";
 import type {
   AprobacionesState,
+  CampanasState,
+  CasosState,
   CobranzaState,
+  ComisionesState,
   ContratosState,
   CotizacionesState,
   IntegracionesState,
@@ -16,12 +23,11 @@ import type {
   TerrenosState,
 } from "./reducers";
 
-export interface SesionState {
-  usuarioId: string | null;
-}
-
+/**
+ * Datos mutables de la demo (persistidos en localStorage). La sesión no va
+ * aquí: vive en `useSesionStore` (`./sesion`), leída del servidor.
+ */
 export interface DatosDemo {
-  session: SesionState;
   cotizaciones: CotizacionesState;
   aprobaciones: AprobacionesState;
   cobranza: CobranzaState;
@@ -33,19 +39,22 @@ export interface DatosDemo {
   obra: ObraState;
   mantenimientos: MantenimientosState;
   proveedores: ProveedoresState;
+  campanas: CampanasState;
+  casos: CasosState;
+  comisiones: ComisionesState;
   reglasDefault: ReglasDefaultState;
   metas: MetasState;
 }
 
 /**
  * Estado de la demo recién reiniciada. Las listas mutables (cotizaciones,
- * excepciones, bandeja anual, prospectos, terrenos, mantenimientos, padrón de proveedores) parten del seed; el resto de los datos se lee
+ * excepciones, bandeja anual, prospectos, terrenos, mantenimientos, padrón de
+ * proveedores, campañas, casos de servicio, comisiones) parten del seed; el resto de los datos se lee
  * siempre de los repositorios.
  */
 export function crearEstadoInicial(): DatosDemo {
   const seed = crearSeed();
   return {
-    session: { usuarioId: null },
     cotizaciones: { cotizaciones: seed.cotizaciones },
     aprobaciones: {
       excepciones: seed.excepciones,
@@ -82,6 +91,9 @@ export function crearEstadoInicial(): DatosDemo {
       facturasSat: seed.facturasSat,
     },
     proveedores: { padron: seed.proveedores },
+    campanas: { campanas: seed.campanas },
+    casos: { casos: seed.casos },
+    comisiones: { esquema: ESQUEMA_INICIAL, comisiones: seed.comisiones },
     reglasDefault: { porPlaza: {} },
     metas: { porPlaza: {} },
   };

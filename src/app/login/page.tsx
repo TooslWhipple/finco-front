@@ -1,27 +1,43 @@
 "use client";
 
-import { useEffect } from "react";
+import { useState, type FormEvent } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
-import { AvatarUsuario } from "@/components/layout/avatar-usuario";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { INICIO_POR_ROL } from "@/config/permissions";
-import { ETIQUETA_ROL, USUARIOS_DEMO } from "@/config/usuarios";
-import { useSesion } from "@/hooks";
-import { useAppStore, useStoreHidratado } from "@/store";
-import { useHidratarStore } from "@/store/hidratar";
+import { usuarioPorId } from "@/config/usuarios";
+import { Campo } from "@/features/cotizacion/campo";
+import { useSesionStore } from "@/store/sesion";
 
+const MENSAJE_CREDENCIALES = "Usuario o contraseña incorrectos";
+const MENSAJE_ERROR = "No se pudo iniciar sesión, intenta de nuevo";
+
+/**
+ * Login con usuario y contraseña, validado en el servidor (`/api/sesion`). Con
+ * sesión abierta el proxy no deja llegar aquí: manda al inicio del rol.
+ */
 export default function Login() {
-  useHidratarStore();
-  const hidratado = useStoreHidratado();
-  const { rol } = useSesion();
-  const router = useRouter();
-  const iniciarSesion = useAppStore((s) => s.iniciarSesion);
+  const iniciar = useSesionStore((s) => s.iniciar);
+  const [usuario, setUsuario] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
 
-  // Con sesión abierta no hay nada que hacer aquí.
-  useEffect(() => {
-    if (hidratado && rol) router.replace(INICIO_POR_ROL[rol]);
-  }, [hidratado, rol, router]);
+  const entrar = async (evento: FormEvent<HTMLFormElement>) => {
+    evento.preventDefault();
+    setEnviando(true);
+    setError(null);
+    const resultado = await iniciar(usuario, password);
+    if (resultado.tipo === "ok") {
+      const activo = usuarioPorId(resultado.sesion.usuarioId);
+      // Navegación completa: ningún prefetch del router sobrevive al cambio de sesión.
+      window.location.assign(activo ? INICIO_POR_ROL[activo.rol] : "/");
+      return;
+    }
+    setError(resultado.tipo === "credenciales" ? MENSAJE_CREDENCIALES : MENSAJE_ERROR);
+    setEnviando(false);
+  };
 
   return (
     <main className="grid min-h-dvh flex-1 grid-cols-1 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
@@ -29,60 +45,73 @@ export default function Login() {
         <Image
           src="/brand/logo.png"
           alt="Plazas Finco"
-          width={200}
-          height={57}
-          priority
-          style={{ height: "auto" }}
+          width={506}
+          height={143}
+          sizes="200px"
+          loading="eager"
+          className="h-auto w-50"
         />
         <div>
           <h1 className="font-heading text-4xl leading-tight font-bold">
             Portal de Plazas
           </h1>
           <p className="mt-4 max-w-md text-lg text-white/80">
-            Precios, contratos y cobranza de tus plazas en un solo lugar, con una sola
-            versión de la verdad.
+            Precios, disponibilidad y contratos de tus plazas en un solo lugar, con una
+            sola versión de la verdad.
           </p>
         </div>
         <p className="text-sm text-white/60">Prototipo demostrativo · by Whipple</p>
       </section>
 
       <section className="flex items-center justify-center p-8 lg:p-12">
-        <div className="w-full max-w-md">
+        <form className="w-full max-w-md" onSubmit={entrar} noValidate>
           <h2 className="font-heading text-2xl font-bold text-brand-primary">
-            Entrar como…
+            Iniciar sesión
           </h2>
           <p className="mt-1 text-sm text-brand-text-muted">
-            Elige un usuario de prueba. Cada rol ve un menú, permisos y pantalla de inicio
-            distintos; podrás cambiar de rol en cualquier momento desde la barra superior.
+            Entra con el usuario y la contraseña que te compartió Whipple.
           </p>
-          <ul className="mt-6 space-y-3">
-            {USUARIOS_DEMO.map((u) => (
-              <li key={u.id}>
-                <button
-                  type="button"
-                  disabled={!hidratado}
-                  onClick={() => {
-                    iniciarSesion(u.id);
-                    router.push(INICIO_POR_ROL[u.rol]);
-                  }}
-                  className="group flex w-full items-center gap-4 rounded-xl border border-brand-line bg-card p-4 text-left shadow-xs transition-colors outline-none hover:border-brand-secondary focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
-                >
-                  <AvatarUsuario nombre={u.nombre} className="size-11" />
-                  <span className="flex-1">
-                    <span className="block font-medium text-brand-text">{u.nombre}</span>
-                    <span className="block text-sm text-brand-text-muted">
-                      {u.cargo} · rol {ETIQUETA_ROL[u.rol]}
-                    </span>
-                  </span>
-                  <ArrowRight
-                    className="size-5 text-brand-text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-brand-cta"
-                    aria-hidden
-                  />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+          <div className="mt-6 space-y-4">
+            <Campo etiqueta="Usuario" htmlFor="login-usuario">
+              <Input
+                id="login-usuario"
+                name="usuario"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                required
+                value={usuario}
+                onChange={(e) => setUsuario(e.target.value)}
+                className="h-11"
+              />
+            </Campo>
+            <Campo etiqueta="Contraseña" htmlFor="login-password">
+              <Input
+                id="login-password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-11"
+              />
+            </Campo>
+            {error ? (
+              <p role="alert" className="text-sm text-brand-danger">
+                {error}
+              </p>
+            ) : null}
+            <Button
+              type="submit"
+              className="h-11 w-full"
+              disabled={enviando || !usuario.trim() || !password}
+            >
+              {enviando ? "Entrando…" : "Entrar"}
+              <ArrowRight aria-hidden />
+            </Button>
+          </div>
+        </form>
       </section>
     </main>
   );

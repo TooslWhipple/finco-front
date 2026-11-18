@@ -38,8 +38,13 @@ const VISTAS = [
   { valor: "TABLA", etiqueta: "Tabla" },
 ] as const;
 
+interface MantenimientosProps {
+  /** Mantenimiento abierto al entrar (llega del caso de servicio que lo escaló). */
+  mantenimientoInicialId?: string;
+}
+
 /** Vista global de mantenimientos: KPIs, filtros, tablero o tabla y detalle lateral. */
-export function Mantenimientos() {
+export function Mantenimientos({ mantenimientoInicialId }: MantenimientosProps) {
   const { rol } = useSesion();
   const todos = useMantenimientos().datos;
   const contexto = useContextoMantenimiento();
@@ -48,7 +53,9 @@ export function Mantenimientos() {
 
   const [vista, setVista] = useState<Vista>("TABLERO");
   const [filtro, setFiltro] = useState<FiltroMantenimientosVista>(FILTRO_INICIAL);
-  const [seleccionadoId, setSeleccionadoId] = useState<string | null>(null);
+  const [seleccionadoId, setSeleccionadoId] = useState<string | null>(
+    mantenimientoInicialId ?? null,
+  );
   const [creando, setCreando] = useState(false);
 
   const visibles = useMemo(

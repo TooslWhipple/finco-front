@@ -4,6 +4,14 @@ import type { Contrato, Cotizacion, FechaISO } from "./tipos";
 
 export type VigenciaContrato = "VIGENTE" | "POR_VENCER" | "VENCIDO";
 
+/** Días de un mes promedio (365.25 / 12), para convertir días de contrato a meses. */
+const DIAS_POR_MES = 30.4375;
+
+/** Meses que dura un contrato entre su inicio y su fin, redondeados. */
+export function mesesDeContrato(contrato: Pick<Contrato, "inicio" | "fin">): number {
+  return Math.round(diasEntre(contrato.inicio, contrato.fin) / DIAS_POR_MES);
+}
+
 /**
  * Vigencia derivada de un contrato en `VIGENTE`: por vencer si termina en los
  * próximos 90 días y vencido si ya pasó su fin. `null` si el contrato aún no

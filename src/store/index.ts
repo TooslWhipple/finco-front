@@ -6,6 +6,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import {
   contratoDesdeCotizacion,
   liberarLocal,
+  prospectoActivo,
   validarApertura,
   DEMO_TODAY,
   HORA_DEMO,
@@ -30,30 +31,29 @@ import {
   type Local,
   type ProgramacionAvisos,
   type ProgramacionEmision,
+  type Campana,
+  type EstatusCaso,
+  type EsquemaComisiones,
   type Prospecto,
   type Proveedor,
   type TipoContactoProspecto,
+  type TipoDocumentoProspecto,
   type ReglaActualizacion,
   type ReglaRecargo,
 } from "@/domain";
 import { evidenciaAntes, evidenciaCorte, evidenciaDespues } from "@/data/fotos";
-import { usuarioPorId } from "@/config/usuarios";
+import { IDS_VENDEDORES, usuarioPorId } from "@/config/usuarios";
 import { formatMoneda } from "@/lib/format";
+import { AHORA_DEMO } from "@/lib/tiempo";
 import { crearEstadoInicial, type DatosDemo } from "./estado-inicial";
+import { useSesionStore } from "./sesion";
 import * as r from "./reducers";
 
 export const CLAVE_STORAGE = "finco-demo";
 /** Subir al cambiar la forma del estado persistido: descarta lo viejo. */
-export const VERSION_STORAGE = 21;
+export const VERSION_STORAGE = 26;
 
 export interface Acciones {
-  iniciarSesion(usuarioId: string): void;
-  /**
-   * Selector de la topbar: pasa la sesión a ese usuario demo aunque comparta rol
-   * con el actual (dos vendedores). Un id que no es de la demo no cambia nada.
-   */
-  cambiarUsuario(usuarioId: string): void;
-  cerrarSesion(): void;
   crearCotizacion(cotizacion: Cotizacion): void;
   actualizarCotizacion(id: string, parche: Partial<Omit<Cotizacion, "id">>): void;
   solicitarExcepcion(cotizacion: Cotizacion, local: Local, motivo: string): void;
@@ -106,12 +106,25 @@ export interface Acciones {
   ): void;
   marcarProspectoPerdido(id: string, motivo: string): void;
   /**
+   * Marca o desmarca un documento del expediente de un prospecto vivo y
+   * recalcula la instantánea de sus cotizaciones abiertas.
+   */
+  registrarDocumentoProspecto(
+    id: string,
+    tipo: TipoDocumentoProspecto,
+    entregado: boolean,
+  ): void;
+  /**
    * Genera el contrato de una cotización: aplica los términos capturados,
-   * marca la cotización y crea el contrato en borrador.
+   * marca la cotización, crea el contrato en borrador y, si la cotización
+   * viene de un prospecto vivo, lo pasa a Ganado.
    */
   generarContrato(cotizacionId: string, terminos: Partial<Omit<Cotizacion, "id">>): void;
   enviarContratoAFirma(id: string): void;
-  /** Deja vigente un contrato en firma y registra su alta en EnKontrol. */
+  /**
+   * Deja vigente un contrato en firma, registra su alta en EnKontrol y genera
+   * sus comisiones con el esquema vigente (si se encuentra su cotización).
+   */
   registrarFirmaContrato(id: string, ahora: string): void;
   /**
    * Termina el contrato vigente de un local y lo libera: lo deja disponible y
@@ -196,9 +209,27 @@ export interface Acciones {
   agregarProveedor(proveedor: Proveedor): void;
   /** La PMO edita un proveedor del padrón; el RFC no puede ser el de otro. */
   editarProveedor(proveedor: Proveedor): void;
+  /** Gerencia comercial da de alta una campaña (id único, `cmp-NN`). */
+  agregarCampana(campana: Campana): void;
+  /** Gerencia comercial edita una campaña existente. */
+  editarCampana(campana: Campana): void;
+  /** Atención a clientes registra un caso recibido de un locatario. */
+  registrarCaso(nuevo: r.NuevoCaso): void;
+  /** Responde al locatario; la primera respuesta fija el responsable (usuario de la sesión). */
+  responderCaso(id: string, texto: string): void;
+  /** Mueve el caso en su ciclo; cerrar exige la calificación del locatario (1 a 5). */
+  transicionarCaso(id: string, destino: EstatusCaso, calificacion?: number): void;
+  /** Comentario interno en la bitácora del caso; no cuenta como respuesta. */
+  comentarCaso(id: string, texto: string): void;
+  /** Crea el correctivo del caso en Mantenimientos y lo liga al caso. */
+  escalarCasoAMantenimiento(casoId: string, nuevo: r.NuevoMantenimiento): void;
+  /** Dirección marca pagada una comisión pendiente en `fecha`. */
+  marcarComisionPagada(id: string, fecha: FechaISO): void;
+  /** Dirección edita el esquema; solo afecta a las comisiones que se generen después. */
+  editarEsquemaComisiones(esquema: EsquemaComisiones): void;
   establecerReglaDefault(plazaId: string, regla: ReglaActualizacion): void;
   ajustarLocal(localId: string, ajuste: r.AjusteLocal): void;
-  /** Vuelve todo al estado inicial, conservando la sesión actual. */
+  /** Vuelve todos los datos al estado inicial; la sesión (otro store) no cambia. */
   resetDemo(): void;
 }
 
@@ -206,18 +237,13 @@ export type AppState = DatosDemo & Acciones;
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set, get) => {
+    (set) => {
       /** Nombre de quien actúa; sin sesión no hay acciones con firma. */
       const actor = () => {
-        return usuarioPorId(get().session.usuarioId)?.nombre ?? "Sistema";
+        return usuarioPorId(useSesionStore.getState().usuarioId)?.nombre ?? "Sistema";
       };
       return {
         ...crearEstadoInicial(),
-        iniciarSesion: (usuarioId) => set({ session: { usuarioId } }),
-        cambiarUsuario: (usuarioId) => {
-          if (usuarioPorId(usuarioId)) set({ session: { usuarioId } });
-        },
-        cerrarSesion: () => set({ session: { usuarioId: null } }),
         crearCotizacion: (cotizacion) =>
           set((s) => ({
             cotizaciones: r.agregarCotizacion(
@@ -233,7 +259,7 @@ export const useAppStore = create<AppState>()(
               s.cotizaciones,
               id,
               parche,
-              s.session.usuarioId ?? "",
+              useSesionStore.getState().usuarioId ?? "",
               DEMO_TODAY,
               HORA_DEMO,
             ),
@@ -370,6 +396,23 @@ export const useAppStore = create<AppState>()(
           set((s) => ({
             prospectos: r.marcarProspectoPerdido(s.prospectos, id, motivo, DEMO_TODAY),
           })),
+        registrarDocumentoProspecto: (id, tipo, entregado) =>
+          set((s) => {
+            const prospectos = r.registrarDocumentoProspecto(
+              s.prospectos,
+              id,
+              tipo,
+              entregado,
+              DEMO_TODAY,
+            );
+            const prospecto = prospectos.prospectos.find((p) => p.id === id);
+            // Un prospecto cerrado no cambia su expediente ni sus cotizaciones.
+            if (!prospecto || !prospectoActivo(prospecto)) return s;
+            return {
+              prospectos,
+              cotizaciones: r.recalcularExpedienteCotizaciones(s.cotizaciones, prospecto),
+            };
+          }),
         generarContrato: (cotizacionId, terminos) =>
           set((s) => {
             const actual = s.cotizaciones.cotizaciones.find((c) => c.id === cotizacionId);
@@ -380,19 +423,25 @@ export const useAppStore = create<AppState>()(
               estado: "CONTRATO_GENERADO",
               contratoGeneradoEl: DEMO_TODAY,
             };
+            const contrato = contratoDesdeCotizacion(generada);
             return {
               cotizaciones: r.actualizarCotizacion(
                 s.cotizaciones,
                 cotizacionId,
                 generada,
-                s.session.usuarioId ?? "",
+                useSesionStore.getState().usuarioId ?? "",
                 DEMO_TODAY,
                 HORA_DEMO,
               ),
-              contratos: r.agregarContrato(
-                s.contratos,
-                contratoDesdeCotizacion(generada),
-              ),
+              contratos: r.agregarContrato(s.contratos, contrato),
+              prospectos: generada.prospectoId
+                ? r.ganarProspectoPorContrato(
+                    s.prospectos,
+                    generada.prospectoId,
+                    contrato.folio ?? contrato.id,
+                    DEMO_TODAY,
+                  )
+                : s.prospectos,
             };
           }),
         enviarContratoAFirma: (id) =>
@@ -401,6 +450,9 @@ export const useAppStore = create<AppState>()(
           set((s) => {
             const contrato = s.contratos.nuevos.find((c) => c.id === id);
             if (contrato?.estado !== "EN_FIRMA") return s;
+            const cotizacion = s.cotizaciones.cotizaciones.find(
+              (c) => c.id === contrato.cotizacionId,
+            );
             return {
               contratos: r.registrarFirma(s.contratos, id),
               integraciones: r.registrarSync(s.integraciones, {
@@ -410,6 +462,16 @@ export const useAppStore = create<AppState>()(
                 detalle: `Alta del contrato ${contrato.folio ?? contrato.id} y su locatario`,
                 registros: 1,
               }),
+              comisiones: cotizacion
+                ? r.registrarComisionesDeFirma(
+                    s.comisiones,
+                    contrato,
+                    cotizacion,
+                    s.aprobaciones.excepciones,
+                    IDS_VENDEDORES.includes(cotizacion.vendedorId),
+                    ahora,
+                  )
+                : s.comisiones,
             };
           }),
         liberarLocal: (local, contrato, fecha, motivo) =>
@@ -427,7 +489,7 @@ export const useAppStore = create<AppState>()(
           }),
         registrarApertura: (contrato, fecha) =>
           set((s) => {
-            const usuarioId = s.session.usuarioId;
+            const usuarioId = useSesionStore.getState().usuarioId;
             if (!usuarioId) return s;
             if (!validarApertura(contrato, fecha, DEMO_TODAY).ok) return s;
             return {
@@ -608,7 +670,7 @@ export const useAppStore = create<AppState>()(
           })),
         responderLicitacion: (licitacionId, proveedorId, precios) =>
           set((s) => {
-            const usuario = usuarioPorId(s.session.usuarioId);
+            const usuario = usuarioPorId(useSesionStore.getState().usuarioId);
             if (!usuario) return {};
             const esContratista = usuario.rol === "CONTRATISTA";
             if (esContratista && usuario.proveedorId !== proveedorId) return {};
@@ -629,25 +691,59 @@ export const useAppStore = create<AppState>()(
           set((s) => ({ proveedores: r.agregarProveedor(s.proveedores, proveedor) })),
         editarProveedor: (proveedor) =>
           set((s) => ({ proveedores: r.editarProveedor(s.proveedores, proveedor) })),
+        agregarCampana: (campana) =>
+          set((s) => ({ campanas: r.agregarCampana(s.campanas, campana) })),
+        editarCampana: (campana) =>
+          set((s) => ({ campanas: r.editarCampana(s.campanas, campana) })),
+        registrarCaso: (nuevo) =>
+          set((s) => ({ casos: r.registrarCaso(s.casos, nuevo, AHORA_DEMO, actor()) })),
+        responderCaso: (id, texto) =>
+          set((s) => {
+            const usuario = usuarioPorId(useSesionStore.getState().usuarioId);
+            if (!usuario) return {};
+            return { casos: r.responderCaso(s.casos, id, texto, AHORA_DEMO, usuario) };
+          }),
+        transicionarCaso: (id, destino, calificacion) =>
+          set((s) => ({
+            casos: r.transicionarCaso(
+              s.casos,
+              id,
+              destino,
+              AHORA_DEMO,
+              actor(),
+              calificacion,
+            ),
+          })),
+        comentarCaso: (id, texto) =>
+          set((s) => ({
+            casos: r.comentarCaso(s.casos, id, texto, AHORA_DEMO, actor()),
+          })),
+        escalarCasoAMantenimiento: (casoId, nuevo) =>
+          set((s) =>
+            r.escalarCaso(s.casos, s.mantenimientos, casoId, nuevo, AHORA_DEMO, actor()),
+          ),
+        marcarComisionPagada: (id, fecha) =>
+          set((s) => ({ comisiones: r.marcarComisionPagada(s.comisiones, id, fecha) })),
+        editarEsquemaComisiones: (esquema) =>
+          set((s) => ({ comisiones: r.editarEsquemaComisiones(s.comisiones, esquema) })),
         establecerReglaDefault: (plazaId, regla) =>
           set((s) => ({
             reglasDefault: r.establecerReglaDefault(s.reglasDefault, plazaId, regla),
           })),
         ajustarLocal: (localId, ajuste) =>
           set((s) => ({ locales: r.ajustarLocal(s.locales, localId, ajuste) })),
-        resetDemo: () => set({ ...crearEstadoInicial(), session: get().session }),
+        resetDemo: () => set(crearEstadoInicial()),
       };
     },
     {
       name: CLAVE_STORAGE,
       version: VERSION_STORAGE,
-      // Forma anterior incompatible: se descarta y se arranca sin sesión (sin error en consola).
+      // Forma anterior incompatible: se descarta y se arranca del estado inicial (sin error en consola).
       migrate: (): DatosDemo => crearEstadoInicial(),
       storage: createJSONStorage(() => localStorage),
       // Se rehidrata a mano tras montar para evitar mismatch de hidratación SSR.
       skipHydration: true,
       partialize: ({
-        session,
         cotizaciones,
         aprobaciones,
         cobranza,
@@ -659,10 +755,12 @@ export const useAppStore = create<AppState>()(
         obra,
         mantenimientos,
         proveedores,
+        campanas,
+        casos,
+        comisiones,
         reglasDefault,
         metas,
       }): DatosDemo => ({
-        session,
         cotizaciones,
         aprobaciones,
         cobranza,
@@ -674,6 +772,9 @@ export const useAppStore = create<AppState>()(
         obra,
         mantenimientos,
         proveedores,
+        campanas,
+        casos,
+        comisiones,
         reglasDefault,
         metas,
       }),

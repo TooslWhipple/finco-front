@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   formatFecha,
   formatFechaLarga,
+  formatHoras,
   formatMoneda,
+  formatMomento,
   formatNumero,
   formatPorcentaje,
   montoEnLetra,
@@ -26,6 +28,17 @@ describe("format", () => {
   it("formatea fechas en es-MX", () => {
     expect(formatFecha("2026-11-03")).toContain("2026");
     expect(formatFechaLarga("2026-11-03")).toBe("martes, 3 de noviembre de 2026");
+  });
+
+  it("formatea fecha y hora de un ISO sin zona", () => {
+    expect(formatMomento("2026-11-03T15:56")).toBe(`${formatFecha("2026-11-03")} · 15:56`);
+    expect(formatMomento("2026-11-03T09:05:00")).toBe(`${formatFecha("2026-11-03")} · 09:05`);
+  });
+
+  it("formatea horas con un decimal", () => {
+    expect(formatHoras(14.64)).toBe("14.6 h");
+    expect(formatHoras(4)).toBe("4 h");
+    expect(formatHoras(1234.06)).toBe("1,234.1 h");
   });
 });
 

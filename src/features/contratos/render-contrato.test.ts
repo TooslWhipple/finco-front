@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { MACHOTE_ARRENDAMIENTO } from "@/data/machote";
-import { crearContrato, crearCotizacion, crearLocal } from "@/domain/fixtures";
+import {
+  crearContrato,
+  crearCotizacion,
+  crearLocal,
+  crearProspecto,
+} from "@/domain/fixtures";
 import type { Plaza } from "@/domain";
-import { renderContrato } from "./render-contrato";
+import { RFC_DEMO, renderContrato } from "./render-contrato";
 
 const plaza: Plaza = {
   id: "p1",
@@ -26,6 +31,14 @@ function todoTexto(r: ReturnType<typeof renderContrato>): string {
     r.proemio,
     ...r.clausulas.flatMap((c) => [c.titulo, c.texto]),
     ...r.firmas.flatMap((f) => [f.rol, f.nombre]),
+    ...(r.arrendatario
+      ? [
+          r.arrendatario.rfc,
+          r.arrendatario.tipoPersona,
+          r.arrendatario.contacto.nombre,
+          ...r.arrendatario.documentos.flatMap((d) => [d.etiqueta, d.entregadoEl]),
+        ]
+      : []),
   ].join("\n");
 }
 
@@ -69,5 +82,39 @@ describe("renderContrato", () => {
     );
     expect(todoTexto(sin)).not.toMatch(/\{\w+\}/);
     expect(todoTexto(sin)).toContain("36 meses");
+  });
+
+  it("con prospecto imprime su RFC, su tipo de persona y sus documentos entregados", () => {
+    const prospecto = crearProspecto({
+      rfc: "CBR210305AB1",
+      tipoPersona: "MORAL",
+      documentos: { ACTA_CONSTITUTIVA: "2026-10-12", IDENTIFICACION: "2026-10-05" },
+    });
+    const con = renderContrato(
+      MACHOTE_ARRENDAMIENTO,
+      contrato,
+      undefined,
+      crearLocal(),
+      plaza,
+      "Café Brasa",
+      prospecto,
+    );
+    const texto = todoTexto(con);
+    expect(texto).toContain("CBR210305AB1");
+    expect(texto).not.toContain(RFC_DEMO);
+    expect(con.arrendatario).toMatchObject({
+      rfc: "CBR210305AB1",
+      tipoPersona: "Persona moral",
+      contacto: prospecto.contacto,
+    });
+    expect(con.arrendatario!.documentos.map((d) => d.etiqueta)).toEqual([
+      "Identificación oficial",
+      "Acta constitutiva",
+    ]);
+  });
+
+  it("sin prospecto usa el RFC genérico y no trae bloque de arrendatario", () => {
+    expect(todoTexto(r)).toContain(RFC_DEMO);
+    expect(r.arrendatario).toBeUndefined();
   });
 });

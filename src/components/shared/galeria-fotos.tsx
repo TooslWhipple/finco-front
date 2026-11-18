@@ -20,6 +20,8 @@ export interface GaleriaFotosProps {
   variante?: "completa" | "portada";
   /** Título del visor. */
   titulo?: string;
+  /** La foto destacada está sobre el pliegue (candidata a LCP): se carga sin diferirla. */
+  prioritaria?: boolean;
   className?: string;
 }
 
@@ -27,6 +29,7 @@ export function GaleriaFotos({
   fotos,
   variante = "completa",
   titulo = "Fotos",
+  prioritaria = false,
   className,
 }: GaleriaFotosProps) {
   const [indice, setIndice] = useState(0);
@@ -83,6 +86,7 @@ export function GaleriaFotos({
             ? "(min-width: 1280px) 24rem, 100vw"
             : "(min-width: 1280px) 40rem, 100vw"
         }
+        loading={prioritaria ? "eager" : undefined}
         className="size-full object-cover transition-transform group-hover:scale-[1.02]"
       />
       {variante === "portada" ? (
@@ -118,6 +122,10 @@ export function GaleriaFotos({
                   width={f.ancho}
                   height={f.alto}
                   sizes="10rem"
+                  // Next identifica la imagen por su URL y la miniatura de la foto
+                  // destacada comparte la de la principal: si no cargara igual, el
+                  // aviso de LCP saltaría aunque la principal sea `eager`.
+                  loading={prioritaria && f.src === destacada.src ? "eager" : undefined}
                   className="size-full object-cover"
                 />
               </button>

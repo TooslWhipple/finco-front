@@ -6,6 +6,8 @@ import {
   diasAtraso,
   estatusCobro,
   facturasDelCorte,
+  foliosFacturaDeLocal,
+  mesesFoliosFactura,
   rangoAntiguedad,
 } from "./cobranza";
 import { crearFactura } from "./fixtures";
@@ -216,5 +218,33 @@ describe("clientesMorosos", () => {
     // la pagada no suma.
     expect(a.saldo).toBe(2_520);
     expect(a.facturaIds).toEqual(["a2", "a1"]);
+  });
+});
+
+describe("foliosFacturaDeLocal", () => {
+  const facturas = [
+    crearFactura({ id: "f-nov", localId: "A-09", mes: "2026-11", folio: "A-100" }),
+    crearFactura({ id: "f-sep", localId: "A-09", mes: "2026-09", folio: "A-080" }),
+    crearFactura({ id: "f-ago", localId: "A-09", mes: "2026-08", folio: "A-070" }),
+    crearFactura({ id: "f-dic", localId: "A-09", mes: "2026-12", folio: "A-110" }),
+    crearFactura({ id: "f-sin", localId: "A-09", mes: "2026-10" }),
+    crearFactura({ id: "f-otro", localId: "B-01", mes: "2026-11", folio: "B-100" }),
+  ];
+
+  it("devuelve solo id, folio y mes, sin el monto", () => {
+    const folios = foliosFacturaDeLocal(facturas, "A-09", "2026-11-03");
+    for (const f of folios) expect(Object.keys(f).sort()).toEqual(["folio", "id", "mes"]);
+  });
+
+  it("busca en el mes de hoy y los dos anteriores, cruzando el año", () => {
+    expect(mesesFoliosFactura("2026-11-03")).toEqual(["2026-11", "2026-10", "2026-09"]);
+    expect(mesesFoliosFactura("2027-01-15")).toEqual(["2027-01", "2026-12", "2026-11"]);
+  });
+
+  it("omite las sin folio, las de otro local y las fuera de los tres meses", () => {
+    expect(foliosFacturaDeLocal(facturas, "A-09", "2026-11-03")).toEqual([
+      { id: "f-nov", folio: "A-100", mes: "2026-11" },
+      { id: "f-sep", folio: "A-080", mes: "2026-09" },
+    ]);
   });
 });

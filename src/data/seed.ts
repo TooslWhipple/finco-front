@@ -3,8 +3,12 @@ import {
   estatusCobro,
   proponerActualizacionAnual,
   sumarDias,
+  type AtribucionContratos,
+  type Campana,
   type CambioPropuesto,
+  type CasoServicio,
   type Ciudad,
+  type Comision,
   type Contrato,
   type Cotizacion,
   type DiferenciaConciliacion,
@@ -32,6 +36,10 @@ import {
   crearPlantillasAviso,
   crearProgramacionAvisos,
 } from "./avisos";
+import { AHORA_DEMO } from "@/lib/tiempo";
+import { asignarCampanas, atribuirContratos, CAMPANAS_SEED } from "./campanas";
+import { crearCasos } from "./casos";
+import { crearComisiones } from "./comisiones";
 import { crearContexto } from "./cartera";
 import { CATALOGO, CIUDAD_HEROE, NOMBRES_PLAZA, PROVEEDORES } from "./catalogo";
 import { generarPlazas, repartir, type PlazaPlan } from "./generador";
@@ -74,6 +82,14 @@ export interface Seed {
   /** Último sync con EnKontrol (ISO con hora). */
   ultimoSync: string;
   prospectos: Prospecto[];
+  /** Campañas comerciales simuladas de 2026. */
+  campanas: Campana[];
+  /**
+   * Dato demo de solo lectura: vendedor y campaña inventados para 15 contratos
+   * históricos de 2026, que no nacieron de una cotización con prospecto. No
+   * entra en el estado persistido; se sirve desde el repositorio de contratos.
+   */
+  atribucionContratos: AtribucionContratos;
   terrenos: Terreno[];
   /** Contratos de obra y cronograma de los proyectos con obra. */
   obra: DatosObra;
@@ -92,6 +108,10 @@ export interface Seed {
   programacionAvisos: ProgramacionAvisos;
   /** Bitácora de envíos simulados de las dos semanas previas. */
   enviosAviso: EnvioAviso[];
+  /** Casos de servicio a clientes de los últimos 60 días. */
+  casos: CasoServicio[];
+  /** Comisiones históricas de 2026 de los contratos atribuidos, con el esquema inicial. */
+  comisiones: Comision[];
 }
 
 /** Cantidad de plazas a generar por ciudad (la héroe se escribe a mano). */
@@ -180,6 +200,9 @@ export function crearSeed(): Seed {
     ]),
   );
   const prospeccion = crearProspectos(cotizacionesSeed, locales, locatarios, contratos);
+  const campanas = CAMPANAS_SEED.map((c) => ({ ...c }));
+  const prospectos = asignarCampanas(prospeccion.prospectos, campanas);
+  const atribucionContratos = atribuirContratos(contratos, prospectos, campanas);
   const terrenos = crearTerrenos(plazas, locales);
   const obra = crearObra(terrenos);
   const mantenimientos = crearMantenimientos(plazas, locales);
@@ -214,7 +237,9 @@ export function crearSeed(): Seed {
     cambiosPropuestos: crearCambiosPropuestos(locales, generado.ocupadosPorPlaza),
     diferenciasEnKontrol,
     ultimoSync,
-    prospectos: prospeccion.prospectos,
+    prospectos,
+    campanas,
+    atribucionContratos,
     terrenos,
     obra,
     licitaciones: crearLicitaciones(obra.contratos),
@@ -227,6 +252,8 @@ export function crearSeed(): Seed {
     plantillasAviso: crearPlantillasAviso(),
     programacionAvisos,
     enviosAviso: crearEnviosAviso(facturas, programacionAvisos),
+    casos: crearCasos({ locales, contratos, facturas, mantenimientos }, AHORA_DEMO),
+    comisiones: crearComisiones(contratos, atribucionContratos, excepciones),
   };
 }
 

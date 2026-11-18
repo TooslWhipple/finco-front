@@ -179,6 +179,20 @@ interface FormularioNuevoProps {
   proveedores: readonly Proveedor[];
   /** Plaza y local precargados (y fijos) según el lugar desde donde se abre. */
   filtro: { plazaId?: string; localId?: string };
+  /** Valores de arranque, editables (p. ej. al escalar un caso de servicio a clientes). */
+  inicial?: Partial<
+    Pick<
+      NuevoMantenimiento,
+      | "titulo"
+      | "descripcion"
+      | "categoria"
+      | "fechaProgramada"
+      | "costoEstimado"
+      | "cargoA"
+    >
+  >;
+  /** Tipo y origen fijados: se muestran pero no se editan. */
+  fijo?: Pick<NuevoMantenimiento, "tipo" | "origen">;
   onCerrar: () => void;
   onCrear: (nuevo: NuevoMantenimiento) => void;
 }
@@ -187,20 +201,32 @@ function FormularioNuevo({
   plazas,
   proveedores,
   filtro,
+  inicial,
+  fijo,
   onCerrar,
   onCrear,
 }: FormularioNuevoProps) {
   const [plazaId, setPlazaId] = useState(filtro.plazaId ?? plazas[0]?.id ?? "");
   const [localId, setLocalId] = useState(filtro.localId ?? SIN_LOCAL);
-  const [titulo, setTitulo] = useState("");
-  const [descripcion, setDescripcion] = useState("");
-  const [tipo, setTipo] = useState<TipoMantenimiento>("CORRECTIVO");
-  const [categoria, setCategoria] = useState<CategoriaMantenimiento>("PINTURA");
+  const [titulo, setTitulo] = useState(inicial?.titulo ?? "");
+  const [descripcion, setDescripcion] = useState(inicial?.descripcion ?? "");
+  const [tipo, setTipo] = useState<TipoMantenimiento>(fijo?.tipo ?? "CORRECTIVO");
+  const [categoria, setCategoria] = useState<CategoriaMantenimiento>(
+    inicial?.categoria ?? "PINTURA",
+  );
   const [proveedorElegido, setProveedorElegido] = useState("");
-  const [origen, setOrigen] = useState<OrigenMantenimiento>("ADMINISTRACION");
-  const [fecha, setFecha] = useState(sumarDias(DEMO_TODAY, 7));
-  const [costoTexto, setCostoTexto] = useState("");
-  const [cargoElegido, setCargoElegido] = useState<CargoMantenimiento>("PLAZA");
+  const [origen, setOrigen] = useState<OrigenMantenimiento>(
+    fijo?.origen ?? "ADMINISTRACION",
+  );
+  const [fecha, setFecha] = useState(
+    inicial?.fechaProgramada ?? sumarDias(DEMO_TODAY, 7),
+  );
+  const [costoTexto, setCostoTexto] = useState(
+    inicial?.costoEstimado === undefined ? "" : String(inicial.costoEstimado),
+  );
+  const [cargoElegido, setCargoElegido] = useState<CargoMantenimiento>(
+    inicial?.cargoA ?? "PLAZA",
+  );
   const [intentado, setIntentado] = useState(false);
 
   const locales = useLocales(plazaId).datos;
@@ -348,6 +374,7 @@ function FormularioNuevo({
           <select
             id="mnt-tipo"
             value={tipo}
+            disabled={fijo !== undefined}
             onChange={(e) => setTipo(e.target.value as TipoMantenimiento)}
             className={CLASE_SELECT}
           >
@@ -370,7 +397,7 @@ function FormularioNuevo({
           <select
             id="mnt-origen"
             value={origenEfectivo}
-            disabled={tipo === "PREVENTIVO"}
+            disabled={fijo !== undefined || tipo === "PREVENTIVO"}
             onChange={(e) => setOrigen(e.target.value as OrigenMantenimiento)}
             className={CLASE_SELECT}
           >

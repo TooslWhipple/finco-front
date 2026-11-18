@@ -1,5 +1,13 @@
 import { diasEntre } from "./fechas";
-import type { EtapaProspecto, FechaISO, OrigenProspecto, Prospecto } from "./tipos";
+import type {
+  EtapaProspecto,
+  ExpedienteProspecto,
+  FechaISO,
+  OrigenProspecto,
+  Prospecto,
+  TipoDocumentoProspecto,
+  TipoPersona,
+} from "./tipos";
 
 /** Etapas del embudo en orden; `PERDIDO` queda fuera del avance. */
 export const ETAPAS_PROSPECTO: readonly EtapaProspecto[] = [
@@ -7,6 +15,7 @@ export const ETAPAS_PROSPECTO: readonly EtapaProspecto[] = [
   "CONTACTADO",
   "VISITA",
   "COTIZADO",
+  "NEGOCIACION",
   "GANADO",
   "PERDIDO",
 ];
@@ -16,6 +25,7 @@ export const ETIQUETA_ETAPA_PROSPECTO: Readonly<Record<EtapaProspecto, string>> 
   CONTACTADO: "Contactado",
   VISITA: "Visita",
   COTIZADO: "Cotizado",
+  NEGOCIACION: "Negociación",
   GANADO: "Ganado",
   PERDIDO: "Perdido",
 };
@@ -32,6 +42,63 @@ export const ETIQUETA_ORIGEN_PROSPECTO: Readonly<Record<OrigenProspecto, string>
 export const ORIGENES_PROSPECTO = Object.keys(
   ETIQUETA_ORIGEN_PROSPECTO,
 ) as readonly OrigenProspecto[];
+
+export const ETIQUETA_TIPO_PERSONA: Readonly<Record<TipoPersona, string>> = {
+  MORAL: "Persona moral",
+  FISICA: "Persona física",
+};
+
+export const TIPOS_PERSONA = Object.keys(ETIQUETA_TIPO_PERSONA) as readonly TipoPersona[];
+
+export const ETIQUETA_DOCUMENTO: Readonly<Record<TipoDocumentoProspecto, string>> = {
+  IDENTIFICACION: "Identificación oficial",
+  CONSTANCIA_FISCAL: "Constancia de situación fiscal",
+  COMPROBANTE_DOMICILIO: "Comprobante de domicilio",
+  ACTA_CONSTITUTIVA: "Acta constitutiva",
+  PODER_REPRESENTANTE: "Poder del representante legal",
+};
+
+const DOCUMENTOS_PERSONA_FISICA: readonly TipoDocumentoProspecto[] = [
+  "IDENTIFICACION",
+  "CONSTANCIA_FISCAL",
+  "COMPROBANTE_DOMICILIO",
+];
+
+/** Documentos que exige el expediente según el tipo de persona, en orden de captura. */
+export const DOCUMENTOS_REQUERIDOS: Readonly<
+  Record<TipoPersona, readonly TipoDocumentoProspecto[]>
+> = {
+  FISICA: DOCUMENTOS_PERSONA_FISICA,
+  MORAL: [...DOCUMENTOS_PERSONA_FISICA, "ACTA_CONSTITUTIVA", "PODER_REPRESENTANTE"],
+};
+
+/** Largo del RFC de cada tipo de persona: 12 caracteres la moral y 13 la física. */
+export const LARGO_RFC_POR_TIPO: Readonly<Record<TipoPersona, number>> = {
+  MORAL: 12,
+  FISICA: 13,
+};
+
+/**
+ * Tipo de persona que corresponde a un RFC ya válido: el largo de la física es
+ * persona física y cualquier otro (el de la moral en un RFC válido) es moral.
+ */
+export function tipoPersonaDeRfc(rfc: string): TipoPersona {
+  return rfc.length === LARGO_RFC_POR_TIPO.FISICA ? "FISICA" : "MORAL";
+}
+
+/** Documentos requeridos que aún no se entregan, en el orden de `DOCUMENTOS_REQUERIDOS`. */
+export function documentosFaltantes(
+  expediente: ExpedienteProspecto,
+): TipoDocumentoProspecto[] {
+  return DOCUMENTOS_REQUERIDOS[expediente.tipoPersona].filter(
+    (tipo) => !expediente.documentos[tipo],
+  );
+}
+
+/** El expediente está completo cuando no falta ningún documento requerido. */
+export function expedienteCompleto(expediente: ExpedienteProspecto): boolean {
+  return documentosFaltantes(expediente).length === 0;
+}
 
 /** Un prospecto sigue vivo mientras no se gane ni se pierda. */
 export function prospectoActivo(prospecto: Prospecto): boolean {
@@ -98,17 +165,21 @@ export const ETIQUETA_TEMPERATURA_PROSPECTO: Readonly<
   FRIO: "Frío",
 };
 
-/**
- * Días desde el último contacto: la fecha más reciente de la actividad o, sin
- * actividad, el alta. `null` si el prospecto ya se ganó o se perdió.
- */
-export function diasSinContacto(prospecto: Prospecto, hoy: FechaISO): number | null {
-  if (!prospectoActivo(prospecto)) return null;
-  const ultimo = prospecto.actividad.reduce(
+/** Fecha del hecho más reciente del prospecto: su última actividad o, sin actividad, el alta. */
+export function fechaUltimoHecho(prospecto: Prospecto): FechaISO {
+  return prospecto.actividad.reduce(
     (max, a) => (a.fecha > max ? a.fecha : max),
     prospecto.creadoEl,
   );
-  return Math.max(0, diasEntre(ultimo, hoy));
+}
+
+/**
+ * Días desde el último contacto (`fechaUltimoHecho`). `null` si el prospecto ya
+ * se ganó o se perdió.
+ */
+export function diasSinContacto(prospecto: Prospecto, hoy: FechaISO): number | null {
+  if (!prospectoActivo(prospecto)) return null;
+  return Math.max(0, diasEntre(fechaUltimoHecho(prospecto), hoy));
 }
 
 /** Tibio desde 15 días sin contacto y frío desde 30; `null` si no aplica. */

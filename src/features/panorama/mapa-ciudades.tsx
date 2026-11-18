@@ -13,7 +13,9 @@ import {
   useMapEvents,
 } from "react-leaflet";
 import { MapaLeaflet } from "@/components/mapa/mapa-leaflet";
+import { hrefPermitido } from "@/config/acceso-rutas";
 import { rutaPlaza } from "@/domain";
+import { useSesion } from "@/hooks";
 import { formatNumero, formatPorcentaje } from "@/lib/format";
 import { bordeCiudad, fondoCiudad } from "./estilo-rango";
 import type { ResumenCiudad } from "./agregados";
@@ -209,7 +211,12 @@ function EncuadrarCiudades({ ciudades }: MapaCiudadesProps) {
   return null;
 }
 
+/**
+ * Mapa de ciudades del Panorama. En el popup, una plaza cuya ruta el rol no
+ * abre (la de una plaza en preventa lleva a su terreno) se lista sin enlace.
+ */
 export default function MapaCiudades({ ciudades }: MapaCiudadesProps) {
+  const { rol } = useSesion();
   return (
     <MapaLeaflet
       center={CENTRO}
@@ -242,16 +249,25 @@ export default function MapaCiudades({ ciudades }: MapaCiudadesProps) {
                 · {formatNumero(c.disponibles)} disponibles
               </p>
               <ul className="space-y-1">
-                {c.plazas.map((p) => (
-                  <li key={p.plaza.id}>
-                    <Link
-                      href={rutaPlaza(p.plaza.id)}
-                      className="text-sm font-medium text-brand-primary underline underline-offset-2 hover:text-brand-secondary"
-                    >
-                      {p.plaza.nombre}
-                    </Link>
-                  </li>
-                ))}
+                {c.plazas.map((p) => {
+                  const ruta = rutaPlaza(p.plaza.id);
+                  return (
+                    <li key={p.plaza.id}>
+                      {rol && hrefPermitido(rol, ruta) ? (
+                        <Link
+                          href={ruta}
+                          className="text-sm font-medium text-brand-primary underline underline-offset-2 hover:text-brand-secondary"
+                        >
+                          {p.plaza.nombre}
+                        </Link>
+                      ) : (
+                        <span className="text-sm font-medium text-brand-primary">
+                          {p.plaza.nombre}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           </Popup>

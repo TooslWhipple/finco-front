@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { crearSeed } from "@/data/seed";
 import { FichaProveedor } from "@/features/proveedores/ficha-proveedor";
 
@@ -12,9 +13,18 @@ export function generateStaticParams() {
   return IDS_PROVEEDORES.map((proveedorId) => ({ proveedorId }));
 }
 
-export default async function PaginaProveedor({
-  params,
-}: PageProps<"/proveedores/[proveedorId]">) {
+type Props = PageProps<"/proveedores/[proveedorId]">;
+
+async function ProveedorDeLaUrl({ params }: Pick<Props, "params">) {
   const { proveedorId } = await params;
   return <FichaProveedor proveedorId={proveedorId} />;
+}
+
+export default function PaginaProveedor({ params }: Props) {
+  // `params` (el proveedor) exige una frontera de Suspense.
+  return (
+    <Suspense fallback={<p className="text-sm text-brand-text-muted">Cargando…</p>}>
+      <ProveedorDeLaUrl params={params} />
+    </Suspense>
+  );
 }

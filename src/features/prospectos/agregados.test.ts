@@ -6,6 +6,7 @@ import {
   filtrarProspectos,
   kpisProspectos,
   prospectosDeEtapa,
+  textoFaltantes,
 } from "./agregados";
 
 const plazaDeLocal = new Map([
@@ -100,11 +101,12 @@ describe("temperatura", () => {
 });
 
 describe("kpisProspectos", () => {
-  it("cuenta activos, sin contactar, cotizados, por cotizar y tasa de cierre", () => {
+  it("cuenta activos, sin contactar, cotizados, en negociación, por cotizar y tasa de cierre", () => {
     expect(kpisProspectos(prospectos)).toEqual({
       activos: 2,
       sinContactar: 1,
       enCotizacion: 1,
+      enNegociacion: 0,
       porCotizar: 0,
       tasaCierre: 0.5,
       frios: 0,
@@ -123,17 +125,25 @@ describe("kpisProspectos", () => {
       });
     let lista = [...prospectos];
     const recorrido = [kpisProspectos(lista)];
-    for (let paso = 0; paso < 4; paso++) {
+    for (let paso = 0; paso < 5; paso++) {
       lista = avanzar(lista, "1");
       recorrido.push(kpisProspectos(lista));
     }
     expect(lista.find((p) => p.id === "1")?.etapa).toBe("GANADO");
-    expect(recorrido.map((k) => [k.sinContactar, k.porCotizar, k.enCotizacion])).toEqual([
-      [1, 0, 1],
-      [0, 0, 1],
-      [0, 1, 1],
-      [0, 0, 2],
-      [0, 0, 1],
+    expect(
+      recorrido.map((k) => [
+        k.sinContactar,
+        k.porCotizar,
+        k.enCotizacion,
+        k.enNegociacion,
+      ]),
+    ).toEqual([
+      [1, 0, 1, 0],
+      [0, 0, 1, 0],
+      [0, 1, 1, 0],
+      [0, 0, 2, 0],
+      [0, 0, 1, 1],
+      [0, 0, 1, 0],
     ]);
     expect(recorrido.at(-1)).toMatchObject({ activos: 1, tasaCierre: 2 / 3 });
   });
@@ -147,5 +157,12 @@ describe("prospectosDeEtapa", () => {
       crearProspecto({ id: "c", etapa: "NUEVO", creadoEl: "2026-10-20" }),
     ];
     expect(prospectosDeEtapa(lista, "VISITA").map((p) => p.id)).toEqual(["b", "a"]);
+  });
+});
+
+describe("textoFaltantes", () => {
+  it("usa singular con un documento y plural con varios", () => {
+    expect(textoFaltantes(1)).toBe("Falta 1 documento");
+    expect(textoFaltantes(3)).toBe("Faltan 3 documentos");
   });
 });

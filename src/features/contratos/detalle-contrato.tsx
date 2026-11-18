@@ -11,6 +11,7 @@ import {
   type Cotizacion,
   type Local,
   type Plaza,
+  type Prospecto,
 } from "@/domain";
 import { BotonLiberarLocal } from "@/features/local/boton-liberar-local";
 import {
@@ -22,6 +23,7 @@ import { formatFecha, formatMoneda } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { diasParaVencer } from "./agregados";
 import { rutaContratoImprimible } from "./contrato-imprimible";
+import { datosArrendatario } from "./render-contrato";
 
 interface DetalleContratoProps {
   contrato: Contrato;
@@ -31,6 +33,8 @@ interface DetalleContratoProps {
   local?: Local;
   plaza?: Plaza;
   cotizacion?: Cotizacion;
+  /** Prospecto del que nació el contrato (su `locatarioId`); ausente en los del seed. */
+  prospecto?: Prospecto;
   /** El local del contrato está rentado y aún no abre (`localesSinAbrir`). */
   sinAbrir: boolean;
   puedeGestionar: boolean;
@@ -62,6 +66,7 @@ export function DetalleContrato({
   local,
   plaza,
   cotizacion,
+  prospecto,
   sinAbrir,
   puedeGestionar,
   onEnviarAFirma,
@@ -74,6 +79,7 @@ export function DetalleContrato({
   const folio = c.folio ?? c.id;
   const renovable = rige && local !== undefined;
   const pendienteApertura = contratoVigenteParaApertura(c, hoy) && sinAbrir;
+  const arrendatario = prospecto ? datosArrendatario(prospecto) : undefined;
 
   return (
     <PanelDetalle
@@ -96,6 +102,46 @@ export function DetalleContrato({
             "Local no disponible."
           ),
         },
+        ...(arrendatario
+          ? [
+              {
+                titulo: "Arrendatario",
+                contenido: (
+                  <dl className="grid grid-cols-2 gap-3">
+                    <Dato etiqueta="RFC" valor={arrendatario.rfc} />
+                    <Dato etiqueta="Tipo de persona" valor={arrendatario.tipoPersona} />
+                    <Dato etiqueta="Contacto" valor={arrendatario.contacto.nombre} />
+                    <Dato etiqueta="Teléfono" valor={arrendatario.contacto.telefono} />
+                    <div className="col-span-2">
+                      <Dato etiqueta="Correo" valor={arrendatario.contacto.correo} />
+                    </div>
+                    <div className="col-span-2">
+                      <dt className="text-xs text-brand-text-muted">
+                        Documentos entregados
+                      </dt>
+                      <dd className="font-medium">
+                        {arrendatario.documentos.length === 0 ? (
+                          "Ninguno."
+                        ) : (
+                          <ul className="space-y-0.5">
+                            {arrendatario.documentos.map((d) => (
+                              <li key={d.tipo}>
+                                {d.etiqueta}
+                                <span className="font-normal text-brand-text-muted">
+                                  {" "}
+                                  · {d.entregadoEl}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                ),
+              },
+            ]
+          : []),
         ...(pendienteApertura || c.apertura
           ? [
               {

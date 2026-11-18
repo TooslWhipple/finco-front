@@ -67,11 +67,11 @@ export function evaluarCandados(
     },
     {
       id: "EXPEDIENTE",
-      nombre: "Expediente del prospecto completo",
+      nombre: "Expediente del prospecto",
       estado: expedienteCompleto ? "CUMPLE" : "FALLA",
       detalle: expedienteCompleto
-        ? "Acta, RFC, identificación, comprobante."
-        : "Faltan documentos del prospecto (acta, RFC, identificación, comprobante).",
+        ? "Entregó todos los documentos que exige su tipo de persona."
+        : "Faltan documentos del expediente del prospecto.",
     },
     {
       id: "AVAL",

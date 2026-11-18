@@ -9,7 +9,8 @@ export type Rol =
   | "PMO"
   | "SUPERVISOR_OBRA"
   | "GERENTE_COMERCIAL"
-  | "CONTRATISTA";
+  | "CONTRATISTA"
+  | "ATENCION_CLIENTES";
 
 export interface Usuario {
   id: string;
@@ -186,7 +187,8 @@ export interface CambioPropuesto {
 
 /**
  * Instantánea del prospecto que consta en la cotización. Sobrevive aunque el
- * prospecto cambie después: los candados y el contrato leen de aquí.
+ * prospecto cambie después: los candados leen de aquí, y el contrato toma los
+ * datos fiscales (RFC, tipo de persona, documentos) del prospecto ligado.
  */
 export interface ProspectoCotizacion {
   nombre: string;
@@ -196,7 +198,24 @@ export interface ProspectoCotizacion {
 }
 
 export type EtapaProspecto =
-  "NUEVO" | "CONTACTADO" | "VISITA" | "COTIZADO" | "GANADO" | "PERDIDO";
+  "NUEVO" | "CONTACTADO" | "VISITA" | "COTIZADO" | "NEGOCIACION" | "GANADO" | "PERDIDO";
+
+export type TipoPersona = "FISICA" | "MORAL";
+
+/** Documentos del expediente del prospecto; el aval va aparte (`aval`). */
+export type TipoDocumentoProspecto =
+  | "IDENTIFICACION"
+  | "CONSTANCIA_FISCAL"
+  | "COMPROBANTE_DOMICILIO"
+  | "ACTA_CONSTITUTIVA"
+  | "PODER_REPRESENTANTE";
+
+/** Expediente del prospecto: los requisitos dependen del tipo de persona. */
+export interface ExpedienteProspecto {
+  tipoPersona: TipoPersona;
+  /** Fecha de entrega de cada documento recibido; ausente si falta. */
+  documentos: Partial<Record<TipoDocumentoProspecto, FechaISO>>;
+}
 
 export type OrigenProspecto =
   "REFERIDO" | "SITIO_WEB" | "LLAMADA" | "REDES" | "BROKER" | "EVENTO";
@@ -216,8 +235,13 @@ export interface ActividadProspecto {
   hora?: string;
 }
 
-/** Prospecto como entidad propia del embudo comercial; `nombre` es la razón social. */
-export interface Prospecto extends ProspectoCotizacion {
+/**
+ * Prospecto como entidad propia del embudo comercial; `nombre` es la razón
+ * social. Su expediente se calcula de `documentos` (`expedienteCompleto`): no
+ * guarda el booleano de la instantánea de la cotización.
+ */
+export interface Prospecto
+  extends Omit<ProspectoCotizacion, "documentosCompletos">, ExpedienteProspecto {
   id: string;
   rfc: string;
   giro: string;
@@ -231,6 +255,21 @@ export interface Prospecto extends ProspectoCotizacion {
   vendedorId: string;
   /** Seguimiento, de más antiguo a más reciente. */
   actividad: ActividadProspecto[];
+  /** Campaña (`Campana.id`) de la que llegó; si la hay, `origen` es su canal. */
+  campanaId?: string;
+}
+
+/** Campaña comercial que genera prospectos; su canal es un origen de prospecto. */
+export interface Campana {
+  /** `cmp-NN`. */
+  id: string;
+  nombre: string;
+  canal: OrigenProspecto;
+  inicio: FechaISO;
+  /** Último día de la campaña; ausente si sigue abierta. */
+  fin?: FechaISO;
+  /** Inversión total en MXN. */
+  inversion: number;
 }
 
 export type EstadoCotizacion = "BORRADOR" | "ENVIADA" | "CONTRATO_GENERADO";
@@ -838,4 +877,100 @@ export interface EnvioAviso {
   /** "HH:mm". */
   hora: string;
   origen: "PROGRAMADO" | "MANUAL";
+}
+
+// --- Servicio a clientes ----------------------------------------------------
+
+/** Motivo del caso de un locatario. `CONSULTA` es una inquietud o consulta. */
+export type TipoCaso =
+  "FALLA" | "FUGA" | "DANO" | "ACLARACION_FACTURA" | "CONSULTA" | "OTRO";
+
+export type PrioridadCaso = "ALTA" | "MEDIA" | "BAJA";
+
+/**
+ * Ciclo del caso, sin reabrir. `RECIBIDO` y no `ABIERTO`: esa clave ya la usa
+ * el chip de estatus de terrenos con otro sentido.
+ */
+export type EstatusCaso = "RECIBIDO" | "EN_ATENCION" | "RESUELTO" | "CERRADO";
+
+/** Por dónde llegó el caso; lo registra el área de atención a clientes. */
+export type CanalCaso = "TELEFONO" | "CORREO" | "WHATSAPP" | "PRESENCIAL";
+
+/** Entrada de la bitácora de un caso: transiciones, respuestas y comentarios. */
+export interface EntradaBitacoraCaso {
+  id: string;
+  /** ISO con hora sin zona. */
+  fecha: string;
+  /** Nombre de quien la registró. */
+  autor: string;
+  texto: string;
+}
+
+/** Caso de servicio de un locatario. Las fechas son ISO con hora sin zona. */
+export interface CasoServicio {
+  id: string;
+  /** `CAS-AAAA-NNNN`, consecutivo por año. */
+  folio: string;
+  plazaId: string;
+  localId: string;
+  locatarioId: string;
+  tipo: TipoCaso;
+  prioridad: PrioridadCaso;
+  estatus: EstatusCaso;
+  canal: CanalCaso;
+  descripcion: string;
+  abiertoEl: string;
+  /** Primera respuesta al locatario; comentar no cuenta. */
+  primeraRespuestaEl?: string;
+  resueltoEl?: string;
+  /** Usuario (`Usuario.id`) que respondió primero. */
+  responsableId?: string;
+  /** Mantenimiento (`Mantenimiento.id`) al que se escaló. */
+  mantenimientoId?: string;
+  /** Factura (`Factura.id`) de una aclaración. */
+  facturaId?: string;
+  /** Calificación del locatario; obligatoria para pasar a `CERRADO`. */
+  calificacion?: 1 | 2 | 3 | 4 | 5;
+  bitacora: EntradaBitacoraCaso[];
+}
+
+// --- Comisiones ---------------------------------------------------------------
+
+/**
+ * Esquema de comisiones vigente; lo editan Dirección y Superadmin. Los
+ * porcentajes son puntos (4 = 4 %) sobre la base de cada contrato.
+ */
+export interface EsquemaComisiones {
+  /** Comisión del vendedor que cerró el contrato. */
+  asesorPct: number;
+  /** Bono del mismo vendedor si la cotización no requirió excepción de precio. */
+  bonoSinExcepcionPct: number;
+  /** Comisión de cada mando medio sobre los contratos de su equipo. */
+  mandoMedioPct: number;
+  /** `Usuario.id` de los mandos medios que cobran comisión. */
+  mandosMedios: string[];
+}
+
+export type ConceptoComision = "ASESOR" | "BONO_SIN_EXCEPCION" | "MANDO_MEDIO";
+
+/**
+ * Comisión generada al firmarse un contrato. Es una foto fija: editar el
+ * esquema después no cambia `base`, `porcentaje` ni `monto`.
+ */
+export interface Comision {
+  /** `com-${contratoId}-${concepto}-${usuarioId}`, determinista. */
+  id: string;
+  contratoId: string;
+  /** `Usuario.id` de quien la cobra. */
+  usuarioId: string;
+  concepto: ConceptoComision;
+  /** Renta mensual × meses cobrados del primer año. */
+  base: number;
+  /** Puntos porcentuales aplicados a la base. */
+  porcentaje: number;
+  monto: number;
+  /** Día en que se generó. */
+  generadaEl: FechaISO;
+  /** Día en que se pagó; ausente si sigue pendiente. */
+  pagadaEl?: FechaISO;
 }

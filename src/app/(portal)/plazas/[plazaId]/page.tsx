@@ -9,13 +9,19 @@ export function generateStaticParams() {
   return IDS_PLAZAS.map((plazaId) => ({ plazaId }));
 }
 
-export default async function PaginaPlaza({ params }: PageProps<"/plazas/[plazaId]">) {
+type Props = PageProps<"/plazas/[plazaId]">;
+
+async function PlazaDeLaUrl({ params }: Pick<Props, "params">) {
   const { plazaId } = await params;
   if (!IDS_PLAZAS.includes(plazaId)) notFound();
-  // `useSearchParams` (?vista=) exige una frontera de Suspense.
+  return <PlazaDetalle plazaId={plazaId} />;
+}
+
+export default function PaginaPlaza({ params }: Props) {
+  // `params` y `useSearchParams` (?vista=) exigen una frontera de Suspense.
   return (
     <Suspense fallback={<p className="text-sm text-brand-text-muted">Cargando…</p>}>
-      <PlazaDetalle plazaId={plazaId} />
+      <PlazaDeLaUrl params={params} />
     </Suspense>
   );
 }

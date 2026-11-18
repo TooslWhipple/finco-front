@@ -1,6 +1,7 @@
 import type { Ejecucion } from "./avisos";
 import { diasAtraso } from "./cobranza";
 import { sumarDias, sumarMeses } from "./fechas";
+import { redondearCentavos } from "./numeros";
 import type {
   ComplementoPago,
   Contrato,
@@ -122,7 +123,7 @@ export function diaDeRecargo(regla: ReglaRecargo, k: number): number {
 
 /** Monto de un recargo: el porcentaje de la renta, a centavos. */
 export function montoRecargo(renta: Factura, regla: ReglaRecargo): number {
-  return Math.round(renta.monto * regla.porcentaje * 100) / 100;
+  return redondearCentavos(renta.monto * regla.porcentaje);
 }
 
 /**

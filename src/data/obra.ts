@@ -9,6 +9,7 @@ import {
   FONDO_GARANTIA_PCT,
   lunesDeSemana,
   pagoDeEstimacion,
+  redondearCentavos,
   resolverEstimacion,
   sumarDias,
   type ActividadCronograma,
@@ -29,8 +30,7 @@ import { PROVEEDOR_POR_NOMBRE } from "./catalogo";
 import { evidenciaCorte } from "./fotos";
 import { crearPrng, type Prng } from "./prng";
 
-/** Terreno héroe de la demo de obra (Valle Real); su id lo fija el orden del seed. */
-export const ID_TERRENO_HEROE = "ter-09";
+export { ID_TERRENO_HEROE } from "@/config/ids-demo";
 
 const SEMILLA_OBRA = 2611;
 
@@ -458,7 +458,7 @@ const ULTIMA_SEMANA_CON_CORTE = sumarDias(lunesDeSemana(DEMO_TODAY), -7);
 const CORTES_POR_PAGO = 2;
 
 const redondearVolumen = (volumen: number, unidad: UnidadObra): number =>
-  unidad === "PZA" ? Math.round(volumen) : Math.round(volumen * 100) / 100;
+  unidad === "PZA" ? Math.round(volumen) : redondearCentavos(volumen);
 
 /** Lunes de cada semana de ejecución del contrato que ya pudo reportarse. */
 function semanasDeEjecucion(contrato: ContratoObra): FechaISO[] {
@@ -508,7 +508,7 @@ function volumenesDelGrupo(grupo: readonly CorteCobrable[]): VolumenCorte[] {
   }
   return [...acumulado].map(([conceptoId, volumen]) => ({
     conceptoId,
-    volumen: Math.round(volumen * 100) / 100,
+    volumen: redondearCentavos(volumen),
   }));
 }
 

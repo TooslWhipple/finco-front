@@ -3,6 +3,8 @@
 import { useMemo } from "react";
 import { DEMO_TODAY } from "@/domain";
 import {
+  useAtribucionContratos,
+  useCampanas,
   useCiudades,
   useContratosVivos,
   useCotizaciones,
@@ -34,6 +36,8 @@ export function useDatosReporte(): DatosReporte | undefined {
   const fuentesLocatario = useFuentesLocatario();
   const cotizaciones = useCotizaciones();
   const excepciones = useExcepciones();
+  const campanas = useCampanas();
+  const atribucionContratos = useAtribucionContratos();
 
   return useMemo<DatosReporte | undefined>(
     () =>
@@ -49,6 +53,8 @@ export function useDatosReporte(): DatosReporte | undefined {
             fuentesLocatario,
             cotizaciones,
             excepciones,
+            campanas,
+            atribucionContratos,
             hoy: DEMO_TODAY,
           }
         : undefined,
@@ -64,6 +70,8 @@ export function useDatosReporte(): DatosReporte | undefined {
       fuentesLocatario,
       cotizaciones,
       excepciones,
+      campanas,
+      atribucionContratos,
     ],
   );
 }

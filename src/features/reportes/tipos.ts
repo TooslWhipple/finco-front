@@ -1,4 +1,6 @@
 import type {
+  AtribucionContratos,
+  Campana,
   Ciudad,
   Contrato,
   Cotizacion,
@@ -25,6 +27,10 @@ export interface DatosReporte {
   fuentesLocatario: FuentesLocatario;
   cotizaciones: readonly Cotizacion[];
   excepciones: readonly ExcepcionPrecio[];
+  /** Catálogo completo de campañas: el alcance por plaza no lo acota. */
+  campanas: readonly Campana[];
+  /** Atribución demo de los contratos históricos sin cotización (vendedor y campaña). */
+  atribucionContratos: Readonly<AtribucionContratos>;
   hoy: FechaISO;
 }
 

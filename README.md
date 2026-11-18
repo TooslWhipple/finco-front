@@ -44,20 +44,46 @@ Los KPIs, badges del sidebar y píldora de EnKontrol se **calculan** de los dato
 hay cifras fijas en la UI. Los tests del seed vigilan la coherencia entre pantallas
 (por ejemplo, C-12 ocupado con una factura vencida de 54 días).
 
+## Variables de entorno
+
+El login de la demo se valida en el servidor (`src/app/api/sesion`) con una cookie
+firmada; las contraseñas no están en el código. Copia `.env.example` a `.env.local`
+y da un valor a cada variable:
+
+| Variable                 | Qué es                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `SESSION_SECRET`         | Secreto de firma de la cookie de sesión: aleatorio, de 32 caracteres o más (`openssl rand -base64 48`). |
+| `DEMO_PASSWORD_RASEK`    | Contraseña de la cuenta `rasek` (solo Comercial).                                                       |
+| `DEMO_PASSWORD_BENJAMIN` | Contraseña de la cuenta `benjamin` (solo Comercial, igual que `rasek`).                                 |
+| `DEMO_PASSWORD_SERGIO`   | Contraseña de la cuenta `sergio` (acceso total; puede ver la demo como cualquier usuario).              |
+
+Una cuenta sin su variable no puede iniciar sesión, y sin `SESSION_SECRET` nadie
+entra. `npm run build` compila sin variables: se leen en cada petición. Para sumar
+una cuenta, agrega su entrada en `CUENTAS` (`src/server/auth/cuentas.ts`) y su
+variable.
+
 ## Despliegue en Vercel
 
-App Next.js estándar, sin `output: 'export'` y sin variables de entorno: basta
-importar el repositorio en Vercel con el preset de Next.js (build `npm run build`).
-El primer despliegue requiere la cuenta de Vercel de Whipple o del usuario.
+App Next.js estándar, sin `output: 'export'`: basta importar el repositorio en
+Vercel con el preset de Next.js (build `npm run build`). El primer despliegue
+requiere la cuenta de Vercel de Whipple o del usuario.
+
+Antes de abrir la demo publicada, da de alta las cuatro variables de arriba en
+**Project → Settings → Environment Variables**, marcando los entornos
+**Production** y **Preview**, y vuelve a desplegar (**Deployments → Redeploy**):
+las variables nuevas solo aplican a los despliegues posteriores. Sin ellas el
+login responde "No se pudo iniciar sesión".
 
 ## Guion de demo
 
-Reinicia antes de ensayar: menú de usuario → **Reiniciar demo**. El selector de rol
-de la topbar cambia de rol en vivo. Escritorio ≥ 1280 px.
+Inicia sesión con la cuenta `sergio`: es la única que ve el selector de rol de la
+topbar, que cambia de usuario en vivo (las cuentas `rasek` y `benjamin` solo ven Comercial y no pueden
+cambiarse). Reinicia antes de ensayar: menú de usuario → **Reiniciar demo**.
+Escritorio ≥ 1280 px.
 
 ### 1. Dirección (Mariana López) — Panorama
 
-1. Login → "Entrar como Dirección". Aterriza en el Panorama.
+1. Login como `sergio` → selector de rol → Dirección. Aterriza en el Panorama.
 2. Muestra los KPIs y el mapa con 11 pines; filtra por Sinaloa y alterna a "Lista".
 3. Abre la plaza héroe desde el mapa o la lista.
 

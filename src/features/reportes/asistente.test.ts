@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEMO_TODAY } from "@/domain";
 import { crearSeed } from "@/data/seed";
-import { PREGUNTAS_ASISTENTE, buscarPregunta } from "./asistente";
+import { PREGUNTAS_ASISTENTE, buscarPregunta, preguntasPara, temasDe } from "./asistente";
 import type { DatosReporte } from "./tipos";
 
 const seed = crearSeed();
@@ -20,6 +20,8 @@ const datos: DatosReporte = {
   },
   cotizaciones: seed.cotizaciones,
   excepciones: seed.excepciones,
+  campanas: seed.campanas,
+  atribucionContratos: seed.atribucionContratos,
   hoy: DEMO_TODAY,
 };
 
@@ -72,15 +74,44 @@ describe("catálogo del asistente", () => {
 
 describe("buscarPregunta", () => {
   it("reconoce preguntas libres por palabras clave, con o sin acentos", () => {
-    expect(buscarPregunta("¿Cómo está la cobranza?")?.id).toBe("cartera-vencida");
-    expect(buscarPregunta("embudo de prospectos")?.id).toBe("embudo");
-    expect(buscarPregunta("que proyectos tienen retraso")?.id).toBe(
+    const todas = PREGUNTAS_ASISTENTE;
+    expect(buscarPregunta("¿Cómo está la cobranza?", todas)?.id).toBe("cartera-vencida");
+    expect(buscarPregunta("embudo de prospectos", todas)?.id).toBe("embudo");
+    expect(buscarPregunta("que proyectos tienen retraso", todas)?.id).toBe(
       "proyectos-atrasados",
     );
-    expect(buscarPregunta("margen sobre el precio mínimo")?.id).toBe("margen-minimo");
+    expect(buscarPregunta("margen sobre el precio mínimo", todas)?.id).toBe(
+      "margen-minimo",
+    );
   });
 
   it("devuelve null si nada coincide", () => {
-    expect(buscarPregunta("¿Qué clima hará mañana?")).toBeNull();
+    expect(buscarPregunta("¿Qué clima hará mañana?", PREGUNTAS_ASISTENTE)).toBeNull();
+  });
+
+  it("solo busca en las preguntas dadas: el Gerente comercial no recibe la cartera vencida", () => {
+    const comercial = preguntasPara("GERENTE_COMERCIAL");
+    expect(buscarPregunta("¿Cómo va la cobranza?", comercial)?.id).not.toBe(
+      "cartera-vencida",
+    );
+    expect(buscarPregunta("que proyectos tienen retraso", comercial)).toBeNull();
+  });
+});
+
+describe("preguntasPara", () => {
+  it("el Gerente comercial no ve cartera vencida ni proyectos atrasados; Dirección sí", () => {
+    const comercial = preguntasPara("GERENTE_COMERCIAL").map((p) => p.id);
+    expect(comercial).not.toContain("cartera-vencida");
+    expect(comercial).not.toContain("proyectos-atrasados");
+    const direccion = preguntasPara("DIRECCION").map((p) => p.id);
+    expect(direccion).toContain("cartera-vencida");
+    expect(direccion).toContain("proyectos-atrasados");
+    expect(direccion).toHaveLength(PREGUNTAS_ASISTENTE.length);
+  });
+
+  it("los temas que anuncia el asistente al Gerente comercial no mencionan cobranza ni proyectos", () => {
+    const temas = temasDe(preguntasPara("GERENTE_COMERCIAL"));
+    expect(temas).toBe("ocupación, contratos, prospectos y precios");
+    expect(temasDe(preguntasPara("DIRECCION"))).toContain("cobranza");
   });
 });

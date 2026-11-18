@@ -48,6 +48,7 @@ export const ESTATUS = {
   CONTACTADO: { etiqueta: "Contactado", tono: "primario" },
   VISITA: { etiqueta: "Visita", tono: "indigo" },
   COTIZADO: { etiqueta: "Cotizado", tono: "naranja" },
+  NEGOCIACION: { etiqueta: "Negociación", tono: "indigo" },
   GANADO: { etiqueta: "Ganado", tono: "verde" },
   PERDIDO: { etiqueta: "Perdido", tono: "coral" },
   // Terrenos y proyectos
@@ -69,6 +70,14 @@ export const ESTATUS = {
   CORRECTIVO: { etiqueta: "Correctivo", tono: "coral" },
   REQUIERE_AUTORIZACION: { etiqueta: "Requiere autorización", tono: "naranja" },
   SOBREGIRO_AUTORIZADO: { etiqueta: "Sobregiro autorizado", tono: "verde" },
+  // Servicio a clientes: estatus del caso y meta de primera respuesta
+  // (POR_VENCER ya existe arriba con el mismo sentido).
+  RECIBIDO: { etiqueta: "Recibido", tono: "indigo" },
+  EN_ATENCION: { etiqueta: "En atención", tono: "naranja" },
+  RESUELTO: { etiqueta: "Resuelto", tono: "verde" },
+  CERRADO: { etiqueta: "Cerrado", tono: "neutro" },
+  EN_TIEMPO: { etiqueta: "En tiempo", tono: "verde" },
+  FUERA_DE_TIEMPO: { etiqueta: "Fuera de tiempo", tono: "coral" },
   // Padrón de proveedores
   ACTIVO: { etiqueta: "Activo", tono: "verde" },
   INACTIVO: { etiqueta: "Inactivo", tono: "neutro" },

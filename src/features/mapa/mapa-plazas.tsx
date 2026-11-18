@@ -18,8 +18,9 @@ import {
   StatusChip,
 } from "@/components/shared";
 import { buttonVariants } from "@/components/ui/button";
+import { hrefPermitido } from "@/config/acceso-rutas";
 import { esPlazaDeTerreno, rutaPlaza } from "@/domain";
-import { useCiudades, useLocales, usePlazas } from "@/hooks";
+import { useCiudades, useLocales, usePlazas, useSesion } from "@/hooks";
 import { formatMoneda, formatNumero, formatPorcentaje } from "@/lib/format";
 import { FONDO_PREVENTA, FONDO_RANGO } from "@/features/panorama/estilo-rango";
 import { cn } from "@/lib/utils";
@@ -183,6 +184,7 @@ interface MapaPlazasProps {
 }
 
 export function MapaPlazas({ plazaInicialId }: MapaPlazasProps) {
+  const { rol } = useSesion();
   const ciudades = useCiudades().datos;
   const plazas = usePlazas().datos;
   const locales = useLocales().datos;
@@ -315,12 +317,15 @@ export function MapaPlazas({ plazaInicialId }: MapaPlazasProps) {
                 : []),
             ]}
             acciones={
-              <Link
-                href={rutaPlaza(seleccionada.id)}
-                className={buttonVariants({ variant: "default" })}
-              >
-                {esPlazaDeTerreno(seleccionada.id) ? "Ver terreno" : "Ver plaza"}
-              </Link>
+              // Sin enlace si el rol no abre la ruta (la de preventa lleva al terreno).
+              rol && hrefPermitido(rol, rutaPlaza(seleccionada.id)) ? (
+                <Link
+                  href={rutaPlaza(seleccionada.id)}
+                  className={buttonVariants({ variant: "default" })}
+                >
+                  {esPlazaDeTerreno(seleccionada.id) ? "Ver terreno" : "Ver plaza"}
+                </Link>
+              ) : undefined
             }
           />
         ) : (

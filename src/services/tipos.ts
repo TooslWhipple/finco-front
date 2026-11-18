@@ -1,4 +1,5 @@
 import type {
+  AtribucionContratos,
   CambioPropuesto,
   Ciudad,
   Contrato,
@@ -90,6 +91,8 @@ export interface ProspectosRepository {
 
 export interface ContratosRepository {
   listar(): Promise<Contrato[]>;
+  /** Atribución demo (vendedor y campaña) de los contratos históricos sin cotización. */
+  atribucionContratos(): Promise<AtribucionContratos>;
 }
 
 export interface TerrenosRepository {

@@ -4,6 +4,7 @@ import {
   estadoVigenciaContrato,
   estadoVisibleContrato,
   folioContrato,
+  mesesDeContrato,
 } from "./contratos";
 import { crearContrato, crearCotizacion } from "./fixtures";
 
@@ -87,5 +88,13 @@ describe("contratoDesdeCotizacion", () => {
   it("sin prospecto registrado usa la cotización como locatario", () => {
     const contrato = contratoDesdeCotizacion(crearCotizacion({ id: "COT-2026-0500" }));
     expect(contrato.locatarioId).toBe("COT-2026-0500");
+  });
+});
+
+describe("mesesDeContrato", () => {
+  it("redondea los días entre inicio y fin a meses promedio", () => {
+    expect(mesesDeContrato({ inicio: "2026-01-01", fin: "2029-01-01" })).toBe(36);
+    expect(mesesDeContrato({ inicio: "2026-03-15", fin: "2027-03-15" })).toBe(12);
+    expect(mesesDeContrato({ inicio: "2026-01-01", fin: "2026-01-10" })).toBe(0);
   });
 });
