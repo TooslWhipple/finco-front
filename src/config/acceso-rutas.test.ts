@@ -4,6 +4,7 @@ import {
   hrefPermitido,
   INICIO_POR_ROL,
   REGLAS_RUTA,
+  RUTA_SIN_ACCESO,
   rutaPermitida,
   rutaTieneDueno,
   RUTAS_PUBLICAS,
@@ -79,7 +80,7 @@ describe("reglas de ruta", () => {
     expect(rutaTieneDueno("/login")).toBe(false);
     expect(rutaTieneDueno("/contratos/x/imprimir")).toBe(true);
     expect(rutaTieneDueno("/")).toBe(true);
-    expect(RUTAS_PUBLICAS).toEqual(["/login"]);
+    expect(RUTAS_PUBLICAS).toEqual([RUTA_SIN_ACCESO]);
   });
 
   it("los ids del menú y las claves de REGLAS_RUTA coinciden", () => {

@@ -129,8 +129,14 @@ export const REGLAS_RUTA: Record<IdRegla, ReglaRuta> = {
 /** Roles que abren todos los módulos sin tener que listarse en `roles`. */
 export const ROLES_VEN_TODO: readonly Rol[] = ["DIRECCION", "SUPERADMIN"];
 
+/** Pantalla que se abre sin sesión: pide el enlace de acceso. */
+export const RUTA_SIN_ACCESO = "/sin-acceso";
+
+/** Prefijo del enlace secreto por cuenta: `RUTA_ENLACE/<clave>`. */
+export const RUTA_ENLACE = "/acceso";
+
 /** Rutas que se abren sin sesión y que no pertenecen a ningún módulo. */
-export const RUTAS_PUBLICAS: readonly string[] = ["/login"];
+export const RUTAS_PUBLICAS: readonly string[] = [RUTA_SIN_ACCESO];
 
 /** Pantalla de inicio de cada rol. */
 export const INICIO_POR_ROL: Record<Rol, string> = {
@@ -162,7 +168,7 @@ function duenosDe(ruta: string): ReglaRuta[] {
 /**
  * ¿Puede el rol abrir esta ruta? Se bloquea solo si la ruta pertenece (por su
  * ruta o prefijo) a algún módulo y ninguno es visible para el rol; las rutas
- * que no pertenecen a ningún módulo (login, redirecciones) pasan. La barrera
+ * que no pertenecen a ningún módulo (`/sin-acceso`, redirecciones) pasan. La barrera
  * del servidor es más estricta: cierra también las rutas sin dueño
  * (`rutaTieneDueno`).
  */

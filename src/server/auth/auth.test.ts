@@ -1,7 +1,12 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { decidirAcceso } from "./acceso";
-import { cuentaPorUsuario, verificarCredenciales } from "./cuentas";
+import {
+  cuentaHabilitada,
+  cuentaPorClave,
+  cuentaPorUsuario,
+  LONGITUD_MINIMA_CLAVE,
+} from "./cuentas";
 import {
   firmarSesion,
   leerSesion,
@@ -14,12 +19,12 @@ import {
 } from "./sesion";
 import type { SesionFirmada } from "./tipos";
 
-/** Entorno ficticio: nunca las contraseñas reales de la demo. */
+/** Entorno ficticio: nunca las claves reales de la demo. */
 const ENV = {
   SESSION_SECRET: "x".repeat(32),
-  DEMO_PASSWORD_RASEK: "clave-de-prueba",
-  DEMO_PASSWORD_BENJAMIN: "clave-de-benjamin",
-  DEMO_PASSWORD_SERGIO: "otra-clave-de-prueba",
+  DEMO_CLAVE_RASEK: "r".repeat(32),
+  DEMO_CLAVE_BENJAMIN: "b".repeat(40),
+  DEMO_CLAVE_SERGIO: "s".repeat(32),
 };
 const SECRETO = ENV.SESSION_SECRET;
 const AHORA = 1_800_000_000_000;
@@ -72,28 +77,34 @@ describe("firma de la sesión", () => {
 });
 
 describe("cuentas", () => {
-  it("rasek con su contraseña entra sin poder suplantar; con trim y mayúsculas también", () => {
-    expect(verificarCredenciales("rasek", "clave-de-prueba", ENV)).toMatchObject({
+  it("la clave de rasek devuelve su cuenta sin poder suplantar", () => {
+    expect(cuentaPorClave("r".repeat(32), ENV)).toMatchObject({
+      usuario: "rasek",
       usuarioId: "usr-rasek",
       puedeSuplantar: false,
     });
-    expect(verificarCredenciales("  Rasek ", "clave-de-prueba", ENV)?.usuario).toBe(
-      "rasek",
-    );
   });
 
-  it("benjamin entra con su contraseña, sin suplantar y con el mismo rol que rasek", () => {
-    expect(verificarCredenciales("benjamin", "clave-de-benjamin", ENV)).toMatchObject({
+  it("la clave de benjamin devuelve su cuenta y no la de otra", () => {
+    expect(cuentaPorClave("b".repeat(40), ENV)).toMatchObject({
       usuarioId: "usr-benjamin",
       puedeSuplantar: false,
     });
-    expect(verificarCredenciales("benjamin", "clave-de-prueba", ENV)).toBeNull();
+    expect(cuentaPorClave("s".repeat(32), ENV)?.usuario).toBe("sergio");
   });
 
-  it("contraseña errónea, usuario desconocido o cuenta sin variable no entran", () => {
-    expect(verificarCredenciales("rasek", "otra", ENV)).toBeNull();
-    expect(verificarCredenciales("nadie", "clave-de-prueba", ENV)).toBeNull();
-    expect(verificarCredenciales("rasek", "", { SESSION_SECRET: SECRETO })).toBeNull();
+  it("clave errónea, vacía o de una cuenta sin variable no entran", () => {
+    expect(cuentaPorClave("otra", ENV)).toBeNull();
+    expect(cuentaPorClave("", ENV)).toBeNull();
+    expect(cuentaPorClave("r".repeat(32), { SESSION_SECRET: SECRETO })).toBeNull();
+  });
+
+  it("una clave de 31 caracteres no habilita la cuenta", () => {
+    const corta = { ...ENV, DEMO_CLAVE_RASEK: "r".repeat(LONGITUD_MINIMA_CLAVE - 1) };
+    const rasekCuenta = cuentaPorUsuario("rasek");
+    expect(rasekCuenta && cuentaHabilitada(rasekCuenta, corta)).toBe(false);
+    expect(cuentaPorClave("r".repeat(31), corta)).toBeNull();
+    expect(rasekCuenta && cuentaHabilitada(rasekCuenta, ENV)).toBe(true);
   });
 
   it("sergio puede suplantar", () => {
@@ -113,7 +124,7 @@ describe("validez de la sesión", () => {
     expect(sesionValida({ ...sergio, usuarioActivoId: "usr-fantasma" }, ENV)).toBe(false);
   });
 
-  it("una cuenta sin su variable de contraseña ya no tiene sesión", () => {
+  it("una cuenta sin su clave habilitada ya no tiene sesión", () => {
     expect(sesionValida(rasek, { SESSION_SECRET: SECRETO })).toBe(false);
   });
 
@@ -139,13 +150,24 @@ describe("validez de la sesión", () => {
 });
 
 describe("decidirAcceso", () => {
-  it("sin sesión solo pasa /login", () => {
-    expect(decidirAcceso("/login", null)).toEqual({ tipo: "pasar" });
+  it("sin sesión solo pasa /sin-acceso; /login ya no es pública", () => {
+    expect(decidirAcceso("/sin-acceso", null)).toEqual({ tipo: "pasar" });
+    expect(decidirAcceso("/login", null)).toEqual({
+      tipo: "redirigir",
+      a: "/sin-acceso",
+    });
     expect(decidirAcceso("/cotizaciones", null)).toEqual({
       tipo: "redirigir",
-      a: "/login",
+      a: "/sin-acceso",
     });
-    expect(decidirAcceso("/", null)).toEqual({ tipo: "redirigir", a: "/login" });
+    expect(decidirAcceso("/", null)).toEqual({ tipo: "redirigir", a: "/sin-acceso" });
+  });
+
+  it("con sesión, /sin-acceso también manda al inicio del rol", () => {
+    expect(decidirAcceso("/sin-acceso", "GERENTE_COMERCIAL")).toEqual({
+      tipo: "redirigir",
+      a: "/resumen-comercial",
+    });
   });
 
   it("el Gerente comercial no abre cobranza (ni codificada) ni rutas sin dueño", () => {

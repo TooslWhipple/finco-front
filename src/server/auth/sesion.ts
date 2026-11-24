@@ -8,7 +8,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { usuarioPorId } from "@/config/usuarios";
 import type { Usuario } from "@/domain";
-import { cuentaPorUsuario, type CuentaDemo } from "./cuentas";
+import { cuentaHabilitada, cuentaPorUsuario, type CuentaDemo } from "./cuentas";
 import type { ErrorSesion, SesionDto, SesionFirmada } from "./tipos";
 
 type Entorno = Record<string, string | undefined>;
@@ -102,13 +102,13 @@ export function leerSesion(
 }
 
 /**
- * ¿La sesión corresponde a una cuenta vigente? La cuenta existe y tiene su
- * variable de contraseña, el usuario activo existe y, si la cuenta no puede
+ * ¿La sesión corresponde a una cuenta vigente? La cuenta existe y está
+ * habilitada (clave de enlace de al menos 32 caracteres), el usuario activo existe y, si la cuenta no puede
  * suplantar, el usuario activo es el suyo.
  */
 export function sesionValida(s: SesionFirmada, env: Entorno = process.env): boolean {
   const cuenta = cuentaPorUsuario(s.cuenta);
-  if (!cuenta || !env[cuenta.variablePassword]) return false;
+  if (!cuenta || !cuentaHabilitada(cuenta, env)) return false;
   if (!usuarioPorId(s.usuarioActivoId)) return false;
   return cuenta.puedeSuplantar || s.usuarioActivoId === cuenta.usuarioId;
 }
