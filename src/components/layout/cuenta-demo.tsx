@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Check, LogOut, RotateCcw, Undo2 } from "lucide-react";
+import { Check, RotateCcw, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -93,22 +93,15 @@ export function SelectorRol() {
   );
 }
 
-/** Menú de usuario: cerrar sesión y reiniciar la demo. */
+/** Menú de usuario: reiniciar la demo. */
 export function MenuUsuario() {
   const { usuario } = useSesion();
-  const cerrar = useSesionStore((s) => s.cerrar);
   const resetDemo = useAppStore((s) => s.resetDemo);
 
   /** Restablece los datos sin navegar: la pantalla actual se repinta con el estado inicial. */
   const reiniciar = () => {
     resetDemo();
     toast.success("Demo reiniciada al estado inicial");
-  };
-
-  /** Borra la cookie en el servidor y recarga en el login. */
-  const salir = async () => {
-    await cerrar();
-    window.location.assign(new URL("/login", window.location.origin).href);
   };
 
   if (!usuario) return null;
@@ -132,9 +125,6 @@ export function MenuUsuario() {
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={reiniciar}>
           <RotateCcw /> Reiniciar demo
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => void salir()}>
-          <LogOut /> Cerrar sesión
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

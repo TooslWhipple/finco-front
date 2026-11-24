@@ -36,7 +36,7 @@ export const USUARIOS_DEMO: readonly Usuario[] = [
     cargo: "Acabados y Pisos del Bajío",
     proveedorId: "prv-obra-07",
   },
-  // Cuentas reales de la demo (login con contraseña). Van al final para que
+  // Cuentas reales de la demo (acceso por enlace). Van al final para que
   // `usuarioDeRol` siga devolviendo la persona demo de cada rol.
   {
     id: "usr-rasek",

@@ -19,17 +19,11 @@ export interface SesionCliente {
   cargada: boolean;
 }
 
-/** Resultado de iniciar sesión: el login muestra un mensaje distinto en cada fallo. */
-export type ResultadoInicio =
-  { tipo: "ok"; sesion: SesionDto } | { tipo: "credenciales" } | { tipo: "error" };
-
 export interface AccionesSesion {
   /** Lee la sesión del servidor; no repite la petición si ya hay sesión. `true` si hay sesión. */
   cargar(): Promise<boolean>;
-  iniciar(usuario: string, password: string): Promise<ResultadoInicio>;
   /** Cambia el usuario activo (solo si la cuenta puede suplantar); `null` si el servidor lo niega. */
   suplantar(usuarioId: string): Promise<SesionDto | null>;
-  cerrar(): Promise<void>;
 }
 
 const SIN_SESION: SesionCliente = {
@@ -78,19 +72,6 @@ export const useSesionStore = create<SesionCliente & AccionesSesion>()((set, get
     return true;
   },
 
-  iniciar: async (usuario, password) => {
-    const respuesta = await pedir("/api/sesion", {
-      method: "POST",
-      body: JSON.stringify({ usuario, password }),
-    });
-    if (respuesta?.status === 200) {
-      const sesion = (await respuesta.json()) as SesionDto;
-      set(desdeDto(sesion));
-      return { tipo: "ok", sesion };
-    }
-    return respuesta?.status === 401 ? { tipo: "credenciales" } : { tipo: "error" };
-  },
-
   suplantar: async (usuarioId) => {
     const respuesta = await pedir("/api/sesion/usuario-activo", {
       method: "PUT",
@@ -100,10 +81,5 @@ export const useSesionStore = create<SesionCliente & AccionesSesion>()((set, get
     const sesion = (await respuesta.json()) as SesionDto;
     set(desdeDto(sesion));
     return sesion;
-  },
-
-  cerrar: async () => {
-    await pedir("/api/sesion", { method: "DELETE" });
-    set(SIN_SESION);
   },
 }));

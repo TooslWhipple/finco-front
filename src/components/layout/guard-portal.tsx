@@ -2,13 +2,14 @@
 
 import { useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { RUTA_SIN_ACCESO } from "@/config/acceso-rutas";
 import { useStoreHidratado } from "@/store";
 import { useHidratarStore } from "@/store/hidratar";
 import { useSesionStore } from "@/store/sesion";
 
 /**
  * Guard del portal: pide la sesión al servidor y, si no hay una válida
- * (cualquier respuesta distinta de 200), manda a `/login`. La barrera de rutas
+ * (cualquier respuesta distinta de 200), manda a `/sin-acceso`. La barrera de rutas
  * la pone el proxy del servidor.
  *
  * El árbol se renderiza siempre (también en el servidor) para que Next pueda
@@ -28,7 +29,7 @@ export function GuardPortal({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void cargar().then((hay) => {
-      if (!hay) router.replace("/login");
+      if (!hay) router.replace(RUTA_SIN_ACCESO);
     });
   }, [cargar, router]);
 

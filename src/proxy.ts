@@ -1,6 +1,6 @@
 /**
- * Barrera de rutas por servidor. Sin sesión válida todo lleva a `/login`; con
- * sesión, una ruta que el rol activo no abre (o que no pertenece a ningún
+ * Barrera de rutas por servidor. Sin sesión válida todo lleva a `/sin-acceso`;
+ * con sesión, una ruta que el rol activo no abre (o que no pertenece a ningún
  * módulo) lleva a su inicio. `GuardRuta` repite el candado en el cliente como
  * segunda capa.
  */
@@ -25,9 +25,10 @@ export function proxy(request: NextRequest): NextResponse {
 }
 
 export const config = {
-  // Fuera: la API de sesión, todo `_next/`, las rutas internas de `next dev`, los
+  // Fuera: la API de sesión, el enlace de acceso (`/acceso/<clave>`, que valida su
+  // propio route handler), todo `_next/`, las rutas internas de `next dev`, los
   // íconos y el manifiesto generados, y los archivos de `public/` por extensión
   // (no por carpeta: `public/mantenimientos/` comparte nombre con una página).
   matcher:
-    "/((?!api/sesion|_next/|__nextjs|icons/|icon$|apple-icon$|manifest\\.webmanifest$|favicon\\.ico$|.*\\.(?:png|jpe?g|webp|svg|gif|ico|txt|xml)$).*)",
+    "/((?!api/sesion|acceso/|_next/|__nextjs|icons/|icon$|apple-icon$|manifest\\.webmanifest$|favicon\\.ico$|.*\\.(?:png|jpe?g|webp|svg|gif|ico|txt|xml)$).*)",
 };

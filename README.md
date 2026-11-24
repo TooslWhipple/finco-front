@@ -29,7 +29,7 @@ npm run build && npm start
 
 ```
 src/
-  app/            rutas (login, (portal)/…)
+  app/            rutas (acceso/[clave], sin-acceso, (portal)/…)
   domain/         tipos y funciones puras (precio, repricing, candados, KPIs, cobranza)
   data/           seed determinista (PRNG con semilla fija) y plaza héroe a mano
   services/       interfaces de repositorio + implementación mock
@@ -46,21 +46,39 @@ hay cifras fijas en la UI. Los tests del seed vigilan la coherencia entre pantal
 
 ## Variables de entorno
 
-El login de la demo se valida en el servidor (`src/app/api/sesion`) con una cookie
-firmada; las contraseñas no están en el código. Copia `.env.example` a `.env.local`
-y da un valor a cada variable:
+La demo no tiene login con usuario y contraseña: cada cuenta entra con su propio
+enlace, `/acceso/<clave>`. El servidor valida la clave (`src/app/acceso/[clave]`),
+firma una cookie de sesión y redirige al inicio de la cuenta, sin dejar la clave en
+la barra. Copia `.env.example` a `.env.local` y da un valor a cada variable:
 
-| Variable                 | Qué es                                                                                                  |
-| ------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `SESSION_SECRET`         | Secreto de firma de la cookie de sesión: aleatorio, de 32 caracteres o más (`openssl rand -base64 48`). |
-| `DEMO_PASSWORD_RASEK`    | Contraseña de la cuenta `rasek` (solo Comercial).                                                       |
-| `DEMO_PASSWORD_BENJAMIN` | Contraseña de la cuenta `benjamin` (solo Comercial, igual que `rasek`).                                 |
-| `DEMO_PASSWORD_SERGIO`   | Contraseña de la cuenta `sergio` (acceso total; puede ver la demo como cualquier usuario).              |
+| Variable              | Qué es                                                                                                                                  |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `SESSION_SECRET`      | Secreto de firma de la cookie de sesión: aleatorio, de 32 caracteres o más (`openssl rand -base64 48`).                                  |
+| `DEMO_CLAVE_RASEK`    | Clave del enlace de la cuenta `rasek` (solo Comercial). Mínimo 32 caracteres.                                                           |
+| `DEMO_CLAVE_BENJAMIN` | Clave del enlace de la cuenta `benjamin` (solo Comercial, igual que `rasek`). Mínimo 32 caracteres.                                     |
+| `DEMO_CLAVE_SERGIO`   | Clave del enlace de la cuenta `sergio` (acceso total; puede ver la demo como cualquier usuario). Mínimo 32 caracteres.                  |
 
-Una cuenta sin su variable no puede iniciar sesión, y sin `SESSION_SECRET` nadie
-entra. `npm run build` compila sin variables: se leen en cada petición. Para sumar
-una cuenta, agrega su entrada en `CUENTAS` (`src/server/auth/cuentas.ts`) y su
+Genera cada clave con un comando que sea seguro dentro de una URL:
+
+```
+openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
+```
+
+El enlace de cada cuenta es `https://<dominio>/acceso/<clave>`. Una cuenta sin su
+clave, o con una clave de menos de 32 caracteres, queda deshabilitada: su enlace
+lleva a la pantalla "Entra con tu enlace". Sin `SESSION_SECRET` el enlace responde
+con error 500. `npm run build` compila sin variables: se leen en cada petición. Para
+sumar una cuenta, agrega su entrada en `CUENTAS` (`src/server/auth/cuentas.ts`) y su
 variable.
+
+**Pega tu enlace.** La pantalla `/sin-acceso` tiene un campo "Pega tu enlace" que
+acepta el enlace completo o solo la clave. Sirve para la app instalada en iPad, que
+guarda su sesión aparte de Safari, y para cuando vence la sesión.
+
+**Revocar un enlace filtrado.** Cambia su `DEMO_CLAVE_*` por una clave nueva y
+despliega de nuevo. Cambiar solo la clave no cierra la sesión que ya obtuvo quien
+usó el enlace viejo: para sacar a todas las sesiones, rota también `SESSION_SECRET`.
+Entonces cada persona vuelve a abrir su enlace.
 
 ## Despliegue en Vercel
 
@@ -71,19 +89,19 @@ requiere la cuenta de Vercel de Whipple o del usuario.
 Antes de abrir la demo publicada, da de alta las cuatro variables de arriba en
 **Project → Settings → Environment Variables**, marcando los entornos
 **Production** y **Preview**, y vuelve a desplegar (**Deployments → Redeploy**):
-las variables nuevas solo aplican a los despliegues posteriores. Sin ellas el
-login responde "No se pudo iniciar sesión".
+las variables nuevas solo aplican a los despliegues posteriores. Sin ellas, ninguna
+cuenta queda habilitada y todos caen en la pantalla "Entra con tu enlace".
 
 ## Guion de demo
 
-Inicia sesión con la cuenta `sergio`: es la única que ve el selector de rol de la
+Abre el enlace de la cuenta `sergio`: es la única que ve el selector de rol de la
 topbar, que cambia de usuario en vivo (las cuentas `rasek` y `benjamin` solo ven Comercial y no pueden
 cambiarse). Reinicia antes de ensayar: menú de usuario → **Reiniciar demo**.
 Escritorio ≥ 1280 px.
 
 ### 1. Dirección (Mariana López) — Panorama
 
-1. Login como `sergio` → selector de rol → Dirección. Aterriza en el Panorama.
+1. Abre el enlace de `sergio` → selector de rol → Dirección. Aterriza en el Panorama.
 2. Muestra los KPIs y el mapa con 11 pines; filtra por Sinaloa y alterna a "Lista".
 3. Abre la plaza héroe desde el mapa o la lista.
 
@@ -134,5 +152,5 @@ Escritorio ≥ 1280 px.
 - El buscador ⌘K encuentra plazas, locales, locatarios, contratos, prospectos y terrenos.
 - Como Dirección todas las pantallas son de consulta (sin acciones).
 - Si no hay red, los tiles del mapa no cargan: usa el toggle "Lista".
-- Los datos de versiones anteriores de la demo se descartan al abrir (vuelve al login).
+- Los datos de versiones anteriores de la demo se descartan al abrir.
 - "Reiniciar demo" deja todo en el estado inicial.

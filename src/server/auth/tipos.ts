@@ -21,10 +21,5 @@ export interface SesionDto {
 }
 
 export type ErrorSesion = {
-  error:
-    | "CREDENCIALES_INVALIDAS"
-    | "SIN_SESION"
-    | "SIN_PERMISO"
-    | "USUARIO_DESCONOCIDO"
-    | "PETICION_INVALIDA";
+  error: "SIN_SESION" | "SIN_PERMISO" | "USUARIO_DESCONOCIDO" | "PETICION_INVALIDA";
 };
